@@ -13,7 +13,7 @@
   <h3>启用群聊 / 私聊</h3><p>启用只控制机器人参与范围，不会自动加入群或添加好友。</p>
   <form id="bfAccess"><select name="kind"><option value="group">QQ群</option><option value="private">个人QQ</option></select> <input name="target" required pattern="[1-9][0-9]{4,15}" placeholder="群号或QQ号"> <button name="enable" value="yes">启用</button> <button name="enable" value="no">停用</button></form><div id="bfPeers"></div>
   <h3>人格与行为</h3><p>人格正文在原控制台“人格与角色”编辑；这里修改闲聊与冷场开场策略。</p>
-  <form id="bfSettings"><label>闲聊简练字数参考（不作为拆条门槛） <input name="casualMaxChars" type="number" min="5" max="200"></label> <span>仅真实 @ 时正式完整回答；其余沿用当前角色的日常风格。</span><p><label>人工补充话题（逗号分隔，可留空）<input name="interests" style="width:70%"></label></p>
+  <form id="bfSettings"><label>闲聊简练字数参考（不作为拆条门槛） <input name="casualMaxChars" type="number" min="5" max="200"></label> <span>真实 @ 优先回应；明确求助按完整准确的方式回答，其余沿用当前人格。</span><p><label>人工补充话题（逗号分隔，可留空）<input name="interests" style="width:70%"></label></p>
   <p><label><input name="dryRun" type="checkbox">冷场主动仅演练</label> <label>安静分钟 <input name="minIdleMinutes" type="number" min="1" max="10080"></label> <label>冷却分钟 <input name="cooldownMinutes" type="number" min="1" max="10080"></label> <label>每日上限 <input name="dailyCap" type="number" min="0" max="20"></label></p>
   <p><label>静默开始 <input name="quietStart" type="number" min="0" max="23"></label> <label>静默结束 <input name="quietEnd" type="number" min="0" max="23"></label>（北京时间，冷场与随机主动共用）</p><p><label>明确称呼（逗号分隔，命中必触发并要求回应）<input name="participationAliases" style="width:90%"></label></p><p>自动统计各会话反复讨论的词组，达到门槛后加入该会话的话题兴趣；再涉及这些话题时按话题概率接话，不再根据预设兴趣词算分。明确找其他群友时不使用话题加成；普通无关消息仍按退火规则处理。多条消息可能合并回应。</p><p>随机主动只在未安排正常回复的群聊合并轮次中抽取一次，依据最近上下文主动分享；已有明确待答消息时不触发。忙碌、离线、静默或限频时跳过，概率命中也不要求硬凑内容。沿用主动小时、全局每日及推理额度；不受冷场演练和45分钟冷场门槛限制。</p><div id="bfPolicyFields"></div><button>保存，即时生效</button></form>
   <h3>长期记忆</h3><select id="bfMemoryKey"></select> <button id="bfMemoryLoad">加载</button> <input id="bfMemoryQuery" placeholder="搜索长期事实"> <button id="bfMemorySearch">搜索</button>
@@ -42,7 +42,7 @@
   el('bfSettings').addEventListener('input', () => { settingsDirty = true; });
   Object.assign(consolePages, {
     'bff-policy': ['话题与主动策略', '从共同讨论中学会参与。', '查看反复讨论的话题、学习门槛、接话概率和主动检查记录。'],
-    'bff-memory': ['长期记忆', '记住各会话中有价值的事。', '按群聊或私聊查看、纠正长期事实与阶段摘要；表达方式在统一风格学习中管理。']
+    'bff-memory': ['长期记忆', '记住各会话中有价值的事。', '按群聊或私聊查看、纠正长期事实与阶段摘要；表达方式在通用表达经验与群聊风格学习中管理。']
   });
   for (const page of ['bff-policy', 'bff-memory']) {
     const nav = document.createElement('button'); nav.className = 'nav-item'; nav.dataset.view = page;

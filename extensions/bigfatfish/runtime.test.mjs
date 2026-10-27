@@ -16,18 +16,18 @@ function fixture(t) {
 test('global delivery preference validates, persists and immediately reaches casual and formal response contexts', async t => {
   const { app, state, config, root } = fixture(t);
   assert.equal(app.settings.replyDelivery, 'natural'); assert.throws(() => validateSettings({ replyDelivery: 'two' }), /分条/);
-  const before = JSON.stringify(state.bigfatfish);
+  const stableState = () => { const { lastRecall, ...rest } = state.bigfatfish; return JSON.stringify(rest); }; const before = stableState();
   for (const [replyDelivery, label] of [['single', '尽量一条'], ['flow', '适度分条'], ['natural', '自然分条']]) {
     let response;
     await app.handle({ method: 'POST', headers: {} }, new URL('http://localhost/api/bigfatfish/settings'), async () => ({ replyDelivery }), value => { response = value; }, {});
     assert.equal(response.ok, true); assert.equal(new BigFatFish(root, config).settings.replyDelivery, replyDelivery);
-    assert.match(app.responseContext('group:123456', state).instruction, new RegExp(label));
+    assert.match(app.instruction('group:123456', state), new RegExp(label));
     state.unread = [{ messageId: 'delivery-at', isSelf: false }]; state.bigfatfish.assistantMessageIds = ['delivery-at'];
-    assert.match(app.responseContext('group:123456', state).instruction, /正式回答要求/);
-    assert.match(app.responseContext('group:123456', state).instruction, new RegExp(label));
+    assert.match(app.instruction('group:123456', state), /正式回答要求/);
+    assert.match(app.instruction('group:123456', state), new RegExp(label));
     state.unread = []; state.bigfatfish.assistantMessageIds = []; app.responseMode('group:123456', state);
   }
-  assert.equal(JSON.stringify(state.bigfatfish), before);
+  assert.equal(stableState(), before);
 });
 test('real mention, self echo and repeated delivery are distinguished', t => {
   const { app, state } = fixture(t);

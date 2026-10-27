@@ -56,7 +56,7 @@ function ok(name) {
     { content: 'b', meaning: '', status: SLANG_STATUS.CONFIRMED, count: 1 },
     { content: 'c', meaning: '丙', status: SLANG_STATUS.CANDIDATE, count: 9 },
   ], 8);
-  assert.ok(ctx.includes('a：甲'));
+  assert.ok(ctx.includes('"term":"a","meaning":"甲"'));
   assert.ok(!ctx.includes('b：'));
   assert.ok(!ctx.includes('c：丙'));
   ok('buildSlangContext 只注入已确认且有含义词条');

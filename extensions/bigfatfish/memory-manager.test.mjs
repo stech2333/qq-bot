@@ -73,11 +73,11 @@ test('correcting a fact cannot inherit confirmations from its previous wording',
 test('duplicate tools and a short burst cannot establish a lasting style', async t => {
   const f = fixture(t), now = Date.now();
   for (const m of [message('same'), message('same'), message('b', undefined, now - 1000), message('c', undefined, now)]) await f.remember(m);
-  assert.deepEqual(f.app.globalStyle.state.features, {});
+  assert.deepEqual(f.app.globalStyle.state.published, []);
 });
 test('cross-day preference facts remain scoped memories without creating a scoped style', async t => {
   const f = fixture(t); await learn(f); const st = f.states.get(KEY);
-  assert.equal(st.bigfatfish.style, undefined); assert.deepEqual(f.app.globalStyle.state.features, {});
+  assert.equal(st.bigfatfish.style, undefined); assert.deepEqual(f.app.globalStyle.state.published, []);
   assert.equal(f.app.memory.targetChars(st), 40); assert.match(f.app.formatMemory(st), /喜欢简短回复/);
   assert.doesNotMatch(f.app.instruction(KEY, st), /表达略简练/);
   assert.doesNotMatch(f.app.instruction(OTHER, f.states.get(OTHER)), /表达略简练/);
@@ -87,15 +87,15 @@ test('cross-day preference facts remain scoped memories without creating a scope
 test('low-confidence, forged and self-authored evidence cannot cause drift', async t => {
   const f = fixture(t), now = Date.now();
   for (let i = 0; i < 3; i++) await f.remember(message(String(i), undefined, now - i * DAY), undefined, { confidence: 0.6 });
-  assert.deepEqual(f.app.globalStyle.state.features, {});
+  assert.deepEqual(f.app.globalStyle.state.published, []);
   assert.equal((await f.remember({ ...message('self'), isSelf: true })).ok, false);
   await f.remember(message('normal', '我喜欢白米饭'), '喜欢简短回复', { styleEvidence: [{ preferences: { length: -1 } }] });
-  assert.deepEqual(f.app.globalStyle.state.features, {});
+  assert.deepEqual(f.app.globalStyle.state.published, []);
 });
 test('different users preference facts never create per-conversation style votes', async t => {
   const f = fixture(t); await learn(f); const now = Date.now();
   for (let i = 0; i < 3; i++) await f.remember(message('other' + i, '我喜欢详细回复', now - (2 - i) * DAY, '222222'), '喜欢详细回复');
-  assert.equal(f.states.get(KEY).bigfatfish.style, undefined); assert.deepEqual(f.app.globalStyle.state.features, {});
+  assert.equal(f.states.get(KEY).bigfatfish.style, undefined); assert.deepEqual(f.app.globalStyle.state.published, []);
 });
 test('correction removes old evidence immediately; deletion removes the stored memory', async t => {
   const f = fixture(t); await learn(f); const id = f.states.get(KEY).bigfatfish.facts[0].id;
@@ -145,7 +145,7 @@ test('personalization can be disabled without erasing stored facts', async t => 
 test('retired scoped style management cannot modify the global profile', async t => {
   const f = fixture(t);
   for (const action of ['style', 'autoStyle', 'rollback', 'resetStyle']) assert.equal((await f.admin({ action, values: { humor: 1 }, locked: true, version: 0 })).ok, false);
-  assert.deepEqual(f.app.globalStyle.state.features, {});
+  assert.deepEqual(f.app.globalStyle.state.published, []);
 });
 test('agents cannot reach admin controls or select unknown scopes; unsafe data is rejected', async t => {
   const f = fixture(t);
@@ -167,6 +167,6 @@ test('failed saves roll back state and revision; backup excludes transcripts and
 test('memory backup retention remains bounded independently of the global style', async t => {
   const f = fixture(t);
   for (let i = 0; i < 22; i++) assert.equal((await f.admin({ action: 'create', category: 'summary', content: '阶段记录' + i })).ok, true);
-  assert.deepEqual(f.app.globalStyle.state.features, {});
+  assert.deepEqual(f.app.globalStyle.state.published, []);
   assert.equal(fs.readdirSync(path.join(f.root, 'state/memory-backups')).length, 5);
 });

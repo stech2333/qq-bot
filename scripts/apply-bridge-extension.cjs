@@ -61,7 +61,7 @@ change('src/mcp-snowluma-safe.js', s => '// BigFatFish memory categories v1\n' +
   .replace("      target: z.string().optional().describe('memberImpression", "      sourceMessageId: z.string().optional().describe('本会话来源消息ID'),\n      target: z.string().optional().describe('memberImpression"), '// BigFatFish memory categories v1');
 {
   const file = path.join(repo, 'public/console.html'); let s = fs.readFileSync(file, 'utf8');
-  const script = '<script>\n' + fs.readFileSync(path.join(root, 'extensions/bigfatfish/console.js'), 'utf8') + '\n' + fs.readFileSync(path.join(root, 'extensions/bigfatfish/companion-console.js'), 'utf8') + '\n' + fs.readFileSync(path.join(root, 'extensions/bigfatfish/global-style-console.js'), 'utf8') + '\n' + fs.readFileSync(path.join(root, 'extensions/bigfatfish/api-pool-console.js'), 'utf8') + '\n</script>';
+  const script = '<script>\n' + fs.readFileSync(path.join(root, 'extensions/bigfatfish/console.js'), 'utf8') + '\n' + fs.readFileSync(path.join(root, 'extensions/bigfatfish/companion-console.js'), 'utf8') + '\n' + fs.readFileSync(path.join(root, 'extensions/bigfatfish/global-style-console.js'), 'utf8') + '\n' + fs.readFileSync(path.join(root, 'extensions/bigfatfish/group-style-console.js'), 'utf8') + '\n' + fs.readFileSync(path.join(root, 'extensions/bigfatfish/api-pool-console.js'), 'utf8') + '\n</script>';
   s = s.includes('// BigFatFish console v1') ? s.replace(/<script>\s*\/\/ BigFatFish console v1[\s\S]*?<\/script>/, () => script) : once(s, '</body>', script + '\n</body>');
   fs.writeFileSync(file, s, 'utf8');
 }
@@ -698,4 +698,11 @@ change('src/bridge.js', s => '// BigFatFish context initiative v4\n' + once(s,
     // consume a direct question that arrived during generation or tool waits.
     const initiative = st.bigfatfish?.contextInitiative?.round;
     if (initiative) throughSeq = throughSeq === null ? initiative.throughSeq : Math.min(throughSeq, initiative.throughSeq);`), '// BigFatFish context initiative v4');
+const expressionPatch = require('./group-style-bridge-patch.cjs');
+change('src/slang-learner.js', s => expressionPatch.patchSlang(s, once, within), '// BigFatFish scoped slang v2');
+change('src/bridge.js', s => expressionPatch.patchBridge(s, once, within), '// BigFatFish four layer expression v2');
+change('src/bridge.js', s => {
+  s = '// BigFatFish expression intake permissions v3\n' + s;
+  return once(s, "styleSourceVersion: /^-?[1-9]\\d{0,19}$/.test(String(messageId)) ? 2 : 0,", "styleSourceVersion: bff.groupStyle.eligible(key) && /^-?[1-9]\\d{0,19}$/.test(String(messageId)) ? 2 : 0,");
+}, '// BigFatFish expression intake permissions v3');
 console.log('BigFatFish integration applied (pinned anchors, idempotent).');

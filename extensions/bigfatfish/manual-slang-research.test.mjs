@@ -36,7 +36,7 @@ test('manual research reserves the selected words once, splits batches and persi
 test('pending manual review suspends promotion of an older definition until the new result arrives', async t => {
   const f = fixture(t), now = Date.now(); f.app.config.allow.groups.push('123456'); f.app.settings.slangPolicy.autoConfirm = true;
   f.app.bind('group:123456', { recentMessages: Array.from({ length: 6 }, (_, i) => ({ messageId: String(i), userId: i % 2 ? '111111' : '222222', time: now - (i + 1) * 600000, plain: '词语0继续讨论' })) });
-  f.entry().meaning = '此前研究的释义'; f.entry().lastInferenceCount = 1; f.entry().research = { status: 'approved' }; f.store.save();
+  f.entry().scope = 'group:123456'; f.entry().meaning = '此前研究的释义'; f.entry().lastInferenceCount = 1; f.entry().research = { status: 'approved' }; f.store.save();
   f.app.slang.manual.queue(f.store.entries(), f.store); f.app.slang.scan(f.store, { force: true });
   assert.equal(f.entry().status, 'candidate'); await f.app.slang.manual.chain;
   assert.equal(f.entry().status, 'confirmed');

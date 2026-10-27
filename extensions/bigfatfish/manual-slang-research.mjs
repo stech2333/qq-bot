@@ -83,11 +83,20 @@ export class ManualSlangResearch {
   }
   async run(job, store) {
     job.status = 'running'; job.stage = '等待DSH队列'; this.save();
-    for (let offset = 0; offset < job.ids.length; offset += 5) {
-      const ids = job.ids.slice(offset, offset + 5), targets = ids.map(id => store.entries().find(e => e.id === id)).filter(e => e?.status === 'candidate' && e.research?.jobId === job.id);
+    let batchSize = 5;
+    for (let offset = 0; offset < job.ids.length; offset += batchSize) {
+      const first = store.entries().find(e => e.id === job.ids[offset]);
+      batchSize = 1;
+      while (batchSize < 5 && offset + batchSize < job.ids.length) {
+        const next = store.entries().find(e => e.id === job.ids[offset + batchSize]);
+        const previous = job.ids.slice(offset, offset + batchSize).map(id => store.entries().find(e => e.id === id));
+        if ((next?.scope || 'legacy') !== (first?.scope || 'legacy') || previous.some(e => e?.content === next?.content)) break;
+        batchSize++;
+      }
+      const ids = job.ids.slice(offset, offset + batchSize), targets = ids.map(id => store.entries().find(e => e.id === id)).filter(e => e?.status === 'candidate' && e.research?.jobId === job.id);
       job.skipped += ids.length - targets.length; job.done += ids.length - targets.length;
       if (!targets.length) continue;
-      const versions = new Map(targets.map(e => [e.id, e.updatedAt])), processed = new Set();
+      const versions = new Map(targets.map(e => [e.id, JSON.stringify([e.updatedAt, e.scope, e.revision || 0])])), processed = new Set();
       try {
         if (this.app.config.slang?.enabled === false) throw Error('研究服务已关闭，未继续提交');
         if (!store.writable()) throw Error('词库已进入只读状态');
@@ -112,7 +121,7 @@ export class ManualSlangResearch {
           try {
             if (!row) throw Error('研究返回遗漏该词，请重试');
             const result = this.safeResult(row);
-            if (entry.updatedAt !== versions.get(entry.id)) throw Error('词库研究期间已修改，该结果未覆盖人工修改');
+            if (JSON.stringify([entry.updatedAt, entry.scope, entry.revision || 0]) !== versions.get(entry.id)) throw Error('词库研究期间已修改，该结果未覆盖人工修改');
             const confidence = Number(row.confidence), validConfidence = Number.isFinite(confidence) && confidence >= 0 && confidence <= 1;
             const approved = row.confirmed === true && validConfidence && confidence >= this.app.settings.learningResearch.minConfidence && Boolean(result.meaning);
             entry.research = { status: approved ? 'approved' : 'rejected', mode: 'manual', jobId: job.id, at: Date.now(), nextAt: Date.now() + 3600000,
@@ -141,7 +150,7 @@ export class ManualSlangResearch {
         }
         try { store.save(); } catch {} job.stage = message(error); this.save();
         if (/^每日研究/.test(String(error?.message))) {
-          for (const id of job.ids.slice(offset + 5)) {
+          for (const id of job.ids.slice(offset + batchSize)) {
             const entry = store.entries().find(e => e.id === id);
             if (entry?.status === 'candidate' && entry.research?.jobId === job.id) { entry.research = { ...entry.research, status: 'failed', at: Date.now(), reason: message(error) }; job.failed++; }
             else job.skipped++;

@@ -3,6 +3,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { installPersonaSection } from './qq-persona.mjs'
 // 本文件是 qq-agent-presets bundle 里的**唯一权威实现**，由 qq-chat / qq-chat-v2 两个
 // agent preset 的 qq-tool-restrict 行共同引用（dsh/agent-presets/<preset>/qq-tool-restrict.mjs
 // 只是个 re-export 壳，避免出现两份会漂移的实现）。
@@ -27,7 +28,7 @@ import { fileURLToPath } from 'node:url'
 //    所以本地工具必须同时出现在下面的 restrict 名单里。
 export const name = 'qq-tool-restrict'
 
-export const inject = ['tools']
+export const inject = ['tools', 'systemPrompt']
 
 /**
  * 本地执行 / 文件访问 / 进程控制类工具：仿真会话**不得**拥有。
@@ -262,6 +263,7 @@ function writeDiagnostics(lines) {
 }
 
 export function apply(ctx) {
+  installPersonaSection(ctx)
   // 1) 把已知危险全局工具从 schema 隐藏（restrict 只影响继承的全局层，
   //    不会误删 preset 自己注册的 scoped 工具）。
   // 逐个 restrict：当前 DSH 版本不存在的工具名会单独抛错并跳过，

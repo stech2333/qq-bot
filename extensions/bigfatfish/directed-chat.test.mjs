@@ -69,8 +69,8 @@ test('real at remains answerable in a mixed batch, plain sends omit quote segmen
   await incoming('102', '你周末去哪里玩', '222222', [at('333333')]);
   const response = await read();
   assert.deepEqual(Array.from(response.response.recipient.messageIds), ['101']);
-  assert.equal(response.response.mode, 'ASSISTANT'); assert.match(response.response.instruction, /不复读原消息/);
-  assert.match(response.response.instruction, /不带QQ引用条/);
+  assert.equal(response.response.mode, 'ASSISTANT'); assert.equal(response.response.style.scene, 'help');
+  assert.match(h.buildWakePromptV2(KEY, 'addressed'), /不带QQ引用条/);
   await h.sendMessagesV2(KEY, ['先把秘密分成多份。', '达到阈值才能还原。'], [], '101');
   assert.equal(sends(h).length, 2); assert.ok(sends(h).every(c => !c.body.message.some(m => m.type === 'reply')));
   assert.deepEqual(Array.from(h.getSocialV2State(KEY).unread.map(m => m.messageId)), ['102']);

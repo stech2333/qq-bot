@@ -36,9 +36,31 @@ export class SlangManager {
       this.audit = []; this.auditWritable = false; this.lastError = '入库记录无法读取，自动确认已暂停；修复记录后重启桥接';
     }
   }
-  evidence(content, now = Date.now()) {
+  visible(entry, key, scene = '') {
+    if (!this.app.globalStyle.allowed(key) || entry.status !== 'confirmed' || (entry.avoidScenes || []).includes(scene)) return false;
+    return entry.scope === 'public' || entry.scope === key || entry.scope === 'shared' && (entry.confirmedScopes || []).includes(key);
+  }
+  contextEntries(entries, key, scene = '', query = '') {
+    if (['help', 'technical'].includes(scene)) return [];
+    return entries.filter(e => this.visible(e, key, scene) && (!query || keywordHit(query, e.content)));
+  }
+  adminScope(store, body) {
+    if (!store?.writable()) throw Error('原黑话词库不可写');
+    const e = store.entries().find(e => e.id === body.id); if (!e) throw Error('黑话记录不存在');
+    if (body.revision !== (e.revision || 0)) throw Error('黑话范围版本已变化');
+    const scope = String(body.scope || '');
+    if (!['public', 'shared', 'legacy'].includes(scope) && !this.app.groupStyle.allowed(scope)) throw Error('黑话范围无效');
+    const confirmedScopes = Array.isArray(body.confirmedScopes) ? [...new Set(body.confirmedScopes)] : [];
+    if (scope === 'shared' && (confirmedScopes.length < 2 || confirmedScopes.some(key => !this.app.groupStyle.allowed(key)))) throw Error('共享黑话须逐群独立确认');
+    const before = structuredClone(e);
+    Object.assign(e, { scope, confirmedScopes, revision: (e.revision || 0) + 1, scopeReviewedAt: Date.now(), updatedAt: new Date().toISOString() });
+    try { if (store.save() !== true) throw Error(); } catch { Object.assign(e, before); throw Error('黑话范围保存失败'); }
+    return { ok: true, id: e.id, scope, revision: e.revision };
+  }
+  evidence(content, now = Date.now(), scope) {
     const app = this.app, p = app.settings.slangPolicy, messages = new Map();
     for (const [key, state] of app.states) {
+      if (scope && scope !== 'public' && key !== scope) continue;
       const group = key.startsWith('group:') ? key.slice(6) : '';
       if (!group || !(app.config.allow?.groups || []).map(String).includes(group) || (app.config.deny?.groups || []).map(String).includes(group)) continue;
       if (state.bigfatfish?.memoryControl?.accumulation === false) continue;
@@ -47,21 +69,21 @@ export class SlangManager {
         if (m.isSelf || !m.messageId || !/^[1-9]\d{4,15}$/.test(uid) || uid === String(app.config.bigfatfish.expectedQQ)
           || !Number.isFinite(at) || at <= 0 || at > now || now - at > p.lookbackHours * 3600000
           || !app.privacy.reference(text) || !keywordHit(text, content)) continue;
-        messages.set(key + ':' + m.messageId, { at, uid });
+        messages.set(key + ':' + m.messageId, { at, uid, key });
       }
     }
     return [...messages.values()];
   }
-  candidateAdmission(content, now = Date.now()) {
+  candidateAdmission(content, now = Date.now(), scope) {
     const text = String(content || '').trim(), required = this.app.settings.slangPolicy.candidateMinMessages;
     const safe = Boolean(text.length >= 2 && text.length <= 50 && this.app.privacy.reference(text) && !/\d{5,}|https?:|@|\[CQ:/i.test(text));
-    const messages = safe ? this.evidence(text, now).length : 0;
+    const messages = safe ? this.evidence(text, now, scope).length : 0;
     return { eligible: safe && messages >= required, messages, required,
       reason: !safe ? '词条需要人工检查' : messages < required ? `进入候选需${required}条不同真人消息，当前${messages}条` : '已达到候选门槛' };
   }
   score(entry, now = Date.now()) {
     const app = this.app, p = app.settings.slangPolicy;
-    const evidence = this.evidence(entry.content, now), speakers = new Set(evidence.map(m => m.uid)).size;
+    const evidence = this.evidence(entry.content, now, entry.scope), speakers = new Set(evidence.map(m => m.uid)).size;
     const times = evidence.map(m => m.at), spanMinutes = times.length ? (Math.max(...times) - Math.min(...times)) / 60000 : 0;
     const meaning = String(entry.meaning || '').trim();
     const injectedFields = [entry.content, meaning, entry.usage, entry.example].map(value => String(value || '').trim());
@@ -73,6 +95,7 @@ export class SlangManager {
       spread: Math.min(15, Math.floor(spanMinutes / p.minSpanMinutes * 15)), meaning: meaning ? 20 : 0,
       freshness: times.some(at => now - at <= 86400000) ? 15 : 0 };
     const score = Object.values(parts).reduce((a, b) => a + b, 0), reasons = [];
+    if (!entry.scope || entry.scope === 'legacy' || entry.scope === 'shared') reasons.push('需管理员确认作用域');
     if (entry.status !== 'candidate') reasons.push('仅候选词可自动入库');
     if (!safe) reasons.push('词条或释义需要人工检查');
     if (!riskOk) reasons.push('风险说明需要人工审核');

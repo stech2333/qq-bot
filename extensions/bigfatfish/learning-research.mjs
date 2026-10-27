@@ -40,8 +40,8 @@ export class LearningResearch {
     if (this.running) throw Error('研究正在进行，请稍后重试');
     let changed = 0;
     const reset = (entry, field) => { if (entry?.[field]?.status === 'failed') { entry[field] = { ...researchMeta(entry[field]), status: 'pending', nextAt: 0 }; changed++; } };
-    if (this.app.globalStyle.state.research.status === 'failed') {
-      const next = structuredClone(this.app.globalStyle.state); next.research = {}; next.revision++; this.app.globalStyle.save(next); changed++;
+    for (const [key] of this.app.states) if (this.app.groupStyle.allowed(key) && this.app.groupStyle.load(key).research.status === 'failed') {
+      const next = structuredClone(this.app.groupStyle.load(key)); next.research = {}; next.revision++; this.app.groupStyle.save(key, next); changed++;
     }
     for (const [key, st] of this.app.states) if (this.allowed(key) && st.bigfatfish.memoryControl?.accumulation !== false) {
       for (const entry of st.bigfatfish.learnedInterests) reset(entry, 'research');
@@ -71,15 +71,15 @@ export class LearningResearch {
     }
     if (store && store.writable() && app.settings.slangPolicy.enabled && app.settings.slangPolicy.autoResearch && app.config.slang?.enabled !== false && app.config.slang?.autoResearch !== false) {
       for (const entry of store.entries()) {
-        if (entry.status !== 'candidate' || app.slang.manual?.active(entry.id) || !app.slang.candidateAdmission(entry.content, now).eligible) continue;
+        if (entry.status !== 'candidate' || !app.groupStyle.allowed(entry.scope) || app.slang.manual?.active(entry.id) || !app.slang.candidateAdmission(entry.content, now, entry.scope).eligible) continue;
         const rows = [];
-        for (const [key, st] of app.states) if (this.allowed(key) && st.bigfatfish.memoryControl?.accumulation !== false) {
+        for (const [key, st] of app.states) if (key === entry.scope && this.allowed(key) && st.bigfatfish.memoryControl?.accumulation !== false) {
           rows.push(...this.rows(key, st, app.settings.slangPolicy.lookbackHours, now).filter(m => keywordHit(m.plain, entry.content)).map(m => ({ ...m, messageId: key + ':' + m.messageId })));
         }
-        if (rows.length >= app.settings.slangPolicy.researchMinMessages && new Set(rows.map(m => m.userId)).size >= app.settings.slangPolicy.minSpeakers) jobs.push({ kind: 'slang', entry, rows, store });
+        if (rows.length >= app.settings.slangPolicy.researchMinMessages && new Set(rows.map(m => m.userId)).size >= app.settings.slangPolicy.minSpeakers) jobs.push({ kind: 'slang', key: entry.scope, scope: entry.scope, revision: entry.revision || 0, entry, rows, store });
       }
     }
-    const globalJob = app.globalStyle?.job(now);
+    const groupJobs = app.styleLearning.jobs(now);
     const ready = jobs.filter(job => {
       const meta = researchMeta(job.entry.research);
       const fingerprint = job.rows.slice(-20).map(m => m.messageId).join('|').slice(-500);
@@ -87,17 +87,18 @@ export class LearningResearch {
       return meta.nextAt <= now && !(meta.status === 'rejected' && meta.fingerprint === fingerprint)
         && meta.status !== 'approved';
     });
-    if (globalJob) ready.push(globalJob);
-    const kinds = ['globalStyle', 'topic', 'slang'].map(kind => ready.filter(job => job.kind === kind)), fair = [];
+    ready.push(...groupJobs);
+    const kinds = ['groupStyle', 'topic', 'slang'].map(kind => ready.filter(job => job.kind === kind)), fair = [];
     while (kinds.some(list => list.length)) for (const list of kinds) if (list.length) fair.push(list.shift());
     return fair;
   }
   reserve(job, now) {
     const p = this.app.settings.learningResearch;
     const ledger = this.ledger.filter(row => now - row.at < 8 * 86400000);
+    if (job.kind === 'groupStyle' && ledger.filter(row => row.kind === job.kind && row.key === job.key && today(row.at) === today(now)).length >= this.app.groupStyle.policy(job.key).dailyCap) return false;
     if (job.kind === 'globalStyle' && ledger.filter(row => row.kind === job.kind && today(row.at) === today(now)).length >= this.app.settings.globalStyleLearning.dailyCap) return false;
     if (ledger.filter(row => today(row.at) === today(now)).length >= p.maxPerDay) return false;
-    ledger.push({ kind: job.kind, at: now });
+    ledger.push({ kind: job.kind, key: job.key ?? null, at: now });
     fs.mkdirSync(path.dirname(this.file), { recursive: true }); const tmp = this.file + '.' + process.pid + '.tmp';
     fs.writeFileSync(tmp, JSON.stringify(ledger), { mode: 0o600 }); fs.renameSync(tmp, this.file); this.ledger = ledger; return true;
   }
@@ -108,9 +109,10 @@ export class LearningResearch {
       job.entry = job.store.entries().find(entry => entry.id === job.entry.id) || job.entry;
       if (app.slang.manual?.active(job.entry.id)) return false;
       return app.settings.slangPolicy.enabled && app.settings.slangPolicy.autoResearch && app.config.slang?.enabled !== false && app.config.slang?.autoResearch !== false
+        && job.scope === job.entry.scope && job.revision === (job.entry.revision || 0) && this.allowed(job.scope)
         && job.store.writable() && job.store.entries().includes(job.entry) && job.entry.status === 'candidate'
-        && app.slang.candidateAdmission(job.entry.content, now).eligible
-        && app.slang.evidence(job.entry.content, now).length >= app.settings.slangPolicy.researchMinMessages;
+        && app.slang.candidateAdmission(job.entry.content, now, job.entry.scope).eligible
+        && app.slang.evidence(job.entry.content, now, job.entry.scope).length >= app.settings.slangPolicy.researchMinMessages;
     }
     if (!this.allowed(job.key) || app.states.get(job.key) !== job.st || job.st.bigfatfish !== job.state
       || job.st.bigfatfish.memoryControl?.accumulation === false) return false;
@@ -137,12 +139,12 @@ export class LearningResearch {
   async run(jobs) {
     for (const job of jobs) {
       const app = this.app, p = app.settings.learningResearch, now = Date.now();
-      if (job.kind === 'globalStyle') {
-        if (!app.globalStyle.current(job)) continue;
+      if (job.kind === 'groupStyle') {
+        if (!app.styleLearning.current(job)) continue;
         try {
           if (!this.reserve(job, now)) continue;
-          await app.globalStyle.run(job, this.runner);
-        } catch { this.lastError = '统一风格保存或研究未完成，已保留原风格'; }
+          await app.styleLearning.run(job, this.runner);
+        } catch { this.lastError = '群风格保存或研究未完成，已保留原风格'; }
         continue;
       }
       job.state = job.st?.bigfatfish;

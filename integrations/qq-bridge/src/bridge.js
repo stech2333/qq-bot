@@ -1,3 +1,5 @@
+// BigFatFish expression intake permissions v3
+// BigFatFish four layer expression v2
 // BigFatFish context initiative v4
 // BigFatFish context initiative v3
 // BigFatFish context initiative v2
@@ -2290,8 +2292,8 @@ async function main() {
         const idx = Number(item.source_id) - 1;
         const src = Number.isInteger(idx) && idx >= 0 && idx < messages.length ? messages[idx] : null;
         const evidence = src ? [{ key, sender: src.sender, text: src.text, time: src.time }] : [];
-        if (!slangEntries.some(e => e.content === item.content) && !bff.slang.candidateAdmission(item.content).eligible) continue;
-        const result = upsertSlangEntry(slangEntries, item.content, { evidence, countIncrement: 1 });
+        if (!slangEntries.some(e => e.content === item.content && e.scope === key) && !bff.slang.candidateAdmission(item.content, Date.now(), key).eligible) continue;
+        const result = upsertSlangEntry(slangEntries, item.content, { scope: key, evidence, countIncrement: 1 });
         if (result.created) added += 1; else updated += 1;
         if (result.entry && result.entry.status === SLANG_STATUS.CANDIDATE && thresholds.includes(result.entry.count) && result.entry.count > result.entry.lastInferenceCount) {
           researchCandidates.push(result.entry);
@@ -2375,21 +2377,21 @@ async function main() {
   }
 
   // 已确认黑话的公开列表（按出现次数排序，最多 injectMax 条）。
-  function confirmedSlangListV2() {
+  function confirmedSlangListV2(key) {
     const max = Math.max(1, Math.min(30, Number(cfg.slang?.injectMax) || 8));
     return slangEntries
-      .filter((e) => e.status === SLANG_STATUS.CONFIRMED && e.content && e.meaning)
+      .filter((e) => bff.slang.visible(e, key) && e.content && e.meaning)
       .sort((a, b) => (Number(b.count) || 0) - (Number(a.count) || 0))
       .slice(0, max)
       .map(publicSlangEntry);
   }
 
-  function withSlangContext(promptText) {
+  function withSlangContext(promptText, key) {
     const now = new Date();
     const timeLine = `【当前时间】${now.toLocaleString('zh-CN', { hour12: false })}（${Intl.DateTimeFormat().resolvedOptions().timeZone}）`;
     const parts = [timeLine];
     if (cfg.slang?.enabled !== false) {
-      const block = buildSlangContext(slangEntries, cfg.slang?.injectMax ?? 8);
+      const block = buildSlangContext(bff.slang.contextEntries(slangEntries, key, bff.styleResolver.diagnostics.get(key)?.scene || '', (getSocialV2State(key).recentMessages || []).filter(m => !m.isSelf).slice(-3).map(m => m.plain || m.text || '').join(' ')), cfg.slang?.injectMax ?? 8);
       if (block) parts.push(block);
     }
     return parts.join('\n\n') + '\n\n' + promptText;
@@ -4789,7 +4791,7 @@ async function main() {
               userId: selfUserId || null,
               line: selfIdentityTextV2(key).trim() || null
             },
-            role: { name: sessionRoleState(key).role ?? null, source: sessionRoleState(key).source, hint: currentMode === 'reserved2' ? currentRoleHintV2(key) : currentRoleHint(key) },
+            role: { name: sessionRoleState(key).role ?? null, source: sessionRoleState(key).source, hint: req.headers['x-agent-token'] ? '' : currentMode === 'reserved2' ? currentRoleHintV2(key) : currentRoleHint(key) },
             recommended: cfg.socialV2?.provideRecommendations === false ? null : {
               wake: cfg.socialV2?.wake ?? {},
               send: cfg.socialV2?.send ?? {},
@@ -4803,12 +4805,12 @@ async function main() {
             recentCount: st.recentMessages.length,
             currentWakeConfig: st.wakeConfig,
             wakeSafety: computeWakeSafetyV2(st.wakeConfig),
-            memory: formatMemoryV2(st),
+            memory: req.headers['x-agent-token'] ? '' : formatMemoryV2(st),
             participation: formatParticipationV2(st),
             slang: {
               enabled: cfg.slang?.enabled !== false,
-              entries: confirmedSlangListV2(),
-              block: buildSlangContext(slangEntries, cfg.slang?.injectMax ?? 8)
+              entries: confirmedSlangListV2(key),
+              block: buildSlangContext(bff.slang.contextEntries(slangEntries, key, bff.styleResolver.diagnostics.get(key)?.scene || '', (getSocialV2State(key).recentMessages || []).filter(m => !m.isSelf).slice(-3).map(m => m.plain || m.text || '').join(' ')), cfg.slang?.injectMax ?? 8)
             },
             stickers: {
               enabled: cfg.socialV2?.sticker?.enabled !== false,
@@ -6878,7 +6880,7 @@ async function main() {
           if (req.headers['x-agent-token'] && !agentTokenOk(key, req.headers['x-agent-token'])) { sendJson({ ok: false, error: 'agent token 无效' }, 403); return; }
           if (req.headers['x-agent-token'] && !v2SessionAllowed(key)) { sendJson({ ok: false, error: '目标不在当前模式允许范围内' }, 403); return; }
           if (req.headers['x-agent-token'] && !v2ToolEnabled('slangQuery')) { sendJson({ ok: false, error: '工具未启用：qq_slang_query' }, 403); return; }
-          const list = confirmedSlangListV2().filter((e) => {
+          const list = confirmedSlangListV2(key).filter((e) => {
             if (!q) return true;
             return e.content.toLowerCase().includes(q)
               || e.meaning.toLowerCase().includes(q)
@@ -6890,7 +6892,7 @@ async function main() {
             key,
             total: list.length,
             entries: list,
-            block: buildSlangContext(slangEntries, cfg.slang?.injectMax ?? 8)
+            block: buildSlangContext(bff.slang.contextEntries(slangEntries, key, bff.styleResolver.diagnostics.get(key)?.scene || '', (getSocialV2State(key).recentMessages || []).filter(m => !m.isSelf).slice(-3).map(m => m.plain || m.text || '').join(' ')), cfg.slang?.injectMax ?? 8)
           });
           return;
         }
@@ -6908,9 +6910,9 @@ async function main() {
           if (!content) { sendJson({ ok: false, error: 'content 不能为空' }, 400); return; }
           if (content.length > 50) { sendJson({ ok: false, error: '黑话词条过长（最多 50 字）' }, 400); return; }
           if (!allowSlangSubmit(key)) { sendJson({ ok: false, error: '黑话提交过于频繁，请稍后再试' }, 429); return; }
-          const existing = slangEntries.find((e) => e.content === content);
+          const existing = slangEntries.find((e) => e.content === content && e.scope === key);
           if (!existing) {
-            const admission = bff.slang.candidateAdmission(content);
+            const admission = bff.slang.candidateAdmission(content, Date.now(), key);
             if (!admission.eligible) {
               sendJson({ ok: true, status: 'pending', admitted: false, ...admission });
               return;
@@ -6945,6 +6947,7 @@ async function main() {
           const entry = createSlangEntry({
             content,
             source: 'ai',
+            scope: key,
             status: SLANG_STATUS.CANDIDATE,
             evidence: context ? [{ key, sender: 'AI提交', text: context.slice(0, 200), time: Date.now() }] : []
           });
@@ -9311,10 +9314,13 @@ async function main() {
         promptText += `\n\n【本次消息快照】\n${JSON.stringify(wakeSnapshot)}\n以上消息已提供，无需重复查询；partial=true 时用 qq_get_unread_messages(afterSeq=readThroughSeq) 继续读取。先处理当前消息；回复前如需确认后续补充，用 qq_wait_for_messages(purpose="reply") 补足短静默，已安静够久会立即返回，不要先长等。收尾只确认你已处理的 readThroughSeq（本地 seq，非 QQ messageId），传给 qq_mark_read 或 qq_set_wake_config 的 throughSeq；新到消息留待处理。`;
       }
     }
-    let content = [{ type: 'text', text: withSlangContext(promptText) }];
+    const trustedCard = sessionRoleLine(key);
+    bff.personas.publish(sessionId, key, readRoleState(), trustedCard);
+    promptText = promptText.split(trustedCard).join('');
+    let content = [{ type: 'text', text: withSlangContext(promptText, key) }];
     if (Array.isArray(opts.media) && opts.media.length > 0) {
       const imageParts = await resolveMediaList(opts.media);
-      content = [{ type: 'text', text: withSlangContext(promptText) }, ...imageParts];
+      content = [{ type: 'text', text: withSlangContext(promptText, key) }, ...imageParts];
     }
     // 媒体解析成功后再标记退场，避免解析异常时残留退场标记。
     if (!isCurrentSession(key, sessionId)) throw new Error('投递前会话已重置或权限已变化');
@@ -9960,7 +9966,7 @@ async function main() {
   }
 
   // ── 二代仿真模式（reserved2）唤醒调度 ──────────────────────────────────
-  function appendSocialV2Message(key, sender, textContent, plainContent, quoteTargetIsSelf, isOwner, messageId, media = [], userId = null, forwardIds = []) {
+  function appendSocialV2Message(key, sender, textContent, plainContent, quoteTargetIsSelf, isOwner, messageId, media = [], userId = null, forwardIds = [], replyToMessageId = null) {
     const st = getSocialV2State(key);
     const recentLimit = Number(cfg.socialV2?.context?.recentLimit) || 100;
     const unreadLimit = Number(cfg.socialV2?.context?.unreadLimit) || 30;
@@ -10006,9 +10012,12 @@ async function main() {
       plain: truncateText(String(plainContent ?? textContent), 200),
       tail: truncateTextTail(String(plainContent ?? textContent), 200),
       quoteTargetIsSelf: !!quoteTargetIsSelf,
+      replyToMessageId,
       isOwner: !!isOwner,
       ownerLabel: isOwner ? `管理员（ownerQQ ${cfg.ownerQQ ?? ''}）` : '',
       isSelf: false,
+      styleSourceVersion: bff.groupStyle.eligible(key) && /^-?[1-9]\d{0,19}$/.test(String(messageId)) ? 2 : 0,
+      sourceScope: key,
       ...(st.bigfatfish?.assistantMessageIds?.includes(String(messageId)) ? { replyStyle: 'formal' } : {}),
       media: safeMedia,
       hasMedia: safeMedia.length > 0,
@@ -10530,7 +10539,9 @@ async function main() {
     const initialPromptLine = initialPromptText ? `${initialPromptText}\n\n` : '';
     // 时间感放在 base 的最末尾：紧接着就是【唤醒】原因与行动指令，位置最显眼。
     const timeSenseLine = buildTimeSenseLine(st);
-    const base = bff.instruction(key, st) + bff.chatHint(st, reason) + roleLine + bff.responseContext(canonicalV2Key(key) || key, st).instruction + identityLine + tokenLine + initialPromptLine + antiAiLine + proactiveLine + stickerLine + replyLine + statusLine + wakeLine + memoryLine + participationLine + preSleepLine + timeSenseLine;
+    const base = bff.instruction(key, st, { persona: roleLine, personaId: sessionRoleState(key).role,
+      personaSignature: bff.personas.signature(key, roleState), memory: memoryText, reason })
+      + identityLine + tokenLine + initialPromptLine + stickerLine + replyLine + statusLine + wakeLine + participationLine + preSleepLine + timeSenseLine;
     // 唤醒原因里的那条消息本身多旧：`atMention@seq194` 这种形态能反查到原消息。
     const triggeredSeq = wakeReasonSeq(reason);
     const triggeredMsg = triggeredSeq ? findV2MessageBySeq(st, triggeredSeq) : null;
@@ -11199,7 +11210,7 @@ async function main() {
     // 二代仿真模式（reserved2）：唤醒调度
     if (currentMode === 'reserved2') {
       const sender = kind === 'group' ? (event.sender?.card || event.sender?.nickname || String(event.user_id)) : '私聊';
-      appendSocialV2Message(key, sender, textContent, plainContent, quoteTargetIsSelf, isOwner, event.message_id ?? event.msg_id ?? null, mediaList, event.user_id ?? null, extractForwardIds(event.message ?? []));
+      appendSocialV2Message(key, sender, textContent, plainContent, quoteTargetIsSelf, isOwner, event.message_id ?? event.msg_id ?? null, mediaList, event.user_id ?? null, extractForwardIds(event.message ?? []), (event.message || []).find(segment => segment.type === 'reply')?.data?.id ?? null);
       // 二代同样收集群聊黑话学习素材（AI 自主提交之外，桥接仍自动提取高频陌生词）
       if (kind === 'group') feedSlangWindow(key, sender, plainContent);
       if (socialV2.paused) {
@@ -11349,10 +11360,13 @@ async function main() {
       }
       throw error;
     }
-    let content = [{ type: 'text', text: withSlangContext(promptText) }];
+    const trustedCard = sessionRoleLine(key);
+    bff.personas.publish(sessionId, key, readRoleState(), trustedCard);
+    promptText = promptText.split(trustedCard).join('');
+    let content = [{ type: 'text', text: withSlangContext(promptText, key) }];
     if (Array.isArray(mediaList) && mediaList.length > 0) {
       const imageParts = await resolveMediaList(mediaList);
-      content = [{ type: 'text', text: withSlangContext(promptText) }, ...imageParts];
+      content = [{ type: 'text', text: withSlangContext(promptText, key) }, ...imageParts];
     }
     if (!isCurrentSession(key, sessionId)) throw new Error('投递前会话已重置或权限已变化');
     const accepted = await api.sessions.prompt({

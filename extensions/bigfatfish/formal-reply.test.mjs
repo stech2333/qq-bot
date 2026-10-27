@@ -34,10 +34,10 @@ test('a real platform at requires a full formal answer even after a later ordina
   const unread = await call('/api/socialV2/unread?key=' + KEY);
   assert.equal(unread.response.mode, 'ASSISTANT');
   assert.equal(unread.messages[0].replyStyle, 'formal');
-  assert.match(unread.response.instruction, /正式回答要求.*先给结论/);
-  assert.match(unread.response.instruction, /不受闲聊25字目标限制/);
+  assert.match(h.buildWakePromptV2(KEY, 'addressed'), /正式回答要求.*先给结论/);
+  assert.match(h.buildWakePromptV2(KEY, 'addressed'), /不受闲聊25字目标限制/);
   assert.deepEqual(unread.response.messageIds, ['formal']);
-  assert.match(unread.response.instruction, /不扩大到同批普通话题或未@的后续聊天/);
+  assert.match(h.buildWakePromptV2(KEY, 'addressed'), /不扩大到同批普通话题或未@的后续聊天/);
   const prompt = h.buildWakePromptV2(KEY, 'addressed');
   assert.ok(prompt.indexOf('【正式回答要求】', prompt.indexOf('【当前角色卡结束】')) > prompt.indexOf('【当前角色卡结束】'));
   const context = await call('/api/socialV2/prompt?key=' + KEY);
@@ -49,15 +49,15 @@ test('a real platform at requires a full formal answer even after a later ordina
   await incoming('followup', [text('肥鱼，今天想聊点什么')]);
   const followup = await call('/api/socialV2/recent?key=' + KEY);
   assert.equal(followup.response.mode, 'CASUAL');
-  assert.match(followup.response.instruction, /当前角色卡.*最初的口吻/);
-  assert.match(followup.response.instruction, /约25字只是表达参考，不是拆条门槛/);
-  assert.match(followup.response.instruction, /不得截断半句或半个单词/);
-  assert.doesNotMatch(followup.response.instruction, /【正式回答要求】/);
+  assert.match(h.buildWakePromptV2(KEY, 'addressed'), /当前角色卡.*最初的口吻/);
+  assert.match(h.buildWakePromptV2(KEY, 'addressed'), /约25字只是表达参考，不是拆条门槛/);
+  assert.match(h.buildWakePromptV2(KEY, 'addressed'), /不得截断半句或半个单词/);
+  assert.doesNotMatch(h.buildWakePromptV2(KEY, 'addressed'), /【正式回答要求】/);
   assert.match(h.buildWakePromptV2(KEY, 'addressed'), /平时喜欢开玩笑/);
 });
 
 test('plain text at, mentions of someone else, and at-all do not enable formal answers', async t => {
-  const { call, incoming } = await fixture(t);
+  const { h, call, incoming } = await fixture(t);
   for (const [id, segments] of [['fake', [text('@肥鱼 请回答')]], ['other', [at('222222'), text('请回答')]], ['all', [at('all'), text('大家好')]]]) {
     await incoming(id, segments);
     const data = await call('/api/socialV2/unread?key=' + KEY);
@@ -71,9 +71,9 @@ test('a real at addressing a casual opinion retains character expression without
   await incoming('opinion', [at(BOT), text('有时坚持原来的计划也挺累的')]);
   const data = await call('/api/socialV2/unread?key=' + KEY);
   assert.equal(data.response.mode, 'ASSISTANT', 'real-at handling remains enabled');
-  assert.match(data.response.instruction, /不清除当前角色的用词、态度和个性/);
-  assert.match(data.response.instruction, /简单问候、感慨或一句观点按原意简短回应/);
-  assert.match(data.response.instruction, /不自动扩写成建议、评价或人生道理/);
+  assert.match(h.buildWakePromptV2(KEY, 'addressed'), /不清除当前角色的用词、态度和个性/);
+  assert.match(h.buildWakePromptV2(KEY, 'addressed'), /简单问候、感慨或一句观点按原意简短回应/);
+  assert.match(h.buildWakePromptV2(KEY, 'addressed'), /不自动扩写成建议、评价或人生道理/);
   const prompt = h.buildWakePromptV2(KEY, 'addressed');
   assert.match(prompt, /平时喜欢开玩笑/);
   assert.match(prompt, /不要求套统一的助手口吻/);
@@ -87,18 +87,18 @@ test('ongoing casual chat receives its own memory material, respects personaliza
   await incoming('tea', [text('肥鱼，聊聊茶叶香气')]);
   const data = await call('/api/socialV2/unread?key=' + KEY);
   assert.equal(data.response.mode, 'CASUAL');
-  assert.match(data.response.instruction, /喜欢讨论茶叶的香气/);
-  assert.match(data.response.instruction, /自己的观点、偏好、具体联想/);
-  assert.match(data.response.instruction, /不连续靠提问/);
-  assert.match(data.response.instruction, /presetTopics/);
-  assert.doesNotMatch(data.response.instruction, /隔壁群喜欢讨论太空电梯/);
+  assert.match(h.buildWakePromptV2(KEY, 'addressed'), /喜欢讨论茶叶的香气/);
+  assert.match(h.buildWakePromptV2(KEY, 'addressed'), /有依据时允许表达不同意见/);
+  assert.doesNotMatch(data.response.instruction, /喜欢讨论茶叶的香气/, 'context tools do not repeat facts already in the wake prompt');
+  assert.equal((h.buildWakePromptV2(KEY, 'addressed').match(/喜欢讨论茶叶的香气/g)||[]).length, 1);
+  assert.doesNotMatch(h.buildWakePromptV2(KEY, 'addressed'), /隔壁群喜欢讨论太空电梯/);
   st.bigfatfish.facts[0].text = '希望多分享茶叶方面的看法';
   const wait = await call('/api/socialV2/wait', { key: KEY, purpose: 'reply', timeoutMs: 10, quietMs: 1 });
-  assert.match(wait.response.instruction, /希望多分享茶叶方面的看法/);
-  assert.doesNotMatch(wait.response.instruction, /喜欢讨论茶叶的香气/);
+  assert.match(h.buildWakePromptV2(KEY, 'addressed'), /希望多分享茶叶方面的看法/);
+  assert.doesNotMatch(h.buildWakePromptV2(KEY, 'addressed'), /喜欢讨论茶叶的香气/);
   st.bigfatfish.memoryControl.personalization = false;
   const plain = await call('/api/socialV2/recent?key=' + KEY);
-  assert.doesNotMatch(plain.response.instruction, /希望多分享茶叶方面的看法/);
-  assert.match(plain.response.instruction, /"facts":\[\],"topics":\[\]/);
-  assert.match(plain.response.instruction, /约25字只是表达参考，不是拆条门槛/);
+  assert.doesNotMatch(h.buildWakePromptV2(KEY, 'addressed'), /希望多分享茶叶方面的看法/);
+  assert.doesNotMatch(h.buildWakePromptV2(KEY, 'addressed'), /【长期事实，|【阶段摘要，/);
+  assert.match(h.buildWakePromptV2(KEY, 'addressed'), /约25字只是表达参考，不是拆条门槛/);
 });

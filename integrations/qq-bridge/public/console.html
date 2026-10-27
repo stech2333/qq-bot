@@ -5112,7 +5112,7 @@ setInterval(() => { if (currentConsolePage !== 'usage') return; refreshUsage(); 
   <h3>启用群聊 / 私聊</h3><p>启用只控制机器人参与范围，不会自动加入群或添加好友。</p>
   <form id="bfAccess"><select name="kind"><option value="group">QQ群</option><option value="private">个人QQ</option></select> <input name="target" required pattern="[1-9][0-9]{4,15}" placeholder="群号或QQ号"> <button name="enable" value="yes">启用</button> <button name="enable" value="no">停用</button></form><div id="bfPeers"></div>
   <h3>人格与行为</h3><p>人格正文在原控制台“人格与角色”编辑；这里修改闲聊与冷场开场策略。</p>
-  <form id="bfSettings"><label>闲聊简练字数参考（不作为拆条门槛） <input name="casualMaxChars" type="number" min="5" max="200"></label> <span>仅真实 @ 时正式完整回答；其余沿用当前角色的日常风格。</span><p><label>人工补充话题（逗号分隔，可留空）<input name="interests" style="width:70%"></label></p>
+  <form id="bfSettings"><label>闲聊简练字数参考（不作为拆条门槛） <input name="casualMaxChars" type="number" min="5" max="200"></label> <span>真实 @ 优先回应；明确求助按完整准确的方式回答，其余沿用当前人格。</span><p><label>人工补充话题（逗号分隔，可留空）<input name="interests" style="width:70%"></label></p>
   <p><label><input name="dryRun" type="checkbox">冷场主动仅演练</label> <label>安静分钟 <input name="minIdleMinutes" type="number" min="1" max="10080"></label> <label>冷却分钟 <input name="cooldownMinutes" type="number" min="1" max="10080"></label> <label>每日上限 <input name="dailyCap" type="number" min="0" max="20"></label></p>
   <p><label>静默开始 <input name="quietStart" type="number" min="0" max="23"></label> <label>静默结束 <input name="quietEnd" type="number" min="0" max="23"></label>（北京时间，冷场与随机主动共用）</p><p><label>明确称呼（逗号分隔，命中必触发并要求回应）<input name="participationAliases" style="width:90%"></label></p><p>自动统计各会话反复讨论的词组，达到门槛后加入该会话的话题兴趣；再涉及这些话题时按话题概率接话，不再根据预设兴趣词算分。明确找其他群友时不使用话题加成；普通无关消息仍按退火规则处理。多条消息可能合并回应。</p><p>随机主动只在未安排正常回复的群聊合并轮次中抽取一次，依据最近上下文主动分享；已有明确待答消息时不触发。忙碌、离线、静默或限频时跳过，概率命中也不要求硬凑内容。沿用主动小时、全局每日及推理额度；不受冷场演练和45分钟冷场门槛限制。</p><div id="bfPolicyFields"></div><button>保存，即时生效</button></form>
   <h3>长期记忆</h3><select id="bfMemoryKey"></select> <button id="bfMemoryLoad">加载</button> <input id="bfMemoryQuery" placeholder="搜索长期事实"> <button id="bfMemorySearch">搜索</button>
@@ -5141,7 +5141,7 @@ setInterval(() => { if (currentConsolePage !== 'usage') return; refreshUsage(); 
   el('bfSettings').addEventListener('input', () => { settingsDirty = true; });
   Object.assign(consolePages, {
     'bff-policy': ['话题与主动策略', '从共同讨论中学会参与。', '查看反复讨论的话题、学习门槛、接话概率和主动检查记录。'],
-    'bff-memory': ['长期记忆', '记住各会话中有价值的事。', '按群聊或私聊查看、纠正长期事实与阶段摘要；表达方式在统一风格学习中管理。']
+    'bff-memory': ['长期记忆', '记住各会话中有价值的事。', '按群聊或私聊查看、纠正长期事实与阶段摘要；表达方式在通用表达经验与群聊风格学习中管理。']
   });
   for (const page of ['bff-policy', 'bff-memory']) {
     const nav = document.createElement('button'); nav.className = 'nav-item'; nav.dataset.view = page;
@@ -5648,79 +5648,113 @@ setInterval(() => { if (currentConsolePage !== 'usage') return; refreshUsage(); 
   if (location.hash.slice(1) === 'bff-mood') { setConsolePage('bff-mood', { updateHash: false }); run(loadMoodScopes); }
 })();
 
-// One global profile; model/chat content is never interpreted as HTML.
+// Curated global strategies; the legacy mixed-corpus file stays read-only.
 (() => {
-  const el = id => document.getElementById(id);
-  const section = document.createElement('section'); section.id = 'section-bff-global-style'; section.dataset.page = 'bff-global-style'; section.className = 'card span-all bf-integrated'; section.hidden = true;
-  section.innerHTML = `<h2>统一风格学习</h2><p>从允许学习的真人对话中融合一份表达风格，所有会话共用。学习措辞、句式、回答结构和接话方式；不共享个人事实，不复刻原句。新特征需至少三天的真实依据，更新时逐步融合。</p>
-    <button id="bfGlobalLoad" type="button">加载 / 刷新</button><p id="bfGlobalStatus" role="status"></p>
-    <h3>回复分条方式（全局）</h3><form id="bfReplyDeliveryForm"><label>分条偏好 <select id="bfReplyDelivery" aria-label="回复分条方式"><option value="natural">自然分条（默认）</option><option value="single">尽量一条</option><option value="flow">适度分条</option></select></label> <button type="submit">保存分条方式</button></form>
-    <p>自然分条：优先一条，确有内容和节奏需要时再分。尽量一条：尽量将回应和补充放在同一条。适度分条：允许按独立重点和自然停顿分条。三种都不固定凑两条；这是表达偏好，不保证固定条数，也不截断内容。保存后即时影响后续回复，独立于自动学习开关。</p>
-    <form id="bfGlobalPolicy"><label><input name="enabled" type="checkbox">自动学习</label> <label><input name="apply" type="checkbox">影响回复</label><div id="bfGlobalNumbers"></div><button type="submit">保存学习设置</button></form>
-    <p><button id="bfGlobalLock" type="button">锁定当前风格</button> <button id="bfGlobalReset" type="button">清空风格与版本，从新消息重新学习</button></p>
-    <h3>当前表达特征</h3><div id="bfGlobalFeatures"></div>
-    <p><label>人工指定维度 <select id="bfGlobalTrait"></select></label> <label>表达方式 <select id="bfGlobalValue"></select></label> <button id="bfGlobalSet" type="button">设置该项并保留人工值</button></p>
-    <h3>风格版本</h3><select id="bfGlobalHistory" aria-label="风格历史版本" style="max-width:100%"></select> <button id="bfGlobalRollback" type="button">回滚所选版本并锁定</button>
-    <p>锁定会停止自动更新，已有有效风格仍可使用。关闭“影响回复”只停用风格。删除特征后，同一批旧消息不会重新激活它；手动指定的特征需删除后才恢复该项自动学习。来源被停用或过期后，对应自动特征停止应用。版本不包含聊天正文。</p>`;
+  const el = id => document.getElementById(id), section = document.createElement('section');
+  Object.assign(section, { id: 'section-bff-global-style', className: 'card span-all bf-integrated', hidden: true }); section.dataset.page = 'bff-global-style';
+  section.innerHTML = `<h2>通用表达经验</h2><p>仅管理员确认发布可迁移的表达策略。旧统一风格文件保留但不自动学习或注入；各群经验在“群聊风格学习”独立审核。</p><button id="bfGlobalLoad">加载 / 刷新</button><p id="bfGlobalStatus" role="status"></p><form id="bfGlobalPublish"><div id="bfGlobalChoices"></div><button>确认发布通用策略</button></form><h3>回复分条方式（全局）</h3><select id="bfReplyDelivery"><option value="natural">自然分条</option><option value="single">尽量一条</option><option value="flow">适度分条</option></select><button id="bfDeliverySave">保存分条方式</button><h3>版本</h3><select id="bfGlobalHistory"></select><button id="bfGlobalRollback">回滚</button>`;
   document.querySelector('#mainContent .grid').append(section);
-  const fields = { lookbackHours: ['语料回看小时', 72, 720], minMessages: ['至少有效发言数', 20, 500], minDays: ['至少覆盖日期数', 3, 30], refreshHours: ['分析至少间隔小时', 1, 168], minNewMessages: ['再次分析所需新发言', 3, 100], dailyCap: ['每日分析上限（共用研究额度）', 0, 30], maxChanges: ['每轮最多调整维度', 1, 3] };
-  for (const [name, [title, min, max]] of Object.entries(fields)) {
-    const label = document.createElement('label'), input = document.createElement('input'); label.textContent = title + ' '; label.style.cssText = 'display:inline-block;margin:8px';
-    Object.assign(input, { name, type: 'number', min, max }); input.style.width = '75px'; label.append(input); el('bfGlobalNumbers').append(label);
+  const run = async fn => { try { await fn(); } catch(e) { showConsoleToast(e.message); } }; let view;
+  const request = async (method='GET', body) => { const r = await api('/api/bigfatfish/global-style', method, body); if (r.ok === false) throw Error(r.error); return r; };
+  const load = async () => {
+    view = await request(); el('bfGlobalStatus').textContent = `v${view.version} · ${view.legacy.present ? '旧统一风格仅保留原文件，不应用' : '无旧统一风格'} · ${view.error || '管理员发布模式'}`;
+    el('bfReplyDelivery').value = view.replyDelivery; el('bfGlobalChoices').replaceChildren();
+    for (const [id, text] of Object.entries(view.choices)) { const label=document.createElement('label'), input=document.createElement('input'); input.type='checkbox'; input.value=id; input.checked=view.published.includes(id); label.append(input,document.createTextNode(text)); el('bfGlobalChoices').append(label,document.createElement('br')); }
+    el('bfGlobalHistory').replaceChildren(); for (const h of [...view.history].reverse()) { const o=document.createElement('option'); o.value=h.version; o.textContent=`v${h.version} · ${new Date(h.at).toLocaleString('zh-CN')}`; el('bfGlobalHistory').append(o); }
+  };
+  const action=async body=>{ if(!view) throw Error('请先加载'); await request('POST',{...body,revision:view.revision}); await load(); };
+  el('bfGlobalLoad').onclick=()=>run(load);
+  el('bfGlobalPublish').onsubmit=e=>{e.preventDefault();run(()=>action({action:'publish',strategies:[...el('bfGlobalChoices').querySelectorAll('input:checked')].map(i=>i.value)}));};
+  el('bfGlobalRollback').onclick=()=>run(()=>action({action:'rollback',version:Number(el('bfGlobalHistory').value)}));
+  el('bfDeliverySave').onclick=()=>run(async()=>{const r=await api('/api/bigfatfish/settings','POST',{replyDelivery:el('bfReplyDelivery').value});if(r.ok===false)throw Error(r.error);await load();});
+  consolePages['bff-global-style']=['通用表达经验','管理员发布的抽象表达策略。','原统一风格只读保留；群经验逐群隔离。'];
+  const nav=document.createElement('button');nav.type='button';nav.className='nav-item';nav.dataset.view='bff-global-style';nav.textContent='✦ 通用表达经验';nav.onclick=()=>{setConsolePage('bff-global-style',{focus:true});run(load);};el('mainNav').append(nav);
+  if(location.hash.slice(1)==='bff-global-style'){setConsolePage('bff-global-style',{updateHash:false});run(load);}
+})();
+
+// Integrated authenticated console page. All learned values are rendered as text nodes.
+(() => {
+  const el = id => document.getElementById(id), section = document.createElement('section');
+  Object.assign(section, { id: 'section-bff-group-style', className: 'card span-all bf-integrated', hidden: true }); section.dataset.page = 'bff-group-style';
+  section.innerHTML = `<h2>群聊风格学习</h2><p>同一人格适应不同群的表达氛围。自动学习只产生候选；审核发布后按场景选择，认真求助优先完整准确。</p>
+    <select id="bfGroupSelect" aria-label="选择已启用群"></select> <button id="bfGroupLoad">加载 / 刷新</button><p id="bfGroupStatus" role="status"></p>
+    <form id="bfGroupConfig"><label><input name="enabled" type="checkbox">允许学习</label> <label><input name="apply" type="checkbox">应用群风格与经验</label> <label><input name="locked" type="checkbox">锁定群风格</label><div id="bfGroupThresholds"></div><button>保存本群设置</button></form>
+    <h3>当前特征和候选</h3><div id="bfGroupFeatures"></div><select id="bfGroupTrait"></select><select id="bfGroupValue"></select><button id="bfGroupSet">人工指定并锁定该特征</button>
+    <h3>场景表达经验</h3><div id="bfGroupExpressions"></div><form id="bfGroupEdit"><select name="id" aria-label="选择编辑经验"></select><div id="bfGroupEditFields"></div><button>保存修改为候选并锁定</button></form>
+    <h3>版本历史</h3><select id="bfGroupHistory"></select><button id="bfGroupRollback">回滚并锁定</button><button id="bfGroupReset">清空本群风格数据</button>
+    <p>清空同时删除本群风格版本和审核记录，并阻止旧任务回写。原事实记忆、黑话词库和共享学习日志保留；旧消息不会重新成为本群风格来源。关闭应用只影响本群表达，不清空聊天队列。</p>
+    <h3>本群黑话与待确认旧词</h3><div id="bfGroupSlang"></div><p>公开用语需管理员确认，多个群共同使用须逐群确认；同词不同群可保留不同释义。原词库编辑和研究仍在“黑话词库”。</p>
+    <h3>只读模拟检索</h3><form id="bfGroupPreview"><input name="message" required maxlength="1000" placeholder="输入模拟消息"><button>预览</button></form><pre id="bfGroupPreviewResult" style="white-space:pre-wrap"></pre><h3>最近提示词诊断</h3><pre id="bfGroupDiagnostics" style="white-space:pre-wrap"></pre>`;
+  document.querySelector('#mainContent .grid').append(section);
+  let view, groups = [], requestSerial = 0;
+  el('bfGroupThresholds').style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:16px 0';
+  el('bfGroupEditFields').style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px';
+  for (const label of el('bfGroupConfig').querySelectorAll('label')) label.style.cssText = 'display:inline-flex;align-items:center;gap:6px;margin-right:20px';
+  const run = async fn => { try { await fn(); } catch(e) { showConsoleToast(e.message); } };
+  const call = async (route, method = 'GET', body) => { const r = await api(route, method, body); if (r.ok === false) throw Error(r.error || '群风格操作失败'); return r; };
+  const option = (value, text) => { const o = document.createElement('option'); o.value = value; o.textContent = text; return o; };
+  const button = (text, fn) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = text; b.onclick = () => run(fn); return b; };
+  const fields = { minMessages: '至少有效消息', minDays: '至少日期数', minSpeakers: '至少发言者', featureMinMessages: '单项至少证据', lookbackHours: '回看小时', refreshHours: '研究间隔小时', minNewMessages: '再次研究新增消息', dailyCap: '本群每日研究上限', maxChanges: '每轮最多更新' };
+  for (const [key, text] of Object.entries(fields)) { const label = document.createElement('label'), input = document.createElement('input'); input.name = key; input.type = 'number'; input.style.width = '80px'; label.style.cssText = 'display:flex;align-items:center;gap:8px;margin:0'; label.append(document.createTextNode(text + ' '), input); el('bfGroupThresholds').append(label); }
+  const editInputs = {};
+  function evidence(node, entry, target) {
+    const details = document.createElement('details'), summary = document.createElement('summary'); summary.textContent = `来源 ${entry.evidence?.sources.length || 0} 条 / ${entry.evidence?.speakerCount || 0} 人 / ${entry.evidence?.dayCount || 0} 天；${entry.status}；支持分 ${Number(entry.confidence || 0).toFixed(2)}（非正确率）`; details.append(summary);
+    const text = document.createElement('pre'); text.style.whiteSpace = 'pre-wrap'; text.textContent = JSON.stringify(entry.evidence || {}, null, 2); details.append(text);
+    const key = view.scope;
+    details.append(button('查看本群来源原文（仅管理员）', async () => { const params = new URLSearchParams({ key, action: 'evidence', ...target }); const r = await call('/api/bigfatfish/group-style?' + params); text.textContent = JSON.stringify(r.sources, null, 2); })); node.append(details);
   }
-  let view;
-  const run = async fn => { try { await fn(); } catch (e) { showConsoleToast(e.message); } };
-  const request = async (method = 'GET', body) => { const r = await api('/api/bigfatfish/global-style', method, body); if (r.ok === false) throw Error(r.error || '风格操作失败'); return r; };
-  const names = { tone: '语气', wording: '措辞', sentences: '句式', structure: '回答结构', engagement: '接话方式', paragraphs: '分段', punctuation: '标点', emotes: '表情' };
-  function values() {
-    const select = el('bfGlobalValue'); select.replaceChildren();
-    for (const [value, title] of Object.entries(view?.traits[el('bfGlobalTrait').value] || {})) { const o = document.createElement('option'); o.value = value; o.textContent = title; select.append(o); }
+  function controls(node, target, entry) {
+    for (const [action, title] of [['approve', '审核发布'], ['reject', '拒绝'], ['delete', '删除']]) node.append(button(title, () => actionRequest({ action, ...target })));
+    node.append(button(entry.locked ? '解锁该项' : '锁定该项', () => actionRequest({ action: 'lock', ...target, locked: !entry.locked })));
   }
-  function render(r) {
-    view = r;
-    el('bfReplyDelivery').value = r.replyDelivery || 'natural';
-    const statuses = { researching: '分析中', approved: '已完成分析', rejected: '暂未确认', failed: '分析失败，等待重试', cancelled: '来源或设置已变化，旧结果已丢弃' };
-    el('bfGlobalStatus').textContent = `统一风格 v${r.version} · ${r.locked ? '已锁定' : '可自动更新'} · ${r.policy.apply ? '允许影响回复' : '仅学习不应用'} · 有效语料 ${r.sample.messages} 次 / ${r.sample.days} 天 · 今日分析 ${r.budget?.todayUsed || 0}/${r.policy.dailyCap} 次 · ${statuses[r.research.status] || (r.sample.qualified ? '等待下一次分析' : '等待语料达标')}${r.error ? ' · ' + r.error : ''}`;
-    for (const [k, value] of Object.entries(r.policy)) { const input = el('bfGlobalPolicy').elements[k]; if (input) input[input.type === 'checkbox' ? 'checked' : 'value'] = value; }
-    el('bfGlobalLock').textContent = r.locked ? '解除锁定，恢复自动更新' : '锁定当前风格';
-    const box = el('bfGlobalFeatures'); box.replaceChildren();
-    for (const f of r.features) {
-      const row = document.createElement('p'); row.textContent = `${names[f.key]}：${f.label} · ${f.active ? '有效' : '依据已失效'} · ${f.manual ? '人工指定' : `${f.evidence} 条来源 / ${f.days} 天，置信度 ${Math.round(f.confidence * 100)}%`} `;
-      const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = '删除该项'; remove.onclick = () => run(() => action({ action: 'delete', key: f.key })); row.append(remove);
-      const details = document.createElement('details'), summary = document.createElement('summary'); summary.textContent = '查看来源依据'; details.append(summary);
-      for (const source of f.sources || []) { const p = document.createElement('p'); p.textContent = `${new Date(source.time).toLocaleString('zh-CN')} · 来源 ${source.id}`; details.append(p); }
-      row.append(details); box.append(row);
+  async function actionRequest(body) {
+    if (!view || view.scope !== el('bfGroupSelect').value) throw Error('请先加载本群');
+    await call('/api/bigfatfish/group-style', 'POST', { ...body, key: view.scope, revision: view.revision }); await load();
+  }
+  function editSelection() {
+    const e = view?.expressionExamples.find(e => e.id === el('bfGroupEdit').elements.id.value);
+    for (const [k, input] of Object.entries(editInputs)) {
+      if (input.multiple) { for (const option of input.options) option.selected = (e?.[k] || (k === 'when' ? ['general'] : [])).includes(option.value); }
+      else input.value = e?.[k] || input.options[0]?.value;
     }
-    if (!r.features.length) box.textContent = '尚无已确认的统一风格；继续使用角色原本的表达。';
-    const trait = el('bfGlobalTrait').value; el('bfGlobalTrait').replaceChildren();
-    for (const key of Object.keys(r.traits)) { const o = document.createElement('option'); o.value = key; o.textContent = names[key]; el('bfGlobalTrait').append(o); }
-    if (r.traits[trait]) el('bfGlobalTrait').value = trait; values();
-    el('bfGlobalHistory').replaceChildren();
-    for (const h of [...r.history].reverse()) { const o = document.createElement('option'); o.value = h.version; o.textContent = `v${h.version} · ${new Date(h.at).toLocaleString('zh-CN')} · ${h.labels.join('；') || '基础风格'}`; el('bfGlobalHistory').append(o); }
   }
-  async function load() { render(await request()); }
-  async function action(body) { if (!view) throw Error('请先加载统一风格'); render(await request('POST', { ...body, revision: view.revision })); showConsoleToast('统一风格已保存'); }
-  el('bfGlobalLoad').onclick = () => run(load);
-  el('bfReplyDeliveryForm').onsubmit = event => { event.preventDefault(); run(async () => {
-    const replyDelivery = el('bfReplyDelivery').value;
-    const r = await api('/api/bigfatfish/settings', 'POST', { replyDelivery });
-    if (r.ok === false) throw Error(r.error || '分条方式保存失败');
-    await load(); showConsoleToast('分条方式已保存，后续回复即时生效');
-  }); };
-  el('bfGlobalTrait').onchange = values;
-  el('bfGlobalPolicy').onsubmit = event => { event.preventDefault(); run(async () => {
-    const f = event.target.elements, policy = { enabled: f.enabled.checked, apply: f.apply.checked };
-    for (const k of Object.keys(fields)) policy[k] = Number(f[k].value);
-    await action({ action: 'configure', policy });
-  }); };
-  el('bfGlobalLock').onclick = () => run(() => action({ action: 'lock', locked: !view?.locked }));
-  el('bfGlobalReset').onclick = () => run(() => action({ action: 'reset' }));
-  el('bfGlobalSet').onclick = () => run(() => action({ action: 'set', key: el('bfGlobalTrait').value, value: el('bfGlobalValue').value }));
-  el('bfGlobalRollback').onclick = () => run(async () => { if (!el('bfGlobalHistory').value) throw Error('暂无历史版本'); await action({ action: 'rollback', version: Number(el('bfGlobalHistory').value) }); });
-  consolePages['bff-global-style'] = ['统一风格学习', '融合真人表达，逐步形成自己的说话方式。', '所有会话共用一份风格；查看特征依据、学习设置与版本。'];
-  const nav = document.createElement('button'); nav.type = 'button'; nav.className = 'nav-item'; nav.dataset.view = 'bff-global-style'; nav.textContent = '✦ 统一风格学习'; nav.onclick = () => { setConsolePage('bff-global-style', { focus: true }); run(load); }; el('mainNav').append(nav);
-  if (typeof featureIndex !== 'undefined') featureIndex.push({ page: 'bff-global-style', label: '统一风格 自动学习 回答方式', target: section });
-  if (location.hash.slice(1) === 'bff-global-style') { setConsolePage('bff-global-style', { updateHash: false }); run(load); }
+  function values() { el('bfGroupValue').replaceChildren(); for (const [v, label] of Object.entries(view?.traits[el('bfGroupTrait').value] || {})) el('bfGroupValue').append(option(v, label)); }
+  async function load() {
+    const serial = ++requestSerial, key = el('bfGroupSelect').value; if (!key) return;
+    const data = await call('/api/bigfatfish/group-style?key=' + encodeURIComponent(key)); if (serial !== requestSerial) return; view = data;
+    const stages = { candidates: '等待审核', unchanged: '表达经验无实质变化', researching: '正在研究', failed: '研究失败，等待重试' };
+    el('bfGroupStatus').textContent = `${key} · v${view.version} / r${view.revision} · 有效 ${view.sample.messages} 条 / ${view.sample.days} 天 / ${view.sample.speakers} 人 · ${view.sample.qualified ? '达到研究门槛' : '等待真实语料'} · ${stages[view.research.status] || '尚未研究'} · ${view.error || ''} · 句长中位数 ${view.sample.statistics.medianChars} 字，短句 ${Math.round(view.sample.statistics.shortFraction * 100)}%`;
+    for (const k of ['enabled', 'apply', 'locked']) el('bfGroupConfig').elements[k].checked = view[k];
+    for (const k of Object.keys(fields)) el('bfGroupConfig').elements[k].value = view.policy[k];
+    el('bfGroupFeatures').replaceChildren();
+    for (const [key, entry] of Object.entries(view.features)) { const row = document.createElement('div'); row.textContent = `${key}：${view.traits[key]?.[entry.value] || entry.value} · ${view.active?.features[key] ? '生效' : '未生效'} `; evidence(row, entry, { feature: key }); controls(row, { feature: key }, entry); el('bfGroupFeatures').append(row); }
+    el('bfGroupExpressions').replaceChildren(); el('bfGroupEdit').elements.id.replaceChildren();
+    for (const entry of view.expressionExamples) { const row = document.createElement('div'); row.textContent = `${view.vocabulary.scene[entry.scene]} / ${view.vocabulary.action[entry.action]} / ${view.vocabulary.strategy[entry.strategy]} / ${view.vocabulary.structure[entry.structure]} · 适用 ${entry.when.join('、')} · 避免 ${entry.avoid.join('、')} · 最近使用 ${entry.lastUsedAt ? new Date(entry.lastUsedAt).toLocaleString('zh-CN') : '尚无'} `; evidence(row, entry, { id: entry.id }); controls(row, { id: entry.id }, entry); el('bfGroupExpressions').append(row); el('bfGroupEdit').elements.id.append(option(entry.id, entry.scene + ' · ' + entry.id)); }
+    const fieldNames = { scene: '场景', action: '回应动作', structure: '表达结构', strategy: '表达策略', when: '适用条件（可多选）', avoid: '不适用场景（可多选）' };
+    el('bfGroupEditFields').replaceChildren(); for (const [k, table] of Object.entries(view.vocabulary)) { const label = document.createElement('label'), input = document.createElement('select'); input.name = k; input.multiple = ['when', 'avoid'].includes(k); if (input.multiple) input.size = 3; for (const [value, title] of Object.entries(table)) input.append(option(value, title)); label.append(document.createTextNode(fieldNames[k] + ' '), input); el('bfGroupEditFields').append(label); editInputs[k] = input; } editSelection();
+    el('bfGroupTrait').replaceChildren(); for (const k of Object.keys(view.traits)) el('bfGroupTrait').append(option(k, k)); values();
+    el('bfGroupHistory').replaceChildren(); for (const h of [...view.history].reverse()) el('bfGroupHistory').append(option(h.version, `v${h.version} · ${h.reason} · ${new Date(h.at).toLocaleString('zh-CN')}`));
+    el('bfGroupDiagnostics').textContent = JSON.stringify(view.promptDiagnostics || { status: '尚无回复诊断', tokens: null }, null, 2);
+    const slang = await call('/api/slang'); if (serial !== requestSerial) return; el('bfGroupSlang').replaceChildren();
+    for (const e of slang.entries.filter(e => e.scope === key || e.scope === 'public' || e.scope === 'legacy' || e.confirmedScopes?.includes(key))) {
+      const row = document.createElement('p'); row.textContent = `${e.content}：${e.meaning || '待研究'} · ${e.scope || 'legacy'} · ${e.status} `;
+      const scope = document.createElement('select'); for (const v of ['legacy', 'public', 'shared', ...groups]) scope.append(option(v, v)); scope.value = e.scope || 'legacy'; row.append(scope);
+      const confirmed = document.createElement('input'); confirmed.placeholder = '独立确认的 group:群号，逗号分隔'; confirmed.value = (e.confirmedScopes || []).join(','); row.append(confirmed);
+      row.append(button('确认范围', async () => { await call('/api/bigfatfish/slang-scope', 'POST', { id: e.id, revision: e.revision || 0, scope: scope.value, confirmedScopes: confirmed.value.split(',').map(s => s.trim()).filter(Boolean) }); await load(); })); el('bfGroupSlang').append(row);
+    }
+  }
+  async function refresh() { const r = await call('/api/bigfatfish/group-style'), old = el('bfGroupSelect').value; groups = r.groups; el('bfGroupSelect').replaceChildren(...groups.map(k => option(k, k))); if (groups.includes(old)) el('bfGroupSelect').value = old; await load(); }
+  el('bfGroupLoad').onclick = () => run(refresh); el('bfGroupSelect').onchange = () => run(load); el('bfGroupTrait').onchange = values; el('bfGroupEdit').elements.id.onchange = editSelection;
+  el('bfGroupConfig').onsubmit = e => { e.preventDefault(); run(() => { const f = e.target.elements, policy = Object.fromEntries(Object.keys(fields).map(k => [k, Number(f[k].value)])); return actionRequest({ action: 'configure', enabled: f.enabled.checked, apply: f.apply.checked, locked: f.locked.checked, policy }); }); };
+  el('bfGroupSet').onclick = () => run(() => actionRequest({ action: 'setFeature', feature: el('bfGroupTrait').value, value: el('bfGroupValue').value }));
+  el('bfGroupEdit').onsubmit = e => { e.preventDefault(); run(() => actionRequest({ action: 'editExpression', id: e.target.elements.id.value, ...Object.fromEntries(Object.entries(editInputs).map(([k, i]) => [k, i.multiple ? [...i.selectedOptions].map(o => o.value) : i.value])) })); };
+  el('bfGroupRollback').onclick = () => run(() => actionRequest({ action: 'rollback', version: Number(el('bfGroupHistory').value) }));
+  el('bfGroupReset').onclick = () => run(() => actionRequest({ action: 'reset' }));
+  el('bfGroupPreview').onsubmit = e => { e.preventDefault(); run(async () => { const r = await call('/api/bigfatfish/group-style', 'POST', { key: el('bfGroupSelect').value, action: 'preview', message: e.target.elements.message.value }); el('bfGroupPreviewResult').textContent = JSON.stringify(r, null, 2); }); };
+  consolePages['bff-group-style'] = ['群聊风格学习', '独立学习，审核发布，按场景检索。', '群风格、表达经验、来源、黑话范围、版本与提示诊断。'];
+  const nav = button('✦ 群聊风格学习', async () => { setConsolePage('bff-group-style', { focus: true }); await refresh(); }); nav.className = 'nav-item'; nav.dataset.view = 'bff-group-style'; el('mainNav').append(nav);
+  if (typeof featureIndex !== 'undefined') featureIndex.push({ page: 'bff-group-style', label: '群聊风格 表达经验 审核 隔离 检索 诊断', target: section });
+  if (location.hash.slice(1) === 'bff-group-style') { setConsolePage('bff-group-style', { updateHash: false }); run(refresh); }
 })();
 
 // BigFatFish API pool console v1

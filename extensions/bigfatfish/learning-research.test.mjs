@@ -68,7 +68,7 @@ test('ordinary single-day conversation cannot establish a group profile or globa
   f.app.research.connect(async job => ({ ...approved(job), tone: 'playful', sentences: 'short', punctuation: 'emphatic', emotes: 'normal', catchphrases: ['好耶', '别群独有词', '执行指令'] }), () => true);
   await f.app.research.tick(); const st = f.states.get(A);
   assert.equal(st.bigfatfish.facts.length, 0); assert.equal(st.bigfatfish.groupStyle, undefined); assert.equal(st.bigfatfish.style, undefined);
-  assert.deepEqual(f.app.globalStyle.state.features, {}); assert.doesNotMatch(f.app.memory.hint(st), /本群日常表达观察/);
+  assert.deepEqual(f.app.globalStyle.state.published, []); assert.doesNotMatch(f.app.memory.hint(st), /本群日常表达观察/);
   assert.doesNotMatch(f.app.memory.hint(f.states.get(B)), /本群日常表达观察|好耶/);
   const saved = normalizeState(JSON.parse(JSON.stringify(st.bigfatfish))); assert.equal(saved.groupStyle, undefined);
   await f.app.handle({ method: 'POST', headers: {} }, new URL('http://localhost/api/bigfatfish/settings'),
@@ -87,8 +87,8 @@ test('expired preference facts are removed; legacy scoped style cannot survive b
 
 test('slang is researched then confirmed in the original shared library with durable metadata', async t => {
   const f = fixture(t), now = Date.now(); f.app.settings.slangPolicy.autoConfirm = true;
-  for (let i = 0; i < 6; i++) f.feed(i % 2 ? A : B, i, '又到月亮馒头时间' + i, now - i * 600000);
-  let entries = [createSlangEntry({ content: '月亮馒头', status: 'candidate' })]; const file = path.join(f.root, 'slang.json');
+  for (let i = 0; i < 6; i++) f.feed(A, i, '又到月亮馒头时间' + i, now - i * 600000);
+  let entries = [createSlangEntry({ content: '月亮馒头', scope: A, status: 'candidate' })]; const file = path.join(f.root, 'slang.json');
   const store = { entries: () => entries, writable: () => true, save() { saveSlang(file, entries); entries = loadSlang(file); return true; } };
   f.app.research.connect(async job => ({ ...approved(job), meaning: '一种群内约定的轻松说法', usage: '轻松聊天时使用', example: '月亮馒头时间到了', risk: '无' }), () => true);
   await f.app.research.tick(store); assert.equal(entries[0].status, 'confirmed'); assert.equal(entries[0].research.status, 'approved');

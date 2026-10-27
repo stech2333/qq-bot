@@ -10,7 +10,8 @@ export function windowSettings(value = {}) {
 // This window is independent of model context. Each group owns a bounded, expiring journal.
 export class LearningWindow {
   constructor(app) { this.app = app; this.windows = new Map(); this.errors = new Map(); }
-  hours() { return Math.max(this.app.settings.topicLearning.lookbackHours, this.app.settings.slangPolicy.lookbackHours, this.app.settings.globalStyleLearning?.lookbackHours || 0); }
+  hours() { return Math.max(this.app.settings.topicLearning.lookbackHours, this.app.settings.slangPolicy.lookbackHours, this.app.settings.groupStyleLearning?.lookbackHours || 720,
+    ...[...(this.app.groupStyle?.states.values() || [])].map(s => Number(s.policy?.lookbackHours) || 0)); }
   file(key) { return path.join(this.app.root, 'state', 'learning-window', createHash('sha256').update(key).digest('hex').slice(0, 24) + '.jsonl'); }
   valid(m, now) {
     return m && !m.isSelf && m.topicLearningAllowed !== false && m.messageId != null && String(m.messageId).trim()
@@ -28,13 +29,15 @@ export class LearningWindow {
     return this.windows.get(key);
   }
   ingest(key, st, messages, now = Date.now()) {
-    if (!key.startsWith('group:') && !this.app.globalStyle?.allowed(key)) return false;
+    if (!this.app.globalStyle?.allowed(key)) return false;
     const win = this.load(key, now); if (this.errors.has(key)) return false;
     const added = [];
     for (const m of st.bigfatfish.memoryControl?.accumulation === false ? [] : (messages || [])) {
       if (!this.valid(m, now) || win.rows.has(String(m.messageId))) continue;
       const row = { messageId: String(m.messageId), userId: String(m.userId), time: m.time, plain: String(m.plain ?? m.text ?? '').slice(0, 500),
-        hasForward: m.hasForward === true, hasMedia: m.hasMedia === true, quoted: m.quoted === true, quoteTargetIsSelf: m.quoteTargetIsSelf === true, styleSourceVersion: 1 };
+        hasForward: m.hasForward === true, hasMedia: m.hasMedia === true, quoted: m.quoted === true, quoteTargetIsSelf: m.quoteTargetIsSelf === true,
+        seq: Number.isSafeInteger(m.seq) ? m.seq : null, replyToMessageId: m.replyToMessageId ? String(m.replyToMessageId) : null,
+        sourceScope: m.sourceScope === key ? key : null, styleSourceVersion: m.styleSourceVersion === 2 && m.sourceScope === key ? 2 : 1 };
       win.rows.set(row.messageId, row); added.push(row);
     }
     const all = [...win.rows.values()].sort((a, b) => a.time - b.time), rows = all.filter(m => this.valid(m, now)).slice(-this.app.settings.learningWindow.maxMessages);
@@ -50,6 +53,7 @@ export class LearningWindow {
     return added.length > 0;
   }
   messages(key, st, now = Date.now()) {
+    if (!this.app.globalStyle?.allowed(key)) return [];
     const win = key.startsWith('group:') || this.app.globalStyle?.allowed(key) ? this.load(key, now) : null;
     if (this.errors.has(key)) return [];
     return [...new Map([...(win?.rows.values() || []), ...(st.recentMessages || [])].filter(m => this.valid(m, now)).map(m => [String(m.messageId), { ...win?.rows.get(String(m.messageId)), ...m }])).values()]

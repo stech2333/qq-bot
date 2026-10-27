@@ -32,11 +32,11 @@ test('native AI submissions cannot create candidates until real message threshol
   }
   assert.equal(entries().length, 0);
   assert.equal((await call('/api/socialV2/slang/submit', { key: KEY, content: WORD })).ok, false, 'existing submission rate limit still applies');
-  feed(3); const result = await call('/api/socialV2/slang/submit', { key: 'group:123457', content: WORD });
-  assert.equal(result.entry?.status, 'candidate', JSON.stringify(result)); assert.equal(entries().length, 1);
-  // Existing candidates remain editable and collectible even after the source window is evicted.
-  h.getSocialV2State(KEY).recentMessages = [];
-  assert.equal((await call('/api/socialV2/slang/submit', { key: 'group:123457', content: WORD })).status, 'candidate');
+  feed(3); const other = await call('/api/socialV2/slang/submit', { key: 'group:123457', content: WORD });
+  assert.equal(other.status, 'pending'); assert.equal(other.messages, 0, 'A group evidence cannot admit B group slang');
+  for (let i = 1; i <= 3; i++) h.appendSocialV2Message('group:123457', '群友', WORD + i, WORD + i, false, false, String(i), [], '222222');
+  const result = await call('/api/socialV2/slang/submit', { key: 'group:123457', content: WORD });
+  assert.equal(result.entry?.status, 'candidate', JSON.stringify(result)); assert.equal(entries()[0].scope, 'group:123457'); assert.equal(entries().length, 1);
 });
 
 test('native extraction enforces the same threshold before creating a candidate', async t => {

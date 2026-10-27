@@ -16,7 +16,7 @@ function fixture(t) {
   app.bind('group:123456', state);
   state.recentMessages = Array.from({ length: 6 }, (_, i) => ({ messageId: String(i + 1), userId: String(111111 + i % 2), plain: '今天又在摸鱼', time: now - i * 600000, isSelf: false }));
   const file = path.join(root, 'slang.json');
-  const entry = createSlangEntry({ content: '摸鱼', meaning: '工作间隙偷闲', status: 'candidate', source: 'ai' });
+  const entry = createSlangEntry({ content: '摸鱼', scope: 'group:123456', meaning: '工作间隙偷闲', status: 'candidate', source: 'ai' });
   entry.research = { status: 'approved', confidence: 0.95 };
   const entries = [entry]; let saves = 0;
   const store = { entries: () => entries, writable: () => true, save: () => { saves++; saveSlang(file, entries); return true; } };
