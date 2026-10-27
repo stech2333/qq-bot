@@ -1,0 +1,36 @@
+.env
+data/
+data-bridge/
+backups/
+logs/
+node_modules/
+integrations/qq-bridge/node_modules/
+integrations/qq-bridge/config.json
+integrations/qq-bridge/state/
+integrations/qq-bridge/.git/
+integrations/voice-tool/
+integrations/SnowLuma/
+downloads/
+integrations/_downloads/
+*.tmp
+
+# Machine-local caches, generated artifacts and third-party runtimes
+/.cache/
+/.tmp/
+/output/
+/runtime/
+/build/
+integrations/qq-bridge/bin/
+integrations/qq-bridge/_snowluma-catalog.json
+
+# Credentials, runtime databases and local backups
+.credentials*
+credentials.json
+*.log
+*.bak
+*.bak-*
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite-*

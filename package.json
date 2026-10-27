@@ -1,0 +1,26 @@
+{
+  "name": "deepseekharness",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test:companion": "node scripts/test-companion-modules.cjs",
+    "test": "node --test extensions/bigfatfish/*.test.mjs",
+    "audit:project": "node scripts/audit-project.cjs",
+    "bridge:prepare": "node scripts/prepare-bridge.cjs && node scripts/apply-bridge-extension.cjs",
+    "bridge:test": "node --test extensions/bigfatfish/*.test.mjs",
+    "bridge:manage": "node scripts/bridge-manager.mjs",
+    "bridge:start": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/open-bridge-manager.ps1 -StartAll"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@deepseek-ai/dsh": "^0.2.1-rc.2"
+  },
+  "overrides": {
+    "@modelcontextprotocol/client": "2.3.1",
+    "fflate": "0.8.3"
+  }
+}

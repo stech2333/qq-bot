@@ -1,0 +1,8 @@
+{
+  "repository": "https://github.com/Derpyu520/qq-bridge",
+  "commit": "a49877f4e58d04e47532d44b803360d0f001160d",
+  "omitted": [
+    "assets/deepseek娘.png"
+  ],
+  "reason": "QQ media uses upstream interfaces; no bundled local image asset."
+}

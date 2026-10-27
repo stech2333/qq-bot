@@ -1,0 +1,49 @@
+{
+  "pairs": [
+    {
+      "before": "            purpose: replyWait ? 'reply' : 'messages',",
+      "after": "            purpose: replyWait ? 'reply' : 'messages',\n            participation: bff.chatHint(st),"
+    },
+    {
+      "before": "    const burst = recent.filter((m) => m && !m.isSelf && Date.now() - Number(m.time || 0) < 15000).length;",
+      "after": "    if (bff.settings.participation.enabled && st.bigfatfish?.participation?.lastDecision?.involved) return Math.min(defaultMs, 2000);\n    const burst = recent.filter((m) => m && !m.isSelf && Date.now() - Number(m.time || 0) < 15000).length;"
+    },
+    {
+      "before": "  function evaluateWakeTriggerV2(key, st, event, kind, textContent, plainContent, quoteTargetIsSelf) {",
+      "after": "  function evaluateWakeTriggerV2(key, st, event, kind, textContent, plainContent, quoteTargetIsSelf) {\n    const decision = bff.chatDecision(key, st, event, { kind, text: plainContent, quoteTargetIsSelf, nickname: selfNickname });\n    if (decision.handled) { saveSocialV2State(); return decision.reason; }"
+    },
+    {
+      "before": "    const antiAiLine = '【反AI味】你不是客服：不用有求必应，可以装傻、已读乱回、拒绝推荐；少用“一绝/真管用/保证/绝对”这类词。\\n\\n';",
+      "after": "    const antiAiLine = '【自然聊天】轻松自然，少用客服套话和“一绝/真管用/保证/绝对”。有人明确找你或接你的话时先及时回应，不要为了装真人而刻意已读不回；话题转向别人时按接话状态安静退出。\\n\\n';"
+    },
+    {
+      "before": "    const proactiveLine = '【积极性】不要习惯性潜水：群里有你能接的话题就主动参与，偶尔插一句别人的话题也很正常；只有确实没话可说、对方已明确结束、或长时间没人说话时才潜水。\\n\\n';",
+      "after": "    const proactiveLine = '【积极性】以本次【接话状态】为准：涉及你时积极回应，加入后接住相关追问；连续无关消息时降低插话并逐渐退出，不强行把别人的话题拉回自己。\\n\\n';"
+    },
+    {
+      "before": "    const base = bff.instruction(key, st) + roleLine + identityLine + tokenLine + initialPromptLine + antiAiLine + proactiveLine + stickerLine + replyLine + statusLine + wakeLine + memoryLine + participationLine + preSleepLine + timeSenseLine;",
+      "after": "    const base = bff.instruction(key, st) + bff.chatHint(st, reason) + roleLine + identityLine + tokenLine + initialPromptLine + antiAiLine + proactiveLine + stickerLine + replyLine + statusLine + wakeLine + memoryLine + participationLine + preSleepLine + timeSenseLine;"
+    },
+    {
+      "before": "    private: 100,\n    atMention: 90,",
+      "after": "    private: 100,\n    addressed: 95,\n    atMention: 90,\n    followUp: 85,"
+    },
+    {
+      "before": "    anyMessage: 50,",
+      "after": "    anyMessage: 50,\n    ambient: 45,\n    cooling: 10,"
+    },
+    {
+      "before": "      const st = getSocialV2State(key);\n      if (!st.bootstrapSent) {",
+      "after": "      const st = getSocialV2State(key);\n      const messageWakeReason = evaluateWakeTriggerV2(key, st, event, kind, textContent, plainContent, quoteTargetIsSelf);\n      if (!st.bootstrapSent) {"
+    },
+    {
+      "before": "        const reason = evaluateWakeTriggerV2(key, st, event, kind, textContent, plainContent, quoteTargetIsSelf);",
+      "after": "        const reason = messageWakeReason;"
+    }
+  ],
+  "scheduler": {
+    "start": "  function scheduleWakeV2(key, reason) {",
+    "end": "  /**\n   * 回合结束后补发",
+    "replacement": "  function armWakeTimerV2(key, st, reason, delay) {\n    st.pendingWakeReason = reason;\n    st.pendingWakeDueAt = Date.now() + delay;\n    st.pendingWakeTimer = setTimeout(() => {\n      st.pendingWakeTimer = null;\n      st.pendingWakeDueAt = 0;\n      const finalReason = st.pendingWakeReason || reason;\n      st.pendingWakeReason = null;\n      void sendWakePromptV2(key, finalReason).catch((error) => log(`[reserved2] 计划唤醒异常 ${key}:`, error?.message ?? error));\n    }, delay);\n    st.pendingWakeTimer.unref?.();\n  }\n\n  function scheduleWakeV2(key, reason) {\n    if (cfg.socialV2?.enabled === false) return;\n    if (socialV2.paused) return;\n    if (!isSessionAllowedInCurrentMode(key)) {\n      log(`[reserved2] 跳过计划唤醒 ${key}（${reason}）：会话已不在当前模式允许范围内`);\n      return;\n    }\n    const st = getSocialV2State(key);\n    if (st.pendingWakeTimer) {\n      // 合并窗口内已有待发送唤醒：按优先级升级最终原因，避免先概率后 @ 却仍按概率唤醒。\n      const cur = st.pendingWakeReason || reason;\n      if (wakePriorityV2(reason) > wakePriorityV2(cur)) {\n        st.pendingWakeReason = reason;\n        const delay = bff.chatDelay(st, reason, st.wakeConfig?.batchWindowMs);\n        if (!st.pendingWakeDueAt || st.pendingWakeDueAt > Date.now() + delay) {\n          clearTimeout(st.pendingWakeTimer);\n          armWakeTimerV2(key, st, reason, delay);\n        }\n        log(`[reserved2] 合并窗口内升级唤醒原因 ${key}: ${cur} -> ${reason}`);\n      }\n      return;\n    }\n    if (isConversationBusyV2(key, st)) {\n      if (!Array.isArray(st.pendingWakeReasons)) st.pendingWakeReasons = [];\n      const seq = st.lastUnreadSeq || 0;\n      if (!st.pendingWakeReasons.some((r) => r && r.reason === reason && r.seq === seq)) {\n        st.pendingWakeReasons.push({ reason, seq });\n        // 有界队列：最多保留 20 条，防止消息洪峰下无限增长。\n        if (st.pendingWakeReasons.length > 20) st.pendingWakeReasons.splice(0, st.pendingWakeReasons.length - 20);\n      }\n      log(`[reserved2] 会话繁忙，暂存唤醒原因 ${key}（${reason}@seq${seq}，原因=${busyReasonV2(key, st)}）`);\n      return;\n    }\n    cancelReplyCheckV2(key); // 真实唤醒已接管，取消普通回复检查，避免 30s 后再补一刀\n    if (st.sleepTimer) {\n      clearTimeout(st.sleepTimer);\n      st.sleepTimer = null;\n    }\n    const batchMs = bff.chatDelay(st, reason, st.wakeConfig?.batchWindowMs);\n    armWakeTimerV2(key, st, reason, batchMs);\n    log(`[reserved2] 计划唤醒 ${key}（${reason}），${Math.round(batchMs / 1000)}s 后发送`);\n  }\n\n"
+  }
+}
