@@ -172,6 +172,7 @@ export async function bridgeHarness({ config = {}, savedState, files = {}, globa
     emojiCdnCandidates, getImageDimensions, acceptImageBuffer, MAX_MEDIA_BYTES, bot,
     isConversationBusyV2, v2TurnStartAt, turnLeaseNoted, TURN_BUSY_LEASE_MS,
     settingFromDshNamespace, selfIdentityTextV2, buildWakeReminderPromptV2,
+    queueReplyDeliveryRecoveryV2, pendingReplyDeliveryV2,
     getMode() { return currentMode; },
     setSelfIdentity(display, id) {
       selfDisplayName = String(display ?? '');

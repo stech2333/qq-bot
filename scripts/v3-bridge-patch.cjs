@@ -239,3 +239,76 @@ exports.replyLatency = (s, once) => {
       return incomingNames.get(target);`);
   return once(s, "        scheduleWakeV2(key, 'bootstrap');", "        scheduleWakeV2(key, messageWakeReason || 'bootstrap');");
 };
+
+exports.replyDeliveryRecovery = (s, once) => {
+  s = '// BigFatFish unsent reply recovery v1\n' + s;
+  s = once(s, '  const pendingSendToolCalls = new Map();', '  const sendToolAttemptedSessions = new Set();\n  const replyDeliveryRetries = new Map();\n  const pendingSendToolCalls = new Map();');
+  s = s.replaceAll(/sendToolSucceededSessions\.delete\(([^)]+)\);/g, '$&\n              sendToolAttemptedSessions.delete($1);');
+  s = s.replaceAll('sendToolSucceededSessions.clear();', 'sendToolSucceededSessions.clear();\n        sendToolAttemptedSessions.clear();');
+  s = once(s, "              const toolName = String(frame.event.data?.name ?? '');", "              const toolName = String(frame.event.data?.name ?? '');\n              if (isSendToolName(toolName)) sendToolAttemptedSessions.add(frame.sessionId);");
+  s = once(s, '              v2TurnStartAt.delete(frame.sessionId);', '              const replyTurnLive = v2TurnStartAt.has(frame.sessionId);\n              const sendToolAttempted = sendToolAttemptedSessions.has(frame.sessionId);\n              v2TurnStartAt.delete(frame.sessionId);');
+  s = once(s, '              if (pendingWakeKeys.has(key)) {', `              const deliveryRecoveryHandled = queueReplyDeliveryRecoveryV2(key, {
+                live: replyTurnLive, attempted: sendToolAttempted || sendToolSucceeded, ended
+              });
+              if (!deliveryRecoveryHandled && pendingWakeKeys.has(key)) {`);
+  s = once(s, '  function buildWakeReminderPromptV2(key) {', `  function pendingReplyDeliveryV2(key) {
+    const st = socialV2.conversations.get(key);
+    if (!st || currentMode !== 'reserved2' || socialV2.paused || cfg.socialV2?.enabled === false || !dshReady
+        || !isSessionAllowedInCurrentMode(key) || shouldBlockSilentReply(key)
+        || String(selfUserId) !== String(cfg.bigfatfish.expectedQQ)
+        || !v2ToolEnabled(key.startsWith('group:') ? 'sendGroup' : 'sendPrivate')
+        || st.bffColdRound || st.lastWakeReason === 'contextInitiative'
+        || (!v2ToolEnabled('sendMessage') && !v2ToolEnabled('sendBurst'))) return null;
+    const pending = (st.unread || []).filter(m => !m.isSelf && Number(m.seq) > Number(st.lastReadThroughSeq || 0)
+      && Number(m.time) > Number(st.lastAiReplyAt || 0) && Date.now() - Number(m.time) < TURN_BUSY_LEASE_MS);
+    if (!pending.some(m => key.startsWith('private:') || m.addressedToBot || m.quoteTargetIsSelf || m.replyStyle === 'formal')) return null;
+    if (key.startsWith('group:') && !bff.groupReplyContext(key, st).confirmed) return null;
+    return { token: st.agentToken, throughSeq: Number(st.lastUnreadSeq || 0) };
+  }
+
+  function queueReplyDeliveryRecoveryV2(key, { live = false, attempted = false, ended } = {}) {
+    if (!live || attempted || ended?.reason?.kind !== 'completed' || !String(ended.text || '').trim()) return false;
+    const target = pendingReplyDeliveryV2(key);
+    if (!target) return false;
+    // Never auto-forward raw assistant output. A correction must use the existing guarded QQ tools.
+    pendingWakeKeys.delete(key); disarmPendingWakeLease(key);
+    wakeConfigUpdatedKeys.delete(key); markReadCalledKeys.delete(key); wakeConfigMissCount.delete(key);
+    const fingerprint = target.token + ':' + target.throughSeq, previous = replyDeliveryRetries.get(key);
+    const attempts = previous?.fingerprint === fingerprint ? previous.attempts : 0;
+    if (attempts >= 2) {
+      appendActivity(key + ' [reserved2] 仍有待答消息但生成文字未通过QQ工具发送，发送纠正次数已用完');
+      return true;
+    }
+    replyDeliveryRetries.set(key, { fingerprint, attempts: attempts + 1 });
+    if (replyDeliveryRetries.size > 500) replyDeliveryRetries.delete(replyDeliveryRetries.keys().next().value);
+    pendingWakeKeys.add(key); armPendingWakeLease(key);
+    appendActivity(key + ' [reserved2] 已生成文字但未发送到QQ，安排发送纠正（' + (attempts + 1) + '/2）');
+    deliverPrompt(key, '', { wakeReason: 'replyDeliveryRecovery', replyDeliveryRecovery: target }).then(result => {
+      if (result?.ok === false || result?.skipped) { pendingWakeKeys.delete(key); disarmPendingWakeLease(key); }
+    }).catch(() => {
+      pendingWakeKeys.delete(key); disarmPendingWakeLease(key);
+      appendActivity(key + ' [reserved2] 发送纠正投递失败，待答消息保留');
+    });
+    return true;
+  }
+
+  function buildWakeReminderPromptV2(key) {`);
+  s = once(s, '    const replyLine = ', `    const deliveryLine = '【QQ发送协议】普通文本输出不会自动发送到 QQ；需要让真人看到的回复，必须调用 qq_send_message 或 qq_send_burst，并确认工具成功。未实际发送时不得把文本草稿当作已经回复。\\n\\n'
+      + (reason === 'replyDeliveryRecovery' ? '【发送遗漏纠正】上一轮只生成文字，没有调用QQ发送工具，真人未收到。请核对本次消息快照，先通过上述工具回应仍待答的消息，再确认已读水位或设置唤醒。不要仅重复输出文字、仅设置唤醒或为此另开无关搜索；已回应的消息不重复发送，权限和隐私边界继续有效。\\n\\n' : '');
+    const replyLine = `);
+  s = once(s, '+ identityLine + tokenLine + initialPromptLine + stickerLine + replyLine', '+ identityLine + tokenLine + deliveryLine + initialPromptLine + stickerLine + replyLine');
+  s = once(s, '    let accepted;\n    try {\n      accepted = await api.sessions.prompt', `    if (opts.replyDeliveryRecovery) {
+      const current = pendingReplyDeliveryV2(key), expected = opts.replyDeliveryRecovery;
+      if (!current || current.token !== expected.token || current.throughSeq !== expected.throughSeq) {
+        if (generationId) bff.delivery.cancelGeneration(generationId);
+        return skipWake();
+      }
+    }
+    let accepted;
+    try {
+      accepted = await api.sessions.prompt`);
+  // Preserve recovery identity while waiting for DSH or session creation retries.
+  s = s.replaceAll('wakeReason: opts.wakeReason });', 'wakeReason: opts.wakeReason, replyDeliveryRecovery: opts.replyDeliveryRecovery });');
+  s = s.replaceAll('wakeReason: item.wakeReason });', 'wakeReason: item.wakeReason, replyDeliveryRecovery: item.replyDeliveryRecovery });');
+  return s;
+};

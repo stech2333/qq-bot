@@ -715,6 +715,7 @@ change('src/mcp-snowluma-safe.js', s => '// BigFatFish V3 wait protocol\n' + s.r
 change('src/bridge.js', s => v3Patch.unknownDelivery(s, once), '// BigFatFish V3 delivery result classification');
 change('src/bridge.js', s => v3Patch.replyDiagnostics(s, once), '// BigFatFish confirmed recipient wake diagnostics');
 change('src/bridge.js', s => v3Patch.replyLatency(s, once), '// BigFatFish direct reply latency v1');
+change('src/bridge.js', s => v3Patch.replyDeliveryRecovery(s, once), '// BigFatFish unsent reply recovery v1');
 const consoleTemplate = fs.readFileSync(path.join(root, 'extensions/bigfatfish/console-v3.html'), 'utf8');
 const consoleScript = ['console-policy.js','console-memory.js','console-api-pool.js','console-v3.js'].map(name=>fs.readFileSync(path.join(root,'extensions/bigfatfish',name),'utf8')).join('\n');
 fs.writeFileSync(path.join(repo, 'public/console.html'), consoleTemplate.replace('<!--V3_SCRIPT-->', () => '<script>\n' + consoleScript + '\n</script>'));

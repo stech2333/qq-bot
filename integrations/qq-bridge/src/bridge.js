@@ -1,3 +1,4 @@
+// BigFatFish unsent reply recovery v1
 // BigFatFish direct reply latency v1
 // BigFatFish confirmed recipient wake diagnostics
 // BigFatFish V3 delivery result classification
@@ -2415,6 +2416,8 @@ async function main() {
   const sendToolSucceededSessions = new Set(); // sessionId：当前 turn 内 MCP 发送类工具至少成功一次
   const v2TurnStartAt = new Map(); // sessionId -> timestamp：reserved2 turn 开始时间，用于判断是否“无行动”
   const toolCallNames = new Map(); // sessionId -> Map<callId, toolName>：用于结果日志关联工具名
+  const sendToolAttemptedSessions = new Set();
+  const replyDeliveryRetries = new Map();
   const pendingSendToolCalls = new Map(); // sessionId -> Set<callId>：等待 tool/result 的发送类调用
   // reserved2 防“忘记设置唤醒条件”：key -> 当前是否等待 AI 处理唤醒回合 / 本回合已更新唤醒配置 / 连续未设置次数
   const pendingWakeKeys = new Set();
@@ -2615,7 +2618,7 @@ async function main() {
         items.shift();
         log(`队列满（${QUEUE_MAX}），丢弃最旧消息 (${key})`);
       }
-      items.push({ promptText, farewell: !!opts.farewell, silent: !!opts.silent, media: opts.media ?? [], wakeReason: opts.wakeReason });
+      items.push({ promptText, farewell: !!opts.farewell, silent: !!opts.silent, media: opts.media ?? [], wakeReason: opts.wakeReason, replyDeliveryRecovery: opts.replyDeliveryRecovery });
       queued.set(key, items);
     }
     queueRetries.delete(key); // 新消息入队视为新的机会，重置退避计数
@@ -2806,6 +2809,7 @@ async function main() {
     sessionModels.delete(sessionId);
     modelAppliedSessions.delete(sessionId);
     sendToolSucceededSessions.delete(sessionId);
+              sendToolAttemptedSessions.delete(sessionId);
     pendingSendToolCalls.delete(sessionId);
     v2TurnStartAt.delete(sessionId);
     turnLeaseNoted.delete(sessionId);
@@ -2874,7 +2878,7 @@ async function main() {
               log(`补投跳过未授权会话 ${key}（当前模式 ${currentMode}）`);
               continue;
             }
-            const result = await deliverPrompt(key, item.promptText, { farewell: item.farewell, silent: item.silent, media: item.media ?? [], wakeReason: item.wakeReason });
+            const result = await deliverPrompt(key, item.promptText, { farewell: item.farewell, silent: item.silent, media: item.media ?? [], wakeReason: item.wakeReason, replyDeliveryRecovery: item.replyDeliveryRecovery });
             if (!result.ok) {
               log(`补投失败 ${key}: ${result.error || '未知错误'}`);
               failed += 1;
@@ -4591,6 +4595,7 @@ async function main() {
               toolCallNames.delete(sid);
               pendingSendToolCalls.delete(sid);
               sendToolSucceededSessions.delete(sid);
+              sendToolAttemptedSessions.delete(sid);
               // 订阅也要退掉，否则它会在每次重连时被重新 follow 并重发整份快照。
               api.events.forget?.(sid);
             }
@@ -7027,6 +7032,7 @@ async function main() {
           reverse.delete(oldSessionId);
           collectors.delete(oldSessionId);
           sendToolSucceededSessions.delete(oldSessionId);
+              sendToolAttemptedSessions.delete(oldSessionId);
           pendingSendToolCalls.delete(oldSessionId);
           v2TurnStartAt.delete(oldSessionId);
           turnLeaseNoted.delete(oldSessionId);
@@ -7119,6 +7125,7 @@ async function main() {
           reverse.clear();
           collectors.clear();
           sendToolSucceededSessions.clear();
+        sendToolAttemptedSessions.clear();
           pendingSendToolCalls.clear();
           v2TurnStartAt.clear();
           toolCallNames.clear();
@@ -8843,7 +8850,7 @@ async function main() {
         items.shift();
         log(`队列满（${QUEUE_MAX}），丢弃最旧消息 (${key})`);
       }
-      items.push({ promptText, farewell: !!opts.farewell, silent: !!opts.silent, media: opts.media ?? [], wakeReason: opts.wakeReason });
+      items.push({ promptText, farewell: !!opts.farewell, silent: !!opts.silent, media: opts.media ?? [], wakeReason: opts.wakeReason, replyDeliveryRecovery: opts.replyDeliveryRecovery });
       queued.set(key, items);
       return { ok: true, queued: true };
     }
@@ -8890,6 +8897,13 @@ async function main() {
     const promptTextForMetrics = typeof content === 'string' ? content : (Array.isArray(content) ? content.filter(p=>p.type==='text').map(p=>p.text).join('\n') : '');
     const diagnostic = bff.styleResolver.diagnostics.get(key);
     if (diagnostic && generationId) Object.assign(diagnostic, { turnId:generationId, totalPromptChars:promptTextForMetrics.length, totalPromptBytes:Buffer.byteLength(promptTextForMetrics), glossaryChars:(promptTextForMetrics.match(/【黑话释义资料】[^]*?(?=\n\n|$)/)?.[0]||'').length, mediaParts:Array.isArray(content)?content.filter(p=>p.type!=='text').length:0 });
+    if (opts.replyDeliveryRecovery) {
+      const current = pendingReplyDeliveryV2(key), expected = opts.replyDeliveryRecovery;
+      if (!current || current.token !== expected.token || current.throughSeq !== expected.throughSeq) {
+        if (generationId) bff.delivery.cancelGeneration(generationId);
+        return skipWake();
+      }
+    }
     let accepted;
     try {
       accepted = await api.sessions.prompt({ sessionId, mode: 'queue', content });
@@ -9880,6 +9894,8 @@ async function main() {
       : '';
     const preSleepMs = numberSetting(cfg.socialV2?.wake?.preSleepWaitMs, 0);
     const replyTiming = replyTimingV2(st);
+    const deliveryLine = '【QQ发送协议】普通文本输出不会自动发送到 QQ；需要让真人看到的回复，必须调用 qq_send_message 或 qq_send_burst，并确认工具成功。未实际发送时不得把文本草稿当作已经回复。\n\n'
+      + (reason === 'replyDeliveryRecovery' ? '【发送遗漏纠正】上一轮只生成文字，没有调用QQ发送工具，真人未收到。请核对本次消息快照，先通过上述工具回应仍待答的消息，再确认已读水位或设置唤醒。不要仅重复输出文字、仅设置唤醒或为此另开无关搜索；已回应的消息不重复发送，权限和隐私边界继续有效。\n\n' : '');
     const replyLine = `【首回复节奏】先处理已有消息，完整的问题及时回答。需要确认对方是否继续补充时，用 qq_wait_for_messages(purpose="reply", quietMs=${replyTiming.quietMs})；从最后来信计时，合批和读提示词的耗时也算，目前还差约 ${Math.ceil(replyTiming.remainingQuietMs / 1000)} 秒静默。已安静够久可直接回，工具也会立即返回并补上思考期间的新消息。只有明确没说完、你确实要等下文时，才用普通 messages 长等待。\n\n`;
     const preSleepLine = '【收尾】没有待答消息且本轮内容已经完整时即可结束。服务端校验未读水位和唤醒条件；仅在确需等待对方补充时使用等待工具。\n\n';
     const lastMsg = [...(Array.isArray(st.recentMessages) ? st.recentMessages : [])].reverse().find((m) => m && !m.isSelf);
@@ -9915,7 +9931,7 @@ async function main() {
     const timeSenseLine = buildTimeSenseLine(st);
     const base = bff.instruction(key, st, { persona: roleLine, personaId: sessionRoleState(key).role,
       personaSignature: bff.personas.signature(key, roleState), memory: memoryText, reason, turnId: st.bffGenerationId })
-      + identityLine + tokenLine + initialPromptLine + stickerLine + replyLine + statusLine + wakeLine + participationLine + preSleepLine + timeSenseLine;
+      + identityLine + tokenLine + deliveryLine + initialPromptLine + stickerLine + replyLine + statusLine + wakeLine + participationLine + preSleepLine + timeSenseLine;
     // 唤醒原因里的那条消息本身多旧：`atMention@seq194` 这种形态能反查到原消息。
     const triggeredSeq = wakeReasonSeq(reason);
     const triggeredMsg = triggeredSeq ? findV2MessageBySeq(st, triggeredSeq) : null;
@@ -9937,6 +9953,47 @@ async function main() {
       return `${base}【唤醒】${key}\n原因：有人拍了一拍（可能拍了你，也可能拍了别人）。\n先看未读/最近消息里的 [拍一拍] 事件：如果是拍你，可以自然回应一句，也可以用 qq_send_poke 回一个拍一拍；如果是拍别人，觉得有趣也可以接梗。除了回应，偶尔也可以主动戳一下正在聊的人/熟人，像真人手贱/提醒/逗一下，但别频繁。不想接就安静收尾（qq_mark_read 或 qq_set_wake_config）。`;
     }
     return `${base}【唤醒】${key}\n原因：${reason}${triggeredLine}\n【行动前】先判断：群里在聊什么？热闹还是冷清？有没有人直接找你？对方说完了吗？你有没有真正想说的？\n只有确认消息是在跟你说话时才考虑回答；群友彼此聊天、对象不明或只是谈到你时，先旁观。\n【回复表达】先遵循本轮【群聊对象确认】和【自然表达】：不要复读原话；管理端关闭群聊引用时用普通消息回答，不带引用条。\n你可以调用工具查看未读消息、人设、状态，自行决定是否发言；没有待答内容时可以结束，由服务端校验已读水位。`;
+  }
+
+  function pendingReplyDeliveryV2(key) {
+    const st = socialV2.conversations.get(key);
+    if (!st || currentMode !== 'reserved2' || socialV2.paused || cfg.socialV2?.enabled === false || !dshReady
+        || !isSessionAllowedInCurrentMode(key) || shouldBlockSilentReply(key)
+        || String(selfUserId) !== String(cfg.bigfatfish.expectedQQ)
+        || !v2ToolEnabled(key.startsWith('group:') ? 'sendGroup' : 'sendPrivate')
+        || st.bffColdRound || st.lastWakeReason === 'contextInitiative'
+        || (!v2ToolEnabled('sendMessage') && !v2ToolEnabled('sendBurst'))) return null;
+    const pending = (st.unread || []).filter(m => !m.isSelf && Number(m.seq) > Number(st.lastReadThroughSeq || 0)
+      && Number(m.time) > Number(st.lastAiReplyAt || 0) && Date.now() - Number(m.time) < TURN_BUSY_LEASE_MS);
+    if (!pending.some(m => key.startsWith('private:') || m.addressedToBot || m.quoteTargetIsSelf || m.replyStyle === 'formal')) return null;
+    if (key.startsWith('group:') && !bff.groupReplyContext(key, st).confirmed) return null;
+    return { token: st.agentToken, throughSeq: Number(st.lastUnreadSeq || 0) };
+  }
+
+  function queueReplyDeliveryRecoveryV2(key, { live = false, attempted = false, ended } = {}) {
+    if (!live || attempted || ended?.reason?.kind !== 'completed' || !String(ended.text || '').trim()) return false;
+    const target = pendingReplyDeliveryV2(key);
+    if (!target) return false;
+    // Never auto-forward raw assistant output. A correction must use the existing guarded QQ tools.
+    pendingWakeKeys.delete(key); disarmPendingWakeLease(key);
+    wakeConfigUpdatedKeys.delete(key); markReadCalledKeys.delete(key); wakeConfigMissCount.delete(key);
+    const fingerprint = target.token + ':' + target.throughSeq, previous = replyDeliveryRetries.get(key);
+    const attempts = previous?.fingerprint === fingerprint ? previous.attempts : 0;
+    if (attempts >= 2) {
+      appendActivity(key + ' [reserved2] 仍有待答消息但生成文字未通过QQ工具发送，发送纠正次数已用完');
+      return true;
+    }
+    replyDeliveryRetries.set(key, { fingerprint, attempts: attempts + 1 });
+    if (replyDeliveryRetries.size > 500) replyDeliveryRetries.delete(replyDeliveryRetries.keys().next().value);
+    pendingWakeKeys.add(key); armPendingWakeLease(key);
+    appendActivity(key + ' [reserved2] 已生成文字但未发送到QQ，安排发送纠正（' + (attempts + 1) + '/2）');
+    deliverPrompt(key, '', { wakeReason: 'replyDeliveryRecovery', replyDeliveryRecovery: target }).then(result => {
+      if (result?.ok === false || result?.skipped) { pendingWakeKeys.delete(key); disarmPendingWakeLease(key); }
+    }).catch(() => {
+      pendingWakeKeys.delete(key); disarmPendingWakeLease(key);
+      appendActivity(key + ' [reserved2] 发送纠正投递失败，待答消息保留');
+    });
+    return true;
   }
 
   function buildWakeReminderPromptV2(key) {
@@ -10509,6 +10566,7 @@ async function main() {
           reverse.delete(old);
           collectors.delete(old);
           sendToolSucceededSessions.delete(old);
+              sendToolAttemptedSessions.delete(old);
           pendingSendToolCalls.delete(old);
           v2TurnStartAt.delete(old);
           turnLeaseNoted.delete(old);
@@ -10946,12 +11004,14 @@ async function main() {
             // 只有“发送成功”才跳过自动转发；如果工具调用失败，仍允许 AI 的文本正常发出。
             if (frame.event.type === 'turn/start') {
               sendToolSucceededSessions.delete(frame.sessionId);
+              sendToolAttemptedSessions.delete(frame.sessionId);
               pendingSendToolCalls.delete(frame.sessionId);
               v2TurnStartAt.set(frame.sessionId, Date.now());
               turnLeaseNoted.delete(frame.sessionId);
             }
             if (frame.event.type === 'tool/call') {
               const toolName = String(frame.event.data?.name ?? '');
+              if (isSendToolName(toolName)) sendToolAttemptedSessions.add(frame.sessionId);
               const callId = frame.event.data?.callId;
               const args = sanitizeToolArgs(frame.event.data?.arguments ?? frame.event.data?.input ?? frame.event.data);
               appendToolLog({ type: 'call', time: new Date().toISOString(), key, sessionId: frame.sessionId, tool: toolName, args });
@@ -11031,11 +11091,14 @@ async function main() {
                   log(`[reserved2] ${key} 回合结束但缺少 turn/start（重连补发），跳过无行动计数`);
                 }
               }
+              const replyTurnLive = v2TurnStartAt.has(frame.sessionId);
+              const sendToolAttempted = sendToolAttemptedSessions.has(frame.sessionId);
               v2TurnStartAt.delete(frame.sessionId);
               collectors.delete(frame.sessionId);
               turnLeaseNoted.delete(frame.sessionId);
               const sendToolSucceeded = sendToolSucceededSessions.has(frame.sessionId);
               sendToolSucceededSessions.delete(frame.sessionId);
+              sendToolAttemptedSessions.delete(frame.sessionId);
               pendingSendToolCalls.delete(frame.sessionId);
               toolCallNames.delete(frame.sessionId);
               // 标记本次 turn 是否为“活跃超时退场”发言（用于准确回到观望，避免把旧回复误判为退场）
@@ -11055,7 +11118,10 @@ async function main() {
               }
               // reserved2 防遗忘：每次唤醒回合结束时，若 AI 没有调用 qq_set_wake_config 设置下一次唤醒条件，
               // 则发送提醒；连续未设置达到上限后重置为默认唤醒配置。静默/后台提醒回合已在上方 continue，不触发。
-              if (pendingWakeKeys.has(key)) {
+              const deliveryRecoveryHandled = queueReplyDeliveryRecoveryV2(key, {
+                live: replyTurnLive, attempted: sendToolAttempted || sendToolSucceeded, ended
+              });
+              if (!deliveryRecoveryHandled && pendingWakeKeys.has(key)) {
                 pendingWakeKeys.delete(key);
                 disarmPendingWakeLease(key);
                 if (wakeConfigUpdatedKeys.has(key) || markReadCalledKeys.has(key)) {
@@ -11171,6 +11237,7 @@ async function main() {
         collectors.clear(); // 清除旧 turn collector，避免重连后残留导致重复累加
         social.silentTurns.clear(); // 清除未消费的摘要静默名额，避免重连后吞掉正常回复
         sendToolSucceededSessions.clear();
+        sendToolAttemptedSessions.clear();
         pendingSendToolCalls.clear();
         v2TurnStartAt.clear();
         toolCallNames.clear();
