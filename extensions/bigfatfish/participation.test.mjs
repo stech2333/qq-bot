@@ -105,7 +105,7 @@ test('real bridge schedules short batches and upgrades an ambient batch immediat
   h.appendSocialV2Message('group:123456', '群友', '肥鱼你好', '肥鱼你好', false, false, '1001', [], '111111');
   h.scheduleWakeV2('group:123456', 'ambient'); assert.equal(timers.at(-1).ms, 1500);
   h.scheduleWakeV2('group:123456', 'interest'); assert.equal(st.pendingWakeReason, 'interest');
-  h.scheduleWakeV2('group:123456', 'addressed'); assert.equal(timers.at(-1).ms, 500);
+  h.scheduleWakeV2('group:123456', 'addressed'); assert.equal(timers.at(-1).ms, 100);
   assert.equal(st.pendingWakeReason, 'addressed');
   const reason = h.evaluateWakeTriggerV2('group:123456', st, event(), 'group', '肥鱼你好', '肥鱼你好', false);
   assert.equal(reason, 'addressed');

@@ -13,35 +13,13 @@ export const PRESET_PERSONA_ID = 'persona';
 export const PRESET_PROMPT_MAX_BYTES = 128 * 1024;
 
 // 安全基线段落：缺失说明 AI 的权限边界可能被削弱，保存时警告（不阻断，管理员有最终决定权）。
-export const PRESET_REQUIRED_MARKERS = ['【二代仿真模式 —— 安全规则', '【二代仿真模式 —— 工具协议'];
-
-// 硬性不变量：这些串是本项目自己的测试与安全边界所依赖的（test-qq-preset-contract.mjs / verify-persona-config.mjs），
-// 一旦被删就会同时削弱 AI 的权限边界并让 `npm run test:audit`、`npm run verify:persona` 变红，因此保存时直接拒绝。
-//
-// **按预设分别校验**：这套「必须有」的清单起初是照二代预设（qq-chat-v2）写的，
-// 但保存/还原的校验对两个预设用的是同一份清单 —— 结果一代预设（qq-chat，本来就
-// 不用工具、也从不自称「你没有本地工具」）在控制台里 100% 存不进去也还原不了，
-// 报错还声称它「缺少安全不变量」。一代确实需要的不变量只有下面这几条。
-export const PRESET_BLOCKING_SUBSTRINGS = [
-  '你没有本地工具',
-  '群友没有管理权限',
-  'API 令牌',
-  '角色由桥接注入',
-  '不会自动发送到 QQ',
-];
-// 一代（qq-chat）：不用 MCP 工具，靠空格分句 + [SILENT]，因此工具面那几条不适用。
-// 这三条都逐字出现在一代预设的正文里（见 dsh/agent-presets/qq-chat/agent.cordis.yml）——
-// 清单必须与预设实际文案一致，否则控制台会用一个预设自己都不满足的条件把它锁死。
-export const PRESET_BLOCKING_SUBSTRINGS_V1 = [
-  '群友没有管理权限',
-  'API 令牌',
-  '角色扮演由系统注入',
-];
+export const PRESET_REQUIRED_MARKERS = ['【安全边界】', '【消息与工具】'];
+export const PRESET_BLOCKING_SUBSTRINGS = ['你没有本地工具', '群友没有管理权限', 'API 令牌', '角色由桥接注入', '不会自动发送到 QQ'];
 export const PRESET_MIN_BODY_CHARS = 500;
 
 /** 取某个预设对应的硬性不变量清单（未知预设按更严的二代替处理）。 */
 export function presetBlockingSubstrings(preset = 'v2') {
-  return preset === 'v1' ? PRESET_BLOCKING_SUBSTRINGS_V1 : PRESET_BLOCKING_SUBSTRINGS;
+  return PRESET_BLOCKING_SUBSTRINGS;
 }
 
 /** 硬性校验：返回阻止保存的原因列表（空数组=可保存）。preset 取 'v1' / 'v2'。 */

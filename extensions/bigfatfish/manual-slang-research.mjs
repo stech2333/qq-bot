@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { buildResearchPrompt, extractJsonArray } from '../../integrations/qq-bridge/src/slang-learner.js';
 
 const keyOf = value => String(value || '').normalize('NFKC').trim().toLowerCase();
 const message = error => /^(?:语料研究失败：|研究返回|研究结果|每日研究|词库|服务重启)/.test(String(error?.message)) ? String(error.message).slice(0, 160) : '研究调用未完成，请重试';
@@ -82,86 +81,40 @@ export class ManualSlangResearch {
     return this.app.privacy.reference(safe.replace(urls, '[公开来源]')) ? safe.slice(0, 4000) : '返回包含不适合展示的内容，已隐藏摘录';
   }
   async run(job, store) {
-    job.status = 'running'; job.stage = '等待DSH队列'; this.save();
-    let batchSize = 5;
-    for (let offset = 0; offset < job.ids.length; offset += batchSize) {
-      const first = store.entries().find(e => e.id === job.ids[offset]);
-      batchSize = 1;
-      while (batchSize < 5 && offset + batchSize < job.ids.length) {
-        const next = store.entries().find(e => e.id === job.ids[offset + batchSize]);
-        const previous = job.ids.slice(offset, offset + batchSize).map(id => store.entries().find(e => e.id === id));
-        if ((next?.scope || 'legacy') !== (first?.scope || 'legacy') || previous.some(e => e?.content === next?.content)) break;
-        batchSize++;
-      }
-      const ids = job.ids.slice(offset, offset + batchSize), targets = ids.map(id => store.entries().find(e => e.id === id)).filter(e => e?.status === 'candidate' && e.research?.jobId === job.id);
-      job.skipped += ids.length - targets.length; job.done += ids.length - targets.length;
-      if (!targets.length) continue;
-      const versions = new Map(targets.map(e => [e.id, JSON.stringify([e.updatedAt, e.scope, e.revision || 0])])), processed = new Set();
+    job.status='running'; job.stage='等待全局词义验证'; this.save();
+    for(const id of job.ids) {
+      const entry=store.entries().find(e=>e.id===id);
+      if(!entry||entry.status!=='candidate'||entry.research?.jobId!==job.id){job.skipped++;job.done++;continue;}
+      const revision=entry.revision||0;
       try {
-        if (this.app.config.slang?.enabled === false) throw Error('研究服务已关闭，未继续提交');
-        if (!store.writable()) throw Error('词库已进入只读状态');
-        if (!this.app.research.writable || !this.app.research.reserve({ kind: 'slang-manual' }, Date.now())) throw Error('每日研究额度已用完，剩余词条未研究');
-        const prompt = buildResearchPrompt(targets) + '\n补充：每个结果必须含 confidence（0至1）及 reason（简短研究结论或无法确认的原因）。保持原JSON数组格式；不确定也返回该词结果，不要省略，不编造含义或来源。';
-        const output = await this.app.research.runner({ kind: 'slang-manual', prompt, timeoutMs: 300000,
-          onStart: () => {
-            for (const id of ids) { const entry = store.entries().find(e => e.id === id); if (entry?.status === 'candidate' && entry.research?.jobId === job.id) entry.research = { ...entry.research, status: 'researching', reason: 'DSH正在研究，单批最多等待5分钟' }; }
-            if (store.save() !== true) throw Error('词库研究状态保存失败');
-          },
-          onStage: stage => { job.stage = `第${Math.floor(offset / 5) + 1}/${Math.ceil(job.ids.length / 5)}批 · ${stage}`; this.save(); }
-        });
-        job.returns ||= [];
-        job.returns.push({ batch: Math.floor(offset / 5) + 1, at: Date.now(), text: this.preview(output) });
-        job.returns = job.returns.slice(-20); this.save();
-        const rows = extractJsonArray(output); if (!Array.isArray(rows) || !rows.length) throw Error('研究返回无可解析的词条结果');
-        if (this.app.config.slang?.enabled === false) throw Error('研究服务已关闭，本轮结果未写入词条');
-        for (const original of targets) {
-          const entry = store.entries().find(e => e.id === original.id);
-          if (!entry || entry.status !== 'candidate' || entry.research?.jobId !== job.id) { job.skipped++; job.done++; processed.add(original.id); continue; }
-          const row = rows.find(r => keyOf(r?.content) === keyOf(entry.content)), before = structuredClone(entry);
-          try {
-            if (!row) throw Error('研究返回遗漏该词，请重试');
-            const result = this.safeResult(row);
-            if (JSON.stringify([entry.updatedAt, entry.scope, entry.revision || 0]) !== versions.get(entry.id)) throw Error('词库研究期间已修改，该结果未覆盖人工修改');
-            const confidence = Number(row.confidence), validConfidence = Number.isFinite(confidence) && confidence >= 0 && confidence <= 1;
-            const approved = row.confirmed === true && validConfidence && confidence >= this.app.settings.learningResearch.minConfidence && Boolean(result.meaning);
-            entry.research = { status: approved ? 'approved' : 'rejected', mode: 'manual', jobId: job.id, at: Date.now(), nextAt: Date.now() + 3600000,
-              confidence: validConfidence ? confidence : 0, reason: result.reason || (approved ? '研究通过，等待入库条件检查' : '研究尚未确认，结果仅供人工参考'), result };
-            if (approved) {
-              for (const field of ['meaning', 'usage', 'example', 'risk', 'sources']) entry[field] = result[field];
-              entry.lastInferenceCount = Math.max(1, Number(entry.count) || 1); entry.updatedAt = new Date().toISOString();
-            }
-            if (store.save() !== true) throw Error('研究结果保存失败');
-            approved ? job.approved++ : job.uncertain++;
-          } catch (error) {
-            Object.assign(entry, before); entry.research = { ...entry.research, status: 'failed', mode: 'manual', jobId: job.id, at: Date.now(), reason: message(error) };
-            try { store.save(); } catch {} job.failed++;
-          }
-          const latest = store.entries().find(e => e.id === original.id);
-          if (latest?.research?.jobId === job.id) { job.results ||= []; job.results.push({ id: latest.id, content: latest.content, research: structuredClone(latest.research) }); job.results = job.results.slice(-200); }
-          processed.add(original.id); job.done++; this.save();
-        }
-        this.app.slang.scan(store, { force: true });
-      } catch (error) {
-        for (const original of targets) {
-          if (processed.has(original.id)) continue;
-          const entry = store.entries().find(e => e.id === original.id);
-          if (entry?.status === 'candidate' && entry.research?.jobId === job.id) { entry.research = { ...entry.research, status: 'failed', at: Date.now(), reason: message(error) }; job.failed++; job.done++; }
-          else { job.skipped++; job.done++; }
-        }
-        try { store.save(); } catch {} job.stage = message(error); this.save();
-        if (/^每日研究/.test(String(error?.message))) {
-          for (const id of job.ids.slice(offset + batchSize)) {
-            const entry = store.entries().find(e => e.id === id);
-            if (entry?.status === 'candidate' && entry.research?.jobId === job.id) { entry.research = { ...entry.research, status: 'failed', at: Date.now(), reason: message(error) }; job.failed++; }
-            else job.skipped++;
-            job.done++;
-          }
-          try { store.save(); } catch {} this.save(); break;
-        }
+        if(this.app.config.slang?.enabled===false||!store.writable()||!this.app.research.runner)throw Error('研究服务已关闭');
+        // Manual enqueue excludes automatic jobs, so gather the same verified group-only rows directly.
+        const selected=[];
+        for(const [key,st]of this.app.states)if(this.app.research.allowed(key)&&st.bigfatfish.memoryControl?.accumulation!==false)
+          for(const m of this.app.learningWindow.messages(key,st))if(m.styleSourceVersion===2&&m.sourceScope===key&&/^-?[1-9]\d{0,19}$/.test(String(m.messageId))&&String(m.plain||'').includes(entry.content))selected.push({...m,messageId:key+':'+m.messageId,sourceKey:key,sourceId:String(m.messageId)});
+        const rows=selected.slice(-30);if(rows.length<3)throw Error('研究结果缺少足够真人来源');
+        if(!this.app.research.reserve({kind:'slang-manual'},Date.now()))throw Error('每日研究额度已用完');
+        const output=await this.app.research.runner({kind:'slang-manual',key:'global',prompt:this.app.research.prompt({kind:'slang',entry},rows),timeoutMs:120000});
+        const raw=String(output).trim().replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,'');const result=JSON.parse(raw);
+        if(result.approved!==true||!Number.isFinite(result.confidence)||result.confidence<this.app.settings.learningResearch.minConfidence)throw Error('研究结果尚不确定');
+        const senses=await this.app.slang.applyResearch(entry,result,rows);
+        const current=store.entries().find(e=>e.id===id);
+        if(!current||current.status!=='candidate'||current.research?.jobId!==job.id||(current.revision||0)!==revision||this.app.config.slang?.enabled===false||rows.some(r=>!this.app.slang.sourceExists({key:r.sourceKey,id:r.sourceId,time:r.time})))throw Error('词库或来源已变化');
+        if(!senses.length)throw Error('研究结果缺少可信公开来源');
+        current.senses=[...new Map([...(current.senses||[]),...senses].map(s=>[s.id,s])).values()];
+        current.meaning=senses[0].meaning;current.usage=senses[0].usage;current.revision=revision+1;
+        current.lastInferenceCount=current.count;current.updatedAt=new Date().toISOString();
+        current.research={status:'approved',mode:'manual',jobId:job.id,at:Date.now(),reason:'公开来源及一般化检查通过'};
+        if(store.save()!==true)throw Error('词库保存失败');job.approved++;
+        this.app.slang.scan(store,{force:true});
+      }catch(error){
+        const current=store.entries().find(e=>e.id===id);
+        if(current&&current.research?.jobId===job.id&&(current.revision||0)===revision){current.research={...current.research,status:'failed',reason:message(error)};try{store.save();}catch{}}
+        job.failed++;
       }
+      job.done++;this.save();
     }
-    job.status = job.failed === job.total ? 'failed' : job.failed ? 'partial' : 'completed'; job.stage = `研究结束：通过${job.approved}，未确认${job.uncertain}，失败${job.failed}，跳过${job.skipped}`;
-    job.finishedAt = Date.now(); this.save();
+    job.status=job.failed?'partial':'completed';job.finishedAt=Date.now();job.stage=`研究结束：通过${job.approved}，失败${job.failed}，跳过${job.skipped}`;this.save();
   }
   snapshot() { return this.jobs.slice(-15).reverse().map(j => ({ ...j, ids: [...j.ids], words: [...j.words] })); }
 }

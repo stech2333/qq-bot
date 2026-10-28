@@ -72,7 +72,7 @@
   });
 
   const section = document.createElement('section'); section.className = 'card span-all bf-integrated'; section.dataset.page = 'bff-mood'; section.id = 'section-bff-mood'; section.hidden = true;
-  section.innerHTML = `<h2>鱼的心情</h2><p>每个群聊或私聊各有一份角色心情。只在实际回复后判断，情绪会自然回稳。默认关闭；启用后使用现有模型，每会话有判断额度，所有会话每日合计最多40次。</p>
+  section.innerHTML = `<h2>鱼的心情</h2><p>每个群聊或私聊各有一份角色心情。只在实际回复后判断，情绪会自然回稳。新会话默认开启，旧关闭设置保留；明确情绪事件后使用现有模型，每会话有判断额度，所有会话每日合计最多40次。</p>
     <select id="bfMoodKey" aria-label="心情所属会话"></select> <button id="bfMoodLoad" type="button">加载 / 刷新</button><p id="bfMoodStatus"></p>
     <div id="bfMoodCurrent"></div><form id="bfMoodSettings"><p><label><input name="enabled" type="checkbox">启用本会话心情</label> <label><input name="autoJudge" type="checkbox">回复后自动判断</label></p>
     <p><label>伙伴称呼 <input name="selfName" maxlength="30"></label> <label>对回复的影响 <select name="injectMode"><option value="off">仅展示，不影响回复</option><option value="label">只告诉当前心情</option><option value="event">带上最近一次感受</option></select></label></p>
@@ -87,7 +87,7 @@
   }
   el('bfMoodSettings').oninput = () => { moodDirty = true; };
   consolePages['bff-mood'] = ['鱼的心情', '观察每个会话里的情绪变化。', '查看心情、七项情绪和历史记录，选择是否影响后续闲聊。'];
-  const nav = button('♡ 鱼的心情', async () => { setConsolePage('bff-mood', { focus: true }); await loadMoodScopes(); }); nav.className = 'nav-item'; nav.dataset.view = 'bff-mood'; el('mainNav').append(nav);
+  const nav = button('♡ 会话心情', async () => { setConsolePage('bff-mood', { focus: true }); await loadMoodScopes(); }); nav.className = 'nav-item'; nav.dataset.subpage = 'bff-mood';document.querySelector('#consoleSubnav [data-subpage="bff-mood"]').replaceWith(nav);
   el('section-bff-overview').append(button('鱼的心情', async () => { setConsolePage('bff-mood', { focus: true }); await loadMoodScopes(); }));
   function renderMood(r) {
     if (r.key !== el('bfMoodKey').value) return;

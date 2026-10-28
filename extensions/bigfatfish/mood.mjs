@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 
 export const MOOD_DIMS = { happy: '开心', calm: '踏实', sweet: '亲近', heartache: '心疼', worry: '担心', sad: '难过', jealous: '吃醋' };
 const DIMS = Object.keys(MOOD_DIMS), HOUR = 3600000;
-const DEFAULTS = { enabled: false, autoJudge: true, injectMode: 'event', baseline: 70, floor: 20,
+const DEFAULTS = { enabled: true, autoJudge: true, injectMode: 'event', baseline: 70, floor: 20,
   halfLifeHours: 12, emotionHalfLifeMinutes: 90, minConfidence: 0.7, significantDelta: 3,
   dailyCap: 12, minIntervalMinutes: 5, selfName: '大肥鱼' };
 const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
@@ -22,7 +22,7 @@ export function moodSettings(value = {}) {
 }
 export function normalizeMood(raw = {}) {
   const config = moodSettings(raw.config), now = Date.now();
-  return { config, revision: Math.max(0, Number(raw.revision) || 0), value: clamp(Number.isFinite(raw.value) ? raw.value : config.baseline, config.floor, 100),
+  return { schemaVersion: 3, migration: raw.migration || { version: 3, enabledSource: raw.config && Object.hasOwn(raw.config, 'enabled') ? 'preserved-explicit-or-ambiguous-legacy' : 'v3-default' }, config, revision: Math.max(0, Number(raw.revision) || 0), value: clamp(Number.isFinite(raw.value) ? raw.value : config.baseline, config.floor, 100),
     dims: Object.fromEntries(DIMS.map(key => [key, clamp(Number(raw.dims?.[key]) || 0, 0, 100)])),
     at: Number(raw.at) || now, updatedAt: Number(raw.updatedAt) || 0, updateId: String(raw.updateId || ''), injectedId: String(raw.injectedId || ''),
     lastAttemptAt: Number(raw.lastAttemptAt) || 0, reason: String(raw.reason || '').slice(0, 200), confidence: Number(raw.confidence) || 0,
@@ -54,7 +54,7 @@ export class MoodManager {
     catch { this.error = '心情额度记录损坏，已暂停判断'; }
   }
   connect(runner, save) { this.runner = runner; this.save = save; }
-  bind(st) { st.bigfatfish.mood ??= normalizeMood(); return st.bigfatfish.mood; }
+  bind(st) { if(st.bigfatfish.mood?.schemaVersion!==3)st.bigfatfish.mood=normalizeMood(st.bigfatfish.mood); return st.bigfatfish.mood; }
   allowed(key) {
     const [kind, target] = key.split(':'), field = kind === 'group' ? 'groups' : 'private';
     return (this.app.config.allow?.[field] || []).map(String).includes(target) && !(this.app.config.deny?.[field] || []).map(String).includes(target);
@@ -115,7 +115,7 @@ export class MoodManager {
     const tmp = this.file + '.' + process.pid + '.tmp'; fs.writeFileSync(tmp, JSON.stringify(ledger), { mode: 0o600 }); fs.renameSync(tmp, this.file); this.ledger = ledger; return true;
   }
   enqueue(key, st, turn) {
-    if (!this.active(key, st) || !this.runner || !turn.rows.length || this.pending.has(key) || this.pending.size >= 20) return;
+    if (!turn.rows.some(r => /(?:谢谢|开心|高兴|难过|伤心|生气|抱歉|对不起|辛苦|担心|喜欢你|讨厌|恭喜|安慰|失望)/.test(r.text)) || !this.active(key, st) || !this.runner || !turn.rows.length || this.pending.has(key) || this.pending.size >= 20) return;
     this.pending.add(key);
     this.done = this.done.then(() => this.judge(key, st, turn)).catch(() => {
       const m = this.bind(st); m.status = '判断未完成，请检查模型服务及磁盘状态';
@@ -137,7 +137,7 @@ export class MoodManager {
       const result = parseMoodResult(await this.runner({ kind: 'mood', key, prompt, timeoutMs: 60000 }), this.app.privacy, new Set(turn.rows.map(r => r.id)));
       // Re-read after await: settings, reset, disable, token and conversation identity may have changed.
       m = this.bind(st);
-      if (!this.active(key, st) || this.app.states.get(key) !== st || st.bigfatfish !== stateRef || m.revision !== revision || JSON.stringify(m.config) !== fingerprint || st.agentToken !== turn.agentToken) return;
+      if (!this.active(key, st) || this.app.states.get(key) !== st || st.bigfatfish !== stateRef || m.revision !== revision || JSON.stringify(m.config) !== fingerprint || st.agentToken !== turn.agentToken || turn.rows.some(r=>this.app.learningWindow.deleted(key).has(r.id))) return;
       const before = structuredClone(m), at = Date.now(), current = moodAt(m, at);
       if (result.confidence >= p.minConfidence) {
         m.value = clamp(current.value + result.delta, p.floor, 100);
@@ -168,7 +168,7 @@ export class MoodManager {
         const current = moodAt(m); Object.assign(m, { config, value: clamp(current.value, config.floor, 100), dims: current.dims, at: Date.now(), status: config.enabled ? '已启用，等待下一轮实际发言' : '已关闭' });
       } else if (body.action === 'reset') Object.assign(m, normalizeMood({ config: m.config, revision: m.revision }));
       else throw Error('未知心情操作');
-      m.revision++; if (hooks.save({ strict: true }) === false) throw Error('保存失败');
+      m.migration = { version: 3, enabledSource: 'admin-explicit' }; m.revision++; if (hooks.save({ strict: true }) === false) throw Error('保存失败');
       return this.view(key, st);
     } catch (error) { st.bigfatfish.mood = before; throw error; }
   }

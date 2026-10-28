@@ -24,6 +24,23 @@ test('strict recipient checking rejects third-person mentions, general questions
   for (const text of ['肥鱼在吗', '古月方鲸，你怎么看', '肥鱼你觉得呢']) assert.equal(decide({}, text).direct, true);
 });
 
+test('unpunctuated direct questions and nudges recognize the bot name without treating third-person reports as calls', () => {
+  for(const text of ['肥鱼怎么不理我','肥鱼为什么没回复','肥鱼如何实现这个功能','肥鱼说话','古月方鲸回我','小鲸鱼在线吗']){
+    const d=decide({},text,{random:()=>0.99});assert.equal(d.direct,true,text);assert.equal(d.reason,'addressed',text);assert.equal(d.probability,1,text);
+  }
+  for(const text of ['肥鱼在群里聊天','肥鱼说他在看书','我觉得肥鱼说得挺好'])assert.equal(decide({},text).recipientConfirmed,false,text);
+  assert.equal(decide({},'肥鱼怎么不理我',{event:event('111111',[at('222222')])}).recipientConfirmed,false);
+});
+
+test('explicit questions from the current confirmed partner are not dropped by the ambient lottery',()=>{
+  const policy=participationSettings({requireDirected:true,engagedProbability:0.2,idleProbability:0.1});
+  const state={},pick=(text,extra={})=>participationDecision(state,extra.event||event(),{kind:'group',text,nickname:'肥鱼',now:NOW,random:()=>0.99,...extra},policy);
+  pick('肥鱼，解释这个算法');recordParticipationSent(state,'算法先校验输入',NOW);
+  const question=pick('那具体怎么实现呢',{now:NOW+1000});assert.equal(question.recipientConfirmed,true);assert.equal(question.reason,'followUp');assert.equal(question.selected,true);assert.equal(question.probability,1);
+  assert.equal(pick('嗯',{now:NOW+2000}).selected,false,'casual acknowledgements retain the configured probability');
+  const other=pick('那具体怎么实现呢',{now:NOW+3000,event:event('222222',[at('333333')])});assert.equal(other.recipientConfirmed,false);assert.equal(other.selected,false);
+});
+
 test('only the current uninterrupted conversation partner can continue without naming the bot', () => {
   const state = {}; decide(state, '肥鱼讲讲秘密分享'); recordParticipationSent(state, '秘密分享用多项式插值', NOW);
   assert.equal(decide(state, '那多项式具体怎么做', { now: NOW + 1000 }).reason, 'followUp');
@@ -61,6 +78,13 @@ test('unknown group conversation does not bootstrap or bypass checking through c
   assert.equal((await read()).response.recipient.confirmed, false);
   await assert.rejects(h.sendMessagesV2(KEY, ['不应抢答'], []), /未确认是在跟机器人聊天/);
   assert.equal(sends(h).length, 0);
+});
+
+test('real intake of an unpunctuated named request wakes the model with mandatory response priority',async t=>{
+  const {h,incoming}=await fixture(t);await incoming('201','肥鱼怎么不理我');
+  for(let i=0;i<40&&!h.calls.prompts.length;i++)await new Promise(r=>setTimeout(r,50));
+  assert.equal(h.calls.prompts.length,1);const st=h.getSocialV2State(KEY);assert.equal(st.bigfatfish.participation.lastDecision.direct,true);
+  const prompt=JSON.stringify(h.calls.prompts[0].content);assert.match(prompt,/本轮接话优先/);assert.match(prompt,/先回应已确认的待答消息/);assert.equal(h.calls.sent.length,0,'scheduler never sends an invented test reply');
 });
 
 test('real at remains answerable in a mixed batch, plain sends omit quote segments and targeted acknowledgement is preserved', async t => {

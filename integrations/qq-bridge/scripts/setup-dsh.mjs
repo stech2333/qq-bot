@@ -2,7 +2,7 @@
 // setup-dsh.mjs — 在目标设备上安装 qq-bridge 的 DSH 端配置
 //
 // 功能：
-//   1. 安装两套 agent preset：qq-chat、qq-chat-v2
+//   1. 安装二代 agent preset：qq-chat-v2
 //      （DSH 0.1.7 机制：作为 qq-agent-presets bundle 的 patch 层插入
 //        @deepseek-ai/dsh-agent-preset 行；~/.dsh/.agent-presets/ 目录已不再被读取）
 //   2. 在 DSH profile 的 cordis.patch.yml 中挂载三个 MCP server：
@@ -306,14 +306,19 @@ function ensureLocalModeFile() {
   const stateDir = path.join(REPO_ROOT, 'state');
   const modeFile = path.join(stateDir, 'mode.json');
   if (fs.existsSync(modeFile)) {
-    log(`state/mode.json already exists; leave as-is (current mode may be user-configured)`);
+    const old=JSON.parse(fs.readFileSync(modeFile,'utf8'));
+    if(!['reserved2','simulation','closed-agent','disabled'].includes(old.mode)){
+      const backup=modeFile+'.pre-v3.bak';if(!fs.existsSync(backup))fs.copyFileSync(modeFile,backup,fs.constants.COPYFILE_EXCL);
+      fs.writeFileSync(modeFile,JSON.stringify({...old,mode:'disabled',schemaVersion:3,migration:{previousMode:old.mode,reason:'retired-or-unknown'}},null,2)+'\n');
+      log('旧模式已备份并安全关闭；请在控制台明确启用二代仿真');
+    }
     return;
   }
   ensureDir(stateDir);
   // DSH 0.1.5 起不再有 'router-standard' preset；留空表示「用 DSH 自己声明的默认 preset」，
   // 由 bridge.js 的 resolvePresetName() 兜底（硬编码已下线的名字只会换来每次启动的误导性告警）。
-  fs.writeFileSync(modeFile, `${JSON.stringify({ mode: 'reserved2', closedAgentPreset: '' }, null, 2)}\n`, 'utf8');
-  log(`state/mode.json created with mode=reserved2 (fallback if DSH settings are not available)`);
+  fs.writeFileSync(modeFile, `${JSON.stringify({ schemaVersion:3, mode: 'disabled', closedAgentPreset: '' }, null, 2)}\n`, 'utf8');
+  log(`state/mode.json created with mode=disabled (enable explicitly in console)`);
 }
 
 // qq-mode-console / qq-agent-presets 以 link: 依赖注册进 profile package.json 后，DSH 首次启动

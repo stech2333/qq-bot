@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { atomicJson } from './state-store.mjs';
 import { createHash } from 'node:crypto';
 
 export function windowSettings(value = {}) {
@@ -10,9 +11,10 @@ export function windowSettings(value = {}) {
 // This window is independent of model context. Each group owns a bounded, expiring journal.
 export class LearningWindow {
   constructor(app) { this.app = app; this.windows = new Map(); this.errors = new Map(); }
-  hours() { return Math.max(this.app.settings.topicLearning.lookbackHours, this.app.settings.slangPolicy.lookbackHours, this.app.settings.groupStyleLearning?.lookbackHours || 720,
-    ...[...(this.app.groupStyle?.states.values() || [])].map(s => Number(s.policy?.lookbackHours) || 0)); }
+  hours() { return Math.max(this.app.settings.topicLearning.lookbackHours, this.app.settings.slangPolicy.lookbackHours, this.app.settings.globalStyleLearning.lookbackHours); }
   file(key) { return path.join(this.app.root, 'state', 'learning-window', createHash('sha256').update(key).digest('hex').slice(0, 24) + '.jsonl'); }
+  deleted(key) { const file=this.file(key)+'.deleted.json';try{return new Set(fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')):[]);}catch{this.errors.set(key,'来源删除记录损坏，暂停学习');return new Set();} }
+  forget(key,id) { if(!/^(group|private):[1-9]\d{4,15}$/.test(key)||!String(id))throw Error('来源参数无效');const deleted=this.deleted(key);if(this.errors.has(key))throw Error(this.errors.get(key));deleted.add(String(id));atomicJson(this.file(key)+'.deleted.json',[...deleted]);const win=this.load(key,Date.now());win.rows.delete(String(id));this.app.learningSources.cache.clear(); }
   valid(m, now) {
     return m && !m.isSelf && m.topicLearningAllowed !== false && m.messageId != null && String(m.messageId).trim()
       && /^[1-9]\d{4,15}$/.test(String(m.userId)) && String(m.userId) !== String(this.app.config.bigfatfish?.expectedQQ)
@@ -21,19 +23,19 @@ export class LearningWindow {
   }
   load(key, now) {
     if (!this.windows.has(key)) {
-      let rows = [];
+      let rows = []; const deleted=this.deleted(key);
       try { if (fs.existsSync(this.file(key))) rows = fs.readFileSync(this.file(key), 'utf8').split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line)); }
       catch { this.errors.set(key, '学习记录无法读取，已停止覆盖，请检查文件'); }
-      this.windows.set(key, { rows: new Map(rows.filter(m => this.valid(m, now)).map(m => [String(m.messageId), m])), compactAt: 0 });
+      this.windows.set(key, { rows: new Map(rows.filter(m => this.valid(m, now) && !deleted.has(String(m.messageId))).map(m => [String(m.messageId), m])), compactAt: 0 });
     }
     return this.windows.get(key);
   }
   ingest(key, st, messages, now = Date.now()) {
-    if (!this.app.globalStyle?.allowed(key)) return false;
+    if (!key.startsWith('group:') || !this.app.globalStyle?.allowed(key)) return false;
     const win = this.load(key, now); if (this.errors.has(key)) return false;
-    const added = [];
+    const added = [], deleted = this.deleted(key);
     for (const m of st.bigfatfish.memoryControl?.accumulation === false ? [] : (messages || [])) {
-      if (!this.valid(m, now) || win.rows.has(String(m.messageId))) continue;
+      if (!this.valid(m, now) || deleted.has(String(m.messageId)) || win.rows.has(String(m.messageId))) continue;
       const row = { messageId: String(m.messageId), userId: String(m.userId), time: m.time, plain: String(m.plain ?? m.text ?? '').slice(0, 500),
         hasForward: m.hasForward === true, hasMedia: m.hasMedia === true, quoted: m.quoted === true, quoteTargetIsSelf: m.quoteTargetIsSelf === true,
         seq: Number.isSafeInteger(m.seq) ? m.seq : null, replyToMessageId: m.replyToMessageId ? String(m.replyToMessageId) : null,
@@ -53,10 +55,11 @@ export class LearningWindow {
     return added.length > 0;
   }
   messages(key, st, now = Date.now()) {
-    if (!this.app.globalStyle?.allowed(key)) return [];
+    if (!key.startsWith('group:') || !this.app.globalStyle?.allowed(key)) return [];
     const win = key.startsWith('group:') || this.app.globalStyle?.allowed(key) ? this.load(key, now) : null;
     if (this.errors.has(key)) return [];
-    return [...new Map([...(win?.rows.values() || []), ...(st.recentMessages || [])].filter(m => this.valid(m, now)).map(m => [String(m.messageId), { ...win?.rows.get(String(m.messageId)), ...m }])).values()]
+    const deleted = this.deleted(key);
+    return [...new Map([...(win?.rows.values() || []), ...(st.recentMessages || [])].filter(m => this.valid(m, now) && !deleted.has(String(m.messageId))).map(m => [String(m.messageId), { ...win?.rows.get(String(m.messageId)), ...m }])).values()]
       .sort((a, b) => a.time - b.time).slice(-this.app.settings.learningWindow.maxMessages);
   }
   snapshot(key, st, now = Date.now()) {

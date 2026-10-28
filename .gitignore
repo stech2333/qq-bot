@@ -7,6 +7,9 @@ node_modules/
 integrations/qq-bridge/node_modules/
 integrations/qq-bridge/config.json
 integrations/qq-bridge/state/
+# New administrator-authored persona files stay local; existing tracked templates remain tracked.
+integrations/qq-bridge/roles/*.md
+integrations/qq-bridge/roles/.write-probe.txt
 integrations/qq-bridge/.git/
 integrations/voice-tool/
 integrations/SnowLuma/

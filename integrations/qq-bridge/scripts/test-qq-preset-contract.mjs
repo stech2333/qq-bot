@@ -38,70 +38,14 @@ test('local/admin tool restrictions and existing compaction budgets stay intact'
   }
 });
 
-test('snapshots are optional, partial snapshots require reading, and watermarks are not message IDs', () => {
-  assert.match(prefix, /可能附带【本次消息快照】/);
-  assert.match(prefix, /partial=true[^。]*继续读取/);
-  assert.match(prefix, /readThroughSeq 是桥接本地的 seq，不是 QQ messageId/);
-  assert.match(prefix, /没有水位[^。]*省略 throughSeq/);
-  assert.match(prefix, /首次进入会话、角色变化[^。]*qq_get_prompt/);
+test('snapshot receipts, recipient limits and server-managed closing are described without forced five minute waits',()=>{
+ for(const value of ['本次消息快照','partial=true','afterSeq=readThroughSeq','本地seq水位','不是QQ messageId','throughSeq','purpose="reply"','没有待答消息','token','当前会话'])assert.ok(prefix.includes(value),value);
+ assert.doesNotMatch(prefix,/timeoutMs=300000/);assert.match(prefix,/不必先强制等待五分钟/);
 });
-
-test('one closing action can acknowledge the read watermark after the full observation', () => {
-  assert.match(prefix, /qq_mark_read\(throughSeq=/);
-  assert.match(prefix, /qq_set_wake_config\(config=[^)]*throughSeq=/);
-  assert.match(prefix, /不需先 mark_read/);
-  assert.match(prefix, /qq_wait_for_messages\(timeoutMs=300000\)/);
-  assert.match(prefix, /短等待不能代替/);
-  assert.match(prefix, /preSleepWaitRemainingMs[^。]*继续等待/);
-  assert.match(prefix, /若你参与回复[^。]*重新观察/);
+test('image, forward, sticker, voice and public search capabilities remain discoverable with safety limits',()=>{
+ for(const value of ['qq_get_message_images','qq_get_forward_msg','nestedForwardIds','qq_send_poke','qq_list_stickers','qq_get_sticker_image','qq_send_sticker','qq_collect_sticker','qq_sticker_note','qq_get_self_image','qq_set_sticker_remark','只有管理端明确开启','qq_list_voices','qq_send_voice','语音默认关闭','verified=true','web_search','web_fetch'])assert.ok(prefix.includes(value),value);
 });
-
-test('pre-reply quiet checks, waiting for replies and pre-sleep observation have distinct instructions', () => {
-  assert.match(prefix, /先理解并处理当前消息/);
-  assert.match(prefix, /【首答前】[^\n]*qq_wait_for_messages\(purpose="reply", quietMs=10000\)/);
-  assert.match(prefix, /读取和思考花掉的时间也算，已安静足够就立即返回/);
-  assert.match(prefix, /不要再重开一次普通长等待/);
-  assert.match(prefix, /预算到但 quiet=false 不等于对方说完/);
-  assert.match(prefix, /【等下文】[^\n]*purpose="messages", timeoutMs=60000~120000/);
-  assert.match(prefix, /【回复后】[^\n]*qq_wait_for_messages\(purpose="messages"\)/);
-  assert.match(prefix, /短静默不算沉睡前观察/);
-  assert.match(prefix, /5 分钟观察不是回复的前置条件/);
-  assert.match(prefix, /只有准备收尾时[^。]*preSleepWaitRemainingMs/);
+test('current-member memory, evidence, global learning and silence rules are retained',()=>{
+ for(const value of ['sourceMessageId','factKey','群内各成员分开','未确认推断','不注入整库','没有合适切入点就沉默','triggers.speakerIds','不凭记忆乱填'])assert.ok(prefix.includes(value),value);
 });
-
-test('social autonomy and visual, forwarding, sticker and web capabilities remain described', () => {
-  for (const text of [
-    '【反 AI 味：拒绝有求必应】', '【保持主体性】', '【学习群友策略】',
-    '【不要当群管家/主持人】', '确有内容和节奏需要时再分条，不固定凑两条', '不要用空格断句',
-    '不会自动发送到 QQ', 'qq_get_message_images', 'qq_get_forward_msg', 'nestedForwardIds',
-    'qq_send_poke', 'qq_list_stickers', 'qq_get_sticker_image', 'qq_send_sticker',
-    'qq_collect_sticker', 'qq_sticker_note', 'qq_get_self_image',
-    'qq_set_sticker_remark', '只有管理端明确开启后才能用',
-    'qq_list_voices', 'qq_send_voice', 'verified=true 才代表这条语音确实落地',
-    '语音**默认是关闭的**', '不要假装发了语音',
-    'mcp__web-search-safe__web_search', 'mcp__web-search-safe__web_fetch',
-  ]) assert.ok(prefix.includes(text), `missing capability or voice rule: ${text}`);
-});
-
-test('autonomy limits and the observation escape hatch stay described', () => {
-  // These rules were previously unguarded: deleting any of them left every test green.
-  for (const text of [
-    // 沉睡前观察唯一的逃生口：明确结束语可以跳过 5 分钟等待。
-    '除非对方明确“不聊了/晚安/下了/拜拜”等结束语',
-    // [SILENT] 是桥接的退出标记，误用会静默吞掉回复。
-    '不要用 [SILENT]',
-    // 记忆面
-    '【记忆卫生】', 'qq_memory_append', 'qq_memory_query', 'qq_memory_remove', 'qq_memory_clear',
-    // 黑话面
-    'qq_slang_query', 'qq_slang_submit', '不重复提交',
-    // 频率上限
-    '普通闲聊约 3~5 轮一张', '别刷屏', '每条只能一张，不能附带文字', '不要频繁拍',
-    // 会话令牌是硬前置，漏传会被拒绝。
-    '作为 token 参数传入',
-    // 指定成员唤醒
-    'triggers.speakerIds', '不凭记忆乱填',
-  ]) assert.ok(prefix.includes(text), `missing rule: ${text}`);
-});
-
-console.log(`reserved2 persona prefix: ${prefix.length} characters (not a model-token estimate)`);
-
+console.log(`reserved2 persona prefix: ${prefix.length} characters (not model tokens)`);

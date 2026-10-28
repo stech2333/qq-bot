@@ -1,9 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { keywordHit } from './policies.mjs';
+import { normalizedTerm, safeGeneralText, publicSource, senseId, termId } from './slang-schema.mjs';
+import { safeFetch } from '../../integrations/qq-bridge/src/safe-fetch.js';
+import { memoryTerms } from './memory-recall.mjs';
 import { ManualSlangResearch } from './manual-slang-research.mjs';
 
-export const SLANG_POLICY = Object.freeze({ enabled: true, autoConfirm: false, threshold: 80, minMessages: 4,
+export const SLANG_POLICY = Object.freeze({ enabled: true, autoConfirm: true, threshold: 80, minMessages: 4,
   candidateMinMessages: 3, autoResearch: true, researchMinMessages: 4, minSpeakers: 2, minSpanMinutes: 30, lookbackHours: 168, scanIntervalMinutes: 5, maxAutoPerDay: 20 });
 export function slangPolicy(value = {}) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('黑话策略须为对象');
@@ -36,37 +39,49 @@ export class SlangManager {
       this.audit = []; this.auditWritable = false; this.lastError = '入库记录无法读取，自动确认已暂停；修复记录后重启桥接';
     }
   }
-  visible(entry, key, scene = '') {
-    if (!this.app.globalStyle.allowed(key) || entry.status !== 'confirmed' || (entry.avoidScenes || []).includes(scene)) return false;
-    return entry.scope === 'public' || entry.scope === key || entry.scope === 'shared' && (entry.confirmedScopes || []).includes(key);
+  sourceExists(source) {
+    if (!this.app.learningSources.allowed(source.key)) return false;
+    const st=this.app.states.get(source.key);if(!st||st.bigfatfish.memoryControl?.accumulation===false)return false;
+    return this.app.learningWindow.messages(source.key,st).some(m=>String(m.messageId)===source.id&&m.time===source.time);
   }
-  contextEntries(entries, key, scene = '', query = '') {
-    if (['help', 'technical'].includes(scene)) return [];
-    return entries.filter(e => this.visible(e, key, scene) && (!query || keywordHit(query, e.content)));
+  validSense(s) {return s.status==='confirmed'&&s.verified&&s.generalizable&&safeGeneralText(s.meaning)&&safeGeneralText(s.usage||'')&&(s.manual||s.evidence?.length>=3&&s.evidence.every(e=>this.sourceExists(e)));}
+  visible(entry,key) {return this.app.globalStyle.allowed(key)&&entry.status==='confirmed'&&safeGeneralText(entry.content)&&entry.senses?.some(s=>this.validSense(s));}
+  contextEntries(entries,key,scene='',query='') {
+    if(!this.app.globalStyle.allowed(key)||!query.trim())return[];
+    const q=normalizedTerm(query),terms=memoryTerms(query),out=[];
+    for(const e of entries){if(![e.normalized||normalizedTerm(e.content),...(e.aliases||[])].some(t=>q.includes(t))||!this.visible(e,key))continue;
+      const senses=e.senses.filter(s=>this.validSense(s)).map(s=>({s,score:(s.contextTerms||[]).filter(t=>terms.includes(t)||q.includes(normalizedTerm(t))).length})).sort((a,b)=>b.score-a.score);
+      for(const {s,score}of senses.slice(0,senses[0]?.score?1:2))out.push({id:e.id,content:e.content,status:'confirmed',count:e.count,meaning:s.meaning,usage:s.usage,senseId:s.id,contextScore:score});
+    }
+    return out.slice(0,8);
   }
-  adminScope(store, body) {
-    if (!store?.writable()) throw Error('原黑话词库不可写');
-    const e = store.entries().find(e => e.id === body.id); if (!e) throw Error('黑话记录不存在');
-    if (body.revision !== (e.revision || 0)) throw Error('黑话范围版本已变化');
-    const scope = String(body.scope || '');
-    if (!['public', 'shared', 'legacy'].includes(scope) && !this.app.groupStyle.allowed(scope)) throw Error('黑话范围无效');
-    const confirmedScopes = Array.isArray(body.confirmedScopes) ? [...new Set(body.confirmedScopes)] : [];
-    if (scope === 'shared' && (confirmedScopes.length < 2 || confirmedScopes.some(key => !this.app.groupStyle.allowed(key)))) throw Error('共享黑话须逐群独立确认');
-    const before = structuredClone(e);
-    Object.assign(e, { scope, confirmedScopes, revision: (e.revision || 0) + 1, scopeReviewedAt: Date.now(), updatedAt: new Date().toISOString() });
-    try { if (store.save() !== true) throw Error(); } catch { Object.assign(e, before); throw Error('黑话范围保存失败'); }
-    return { ok: true, id: e.id, scope, revision: e.revision };
+  async verifyPublicSources(urls,term,meaning) {
+    const valid=[...new Set((Array.isArray(urls)?urls:[]).map(publicSource).filter(Boolean))].slice(0,2),terms=memoryTerms(meaning);
+    this.publicCache??=new Map();
+    for(const url of valid){const key=url+':'+normalizedTerm(term)+':'+meaning,cached=this.publicCache.get(key);if(cached&&Date.now()-cached.at<86400000){if(cached.valid)return[url];continue;}
+      let approved=false;try{const page=await safeFetch(url,24000),text=page.body.replace(/<[^>]*>/g,' ');approved=page.statusCode===200&&normalizedTerm(text).includes(normalizedTerm(term))&&(text.includes(meaning)||terms.filter(t=>text.includes(t)).length>=Math.min(2,terms.length)&&terms.length>0);}catch{}
+      this.publicCache.set(key,{at:Date.now(),valid:approved});if(this.publicCache.size>100)this.publicCache.delete(this.publicCache.keys().next().value);if(approved)return[url];
+    }
+    return[];
+  }
+  async applyResearch(entry,output,selected) {
+    const senses=Array.isArray(output.senses)?output.senses:[];if(senses.length>4)throw Error('黑话释义过多');const results=[];
+    for(const s of senses){if(!s||Object.keys(s).some(k=>!['meaning','usage','contextTerms','sourceMessageIds','publicSources','generalizable','privateReferences'].includes(k))||typeof s.meaning!=='string'||!safeGeneralText(s.meaning)||!safeGeneralText(s.usage||'')||s.generalizable!==true||s.privateReferences!==false||!Array.isArray(s.contextTerms)||s.contextTerms.length>12||s.contextTerms.some(t=>!safeGeneralText(t)))throw Error('黑话研究未通过一般化和隐私检查');
+      const ids=[...new Set(s.sourceMessageIds||[])],rows=ids.map(id=>selected.find(m=>m.messageId===id));if(ids.length<3||rows.some(r=>!r))throw Error('黑话释义来源无效');
+      const publicSources=await this.verifyPublicSources(s.publicSources,entry.content,s.meaning);if(!publicSources.length)continue;
+      results.push({id:senseId(s.meaning),meaning:s.meaning.slice(0,300),usage:(s.usage||'').slice(0,300),contextTerms:s.contextTerms,status:'candidate',generalizable:true,verified:true,verifiedAt:Date.now(),publicSources,revision:0,evidence:rows.map(r=>({key:r.sourceKey,id:r.sourceId,time:r.time}))});
+    }
+    return results;
   }
   evidence(content, now = Date.now(), scope) {
     const app = this.app, p = app.settings.slangPolicy, messages = new Map();
     for (const [key, state] of app.states) {
-      if (scope && scope !== 'public' && key !== scope) continue;
       const group = key.startsWith('group:') ? key.slice(6) : '';
       if (!group || !(app.config.allow?.groups || []).map(String).includes(group) || (app.config.deny?.groups || []).map(String).includes(group)) continue;
       if (state.bigfatfish?.memoryControl?.accumulation === false) continue;
       for (const m of app.learningWindow.messages(key, state, now)) {
         const at = Number(m.time), uid = String(m.userId || ''), text = String(m.plain ?? m.text ?? '');
-        if (m.isSelf || !m.messageId || !/^[1-9]\d{4,15}$/.test(uid) || uid === String(app.config.bigfatfish.expectedQQ)
+        if (m.isSelf || m.styleSourceVersion !== 2 || m.sourceScope !== key || !/^-?[1-9]\d{0,19}$/.test(String(m.messageId)) || !/^[1-9]\d{4,15}$/.test(uid) || uid === String(app.config.bigfatfish.expectedQQ)
           || !Number.isFinite(at) || at <= 0 || at > now || now - at > p.lookbackHours * 3600000
           || !app.privacy.reference(text) || !keywordHit(text, content)) continue;
         messages.set(key + ':' + m.messageId, { at, uid, key });
@@ -77,15 +92,17 @@ export class SlangManager {
   candidateAdmission(content, now = Date.now(), scope) {
     const text = String(content || '').trim(), required = this.app.settings.slangPolicy.candidateMinMessages;
     const safe = Boolean(text.length >= 2 && text.length <= 50 && this.app.privacy.reference(text) && !/\d{5,}|https?:|@|\[CQ:/i.test(text));
-    const messages = safe ? this.evidence(text, now, scope).length : 0;
-    return { eligible: safe && messages >= required, messages, required,
+    const deletedFile=path.join(this.app.root,'state/slang.json.deleted.json');
+    const deleted=fs.existsSync(deletedFile)?JSON.parse(fs.readFileSync(deletedFile,'utf8')):{};
+    const messages = safe && !deleted[termId(text)] ? this.evidence(text, now, scope).length : 0;
+    return { eligible: safe && !deleted[termId(text)] && messages >= required, messages, required,
       reason: !safe ? '词条需要人工检查' : messages < required ? `进入候选需${required}条不同真人消息，当前${messages}条` : '已达到候选门槛' };
   }
   score(entry, now = Date.now()) {
     const app = this.app, p = app.settings.slangPolicy;
     const evidence = this.evidence(entry.content, now, entry.scope), speakers = new Set(evidence.map(m => m.uid)).size;
     const times = evidence.map(m => m.at), spanMinutes = times.length ? (Math.max(...times) - Math.min(...times)) / 60000 : 0;
-    const meaning = String(entry.meaning || '').trim();
+    const meaning = String(entry.meaning || entry.senses?.find(s=>s.verified)?.meaning || '').trim();
     const injectedFields = [entry.content, meaning, entry.usage, entry.example].map(value => String(value || '').trim());
     const safe = String(entry.content || '').trim().length >= 2 && meaning && injectedFields.filter(Boolean).every(text => app.privacy.reference(text))
       && !/\d{5,}|https?:|@|\[CQ:/i.test(injectedFields.join(' '));
@@ -95,8 +112,8 @@ export class SlangManager {
       spread: Math.min(15, Math.floor(spanMinutes / p.minSpanMinutes * 15)), meaning: meaning ? 20 : 0,
       freshness: times.some(at => now - at <= 86400000) ? 15 : 0 };
     const score = Object.values(parts).reduce((a, b) => a + b, 0), reasons = [];
-    if (!entry.scope || entry.scope === 'legacy' || entry.scope === 'shared') reasons.push('需管理员确认作用域');
-    if (entry.status !== 'candidate') reasons.push('仅候选词可自动入库');
+    if (!entry.senses?.some(s => s.status === 'candidate' && s.verified && s.generalizable && safeGeneralText(s.meaning) && (s.manual || s.evidence?.length >= 3 && s.evidence.every(r => this.sourceExists(r))))) reasons.push('等待公开来源验证与一般化释义');
+    if (!['candidate', 'confirmed'].includes(entry.status)) reasons.push('词条已拒绝或撤销');
     if (!safe) reasons.push('词条或释义需要人工检查');
     if (!riskOk) reasons.push('风险说明需要人工审核');
     if (!meaning) reasons.push('等待原黑话研究工具补充释义');
@@ -115,24 +132,25 @@ export class SlangManager {
     if (!p.autoConfirm || !store.writable()) return;
     const used = this.audit.filter(e => date(e.at) === date(now)).length;
     let remaining = Math.max(0, p.maxAutoPerDay - used);
-    for (const candidate of store.entries().filter(e => e.status === 'candidate').map(e => e.id)) {
+    for (const candidate of store.entries().filter(e => ['candidate','confirmed'].includes(e.status) && e.senses?.some(s => s.status === 'candidate')).map(e => e.id)) {
       if (!remaining) break;
       // The upstream save may normalize/cap and replace the whole entries array.
       const entry = store.entries().find(e => e.id === candidate);
-      if (!entry || entry.status !== 'candidate') continue;
+      if (!entry || !['candidate','confirmed'].includes(entry.status)) continue;
       const result = this.score(entry, now); if (!result.eligible) continue;
       const record = { id: entry.id, at: now, score: result.score, status: 'reserved' };
       // Reserve quota durably first: a crash or save failure must not bypass the daily cap.
       const audit = [...this.audit.filter(e => now - e.at < 31 * 86400000), record];
       try { persist(this.file, audit); } catch { this.lastError = '入库额度记录保存失败，本次未修改原词库'; return; }
       this.audit = audit; remaining--;
-      const oldStatus = entry.status, oldUpdated = entry.updatedAt;
+      const before = structuredClone(entry);
       try {
-        entry.status = 'confirmed'; entry.updatedAt = new Date(now).toISOString();
+        for (const sense of entry.senses || []) if (sense.status === 'candidate' && sense.verified && sense.generalizable && safeGeneralText(sense.meaning) && (sense.manual || sense.evidence.every(r => this.sourceExists(r)))) sense.status = 'confirmed';
+        entry.status = 'confirmed'; entry.revision = (entry.revision || 0) + 1; entry.updatedAt = new Date(now).toISOString();
         if (store.save() !== true) throw new Error('词库未保存');
         record.status = 'confirmed';
       } catch {
-        entry.status = oldStatus; entry.updatedAt = oldUpdated;
+        Object.assign(entry, before);
         record.status = 'failed'; this.lastError = '原词库保存失败，本次入库已撤回';
       }
       try { persist(this.file, this.audit); } catch { this.lastError = '入库记录写入失败，预留额度仍有效，请检查磁盘'; }

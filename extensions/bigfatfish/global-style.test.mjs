@@ -5,11 +5,8 @@ import path from 'node:path';
 import { GlobalStyle } from './global-style.mjs';
 import { fixture, A, B, P } from './style-test-fixture.mjs';
 
-test('legacy mixed global state is preserved and never imported or applied', t => {
-  const f=fixture(t), file=path.join(f.root,'state/global-style.json'), legacy=JSON.stringify({revision:5,version:3,features:{tone:{value:'playful',manual:true}},history:[]});
-  fs.writeFileSync(file,legacy); const global=new GlobalStyle(f.app);
-  assert.equal(global.view().legacy.present,true); assert.deepEqual(global.strategies('casual_chat'),[]); assert.equal(global.hint(), ''); assert.equal(global.job(Date.now()),null);
-  assert.equal(fs.readFileSync(file,'utf8'),legacy); assert.deepEqual(global.state.migration,{legacyImported:false,source:'admin-only'});
+test('legacy global data is backed up and never copied into a prompt as free text',t=>{
+ const f=fixture(t),file=path.join(f.root,'state/global-style.json');fs.writeFileSync(file,JSON.stringify({version:5,profile:'旧群私人原文'}));fs.unlinkSync(f.app.globalStyle.file);const g=new GlobalStyle(f.app);assert.ok(fs.existsSync(file+'.pre-v3.bak'));assert.equal(g.state.version,0);assert.doesNotMatch(JSON.stringify(g.state),/旧群私人原文/);
 });
 test('only administrator-reviewed closed-vocabulary strategies can be global', t => {
   const f=fixture(t); const admin=body=>f.app.globalStyle.admin('POST',{revision:f.app.globalStyle.state.revision,...body});

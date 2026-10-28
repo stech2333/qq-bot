@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /** Offline console preview. No production modules, credentials, state, or network clients are loaded. */
 import http from 'node:http';
+import {validateSettings} from '../../../extensions/bigfatfish/runtime.mjs';
 import { readFile } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -344,6 +345,8 @@ export async function startConsoleFixture({ port = 0, original = false, htmlPath
   const file = htmlPath || resolve(projectRoot, original ? 'scripts/fixtures/console.before.html' : 'public/console.html');
   await readFile(file); // Fail early rather than displaying a broken preview.
   const state = makeFixtureState();
+  state.bffSettings=validateSettings({});
+  state.bffMemory={ok:true,key:'group:123456789',revision:0,control:{accumulation:true,personalization:true},facts:[],archive:[],interests:[],summary:'',summaryMeta:null,deletedCount:0,limits:{facts:100,summaryChars:2000,backups:5},interestLearning:{},learningWindow:{messages:24,hours:720}};
   const requests = [];
   const unknownRequests = [];
   const server = http.createServer(async (req, res) => {
@@ -361,6 +364,14 @@ export async function startConsoleFixture({ port = 0, original = false, htmlPath
         res.end(await readFile(file));
         return;
       }
+      if(path==='/api/bigfatfish/contacts')return json({ok:true,verified:true,groups:[{id:'123456789',name:'测试群聊',enabled:true,available:true},{id:'223456789',name:'可选群聊',enabled:false,available:true}],friends:[{id:'323456789',name:'测试好友',enabled:false,available:true}],errors:[]});
+      if(path==='/api/bigfatfish/status')return json({ok:true,settings:state.bffSettings,expectedQQ:'999999999',gatewayQQ:'999999999',ownerQQ:'111111111',allow:state.whitelist.allow,deny:state.whitelist.deny||{groups:[],private:[]},requests:[],sessions:[],voice:{installed:false},nativeSwitches:{socialV2:true,proactive:true},research:{running:false,todayUsed:0,policy:state.bffSettings.learningResearch},legacy:[]});
+      if(path==='/api/bigfatfish/personas')return json({ok:true,revision:0,defaultRole:state.role,roles:[...state.roles],sessions:[]});
+      if(path==='/api/bigfatfish/global-style')return json({ok:true,version:0,revision:0,features:{},expressionExamples:[],candidates:[],history:[],published:[],sample:{messages:24,days:3,speakers:2,groups:1},policy:state.bffSettings.globalStyleLearning,choices:{concise:'简短完整'},traits:{},replyDelivery:'natural'});
+      if(path==='/api/bigfatfish/memory'&&method==='GET')return json({...state.bffMemory,key:url.searchParams.get('key')||state.bffMemory.key});
+      if(path==='/api/bigfatfish/slang')return json({ok:true,rows:[],audit:[],policy:state.bffSettings.slangPolicy,writable:true,nativeEnabled:true,todayUsed:0,totalCandidates:0,researchJobs:[]});
+      if(path==='/api/bigfatfish/services')return json({ok:true,busy:false,gateway:{ready:true},services:{bridge:{running:true,owned:true},dsh:{running:true,owned:true},snowluma:{running:true,owned:true}}});
+      if(path==='/api/model-pool')return json({ok:true,revision:1,entries:[],activeId:null,fallback:{provider:'fixture',model:'fixture-model'},ready:true});
       if (path === '/favicon.ico') { res.writeHead(204); res.end(); return; }
       if (method === 'GET' && path === '/__fixture/requests') return json({ requests, unknownRequests });
       if (method === 'GET' && path === '/__fixture/info') return json({ offline: true, htmlPath: file });
@@ -373,6 +384,12 @@ export async function startConsoleFixture({ port = 0, original = false, htmlPath
         body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
         requests.push({ method, path, body });
         if (logWrites) console.log(`[mock write] ${method} ${path} ${JSON.stringify(body)}`);
+      }
+      if(method==='POST'&&path.startsWith('/api/bigfatfish/')){
+        if(path.endsWith('/settings'))state.bffSettings={...state.bffSettings,...body};
+        if(path.endsWith('/access')){const f=body.kind==='group'?'groups':'private',id=String(body.target);state.whitelist.allow[f]=body.enabled?[...new Set([...state.whitelist.allow[f],id])]:state.whitelist.allow[f].filter(x=>String(x)!==id);}
+        if(path.endsWith('/memory')){if(body.action==='create')state.bffMemory.facts.push({id:'fixture-fact',text:body.content,source:{admin:true}});state.bffMemory.revision++;return json({...state.bffMemory,key:body.key});}
+        return json({ok:true});
       }
       if (method === 'GET') {
         switch (path) {

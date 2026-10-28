@@ -22,6 +22,8 @@ export function forgetFact(state, fact) {
   state.memoryDeleted = [...new Set([...state.memoryDeleted, memoryDigest(fact.text), ...versions.map(row => memoryDigest(row.fact.text))])].slice(-1000);
   state.memoryArchive = (state.memoryArchive || []).filter(row => !belongs(row) && memoryDigest(row.fact?.text) !== memoryDigest(fact.text));
   state.lastRecall = null;
+  // A summary derived from deleted or corrected facts must be regenerated from remaining sources.
+  state.summary = ''; state.summaryMeta = null;
 }
 export function supersedeMatching(state, fact, privacy) {
   if (!fact.factKey) return;
@@ -29,6 +31,7 @@ export function supersedeMatching(state, fact, privacy) {
     if (old.id === fact.id || old.factKey !== fact.factKey || String(old.source?.userId || '') !== String(fact.source?.userId || '')) continue;
     if (!privacy.reference(old.text)) continue;
     archiveFact(state, old, '同一人的事实键已有新状态');
+    state.summary = ''; state.summaryMeta = null;
     state.facts = state.facts.filter(f => f !== old);
   }
 }

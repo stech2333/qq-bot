@@ -1,3 +1,5 @@
+> 历史版本记录：V3 的当前行为以 `docs/v3-report.md` 为准。按群风格/人格与旧 UI 已退役。
+
 # 心情与记忆增强
 
 2026-10-24 在现有 QQ Bridge 上实现。功能设计参考 [鱼的记忆](https://github.com/Yuuyuko-uu/dsh-fish-memory)、[鱼的心情](https://github.com/Yuuyuko-uu/dsh-feiyu-mood)、[主动搭话](https://github.com/Yuuyuko-uu/dsh-speak-up)；没有安装这些插件，没有接入朗读桥。QQ 收发继续沿用当前桥接的会话映射、发送工具和权限检查。

@@ -14,21 +14,25 @@ export function memoryFreshness(fact, policy, now = Date.now()) {
   return 2 ** (-age / ((policy.halfLifeDays || 90) * DAY));
 }
 // Relevance gates recall; freshness only orders eligible memories. Reading never reinforces a fact.
-export function recallTrace(facts, query, policy, privacy, now = Date.now()) {
+export function recallTrace(facts, query, policy, privacy, now = Date.now(), context = {}) {
   const terms = memoryTerms(query), source = Array.isArray(facts) ? facts.filter(f => f && typeof f.text === 'string') : [];
+  const firstPerson = /(?:我(?:之前|以前|上次|喜欢|说过|的|记得)|关于我|我的偏好|what did I|my preference)/i.test(query);
+  const preferenceQuery=firstPerson&&/(?:喜欢|偏好|爱好|preference)/i.test(query);
   const sets = source.map(f => new Set(memoryTerms(f.text + ' ' + (f.tags || []).join(' '))));
   const df = new Map(terms.map(term => [term, sets.filter(set => set.has(term)).length]));
   const weight = term => 1 + Math.log(1 + source.length / (1 + (df.get(term) || 0)));
   const total = terms.reduce((sum, term) => sum + weight(term), 0);
   const rows = source.map((fact, i) => {
     const matched = terms.filter(term => sets[i].has(term));
-    const evidence = total ? matched.reduce((sum, term) => sum + weight(term), 0) / total : 0;
+    const ownPreference=preferenceQuery&&String(fact.source?.userId||'')===String(context.userId)&&/(?:喜欢|偏好|爱好|preference)/i.test(fact.text+' '+(fact.factKey||''));
+    const evidence = total ? Math.max(ownPreference?0.5:0, matched.reduce((sum, term) => sum + weight(term), 0) / total) : ownPreference?0.5:0;
     const freshness = memoryFreshness(fact, policy, now);
-    let reason = !privacy.reference(fact.text) ? '隐私或不适合引用'
+    const ownerMismatch = firstPerson && (!context.userId || String(fact.source?.userId || '') !== String(context.userId));
+    let reason = ownerMismatch ? '不是当前成员的事实' : context.deleted?.includes(fact.id) ? '来源已删除' : !privacy.reference(fact.text) ? '隐私或不适合引用'
       : fact.expiresAt && fact.expiresAt <= now ? '已过期'
       : Number(fact.confidence ?? 1) < policy.minConfidence ? '置信度不足'
-      : !terms.length ? '问句缺少具体检索词'
-      : !matched.length ? '没有命中具体检索词'
+      : !terms.length && !ownPreference ? '问句缺少具体检索词'
+      : !matched.length && !ownPreference ? '没有命中具体检索词'
       : evidence < (policy.evidenceThreshold ?? 0.15) ? '相关证据不足' : '';
     return { id: fact.id, fact, matched, evidence: +evidence.toFixed(3), freshness: +freshness.toFixed(3),
       score: evidence * 4 + Number(fact.importance ?? 0.5) + freshness + Math.min(0.5, Math.log2(Math.max(1, Number(fact.confirmations || 1))) / 10), reason, selected: false };

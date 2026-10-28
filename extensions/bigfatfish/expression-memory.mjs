@@ -14,7 +14,8 @@ export function enumList(table, value, max = 4) {
   return [...new Set(value.map(v => enumValue(table, v)))];
 }
 export function validateExpression(raw) {
-  exactObject(raw, ['scene', 'action', 'structure', 'strategy', 'when', 'avoid', 'sourceMessageIds', 'confidence']);
+  exactObject(raw, ['scene', 'action', 'structure', 'strategy', 'when', 'avoid', 'sourceMessageIds', 'confidence', 'abstractRule']);
+  if (raw.abstractRule !== undefined && !validAbstractRule(raw.abstractRule)) throw Error('抽象表达规律不符合安全语法');
   for (const [k, table] of Object.entries({ scene: SCENES, action: ACTIONS, structure: STRUCTURES, strategy: STRATEGIES })) enumValue(table, raw[k]);
   const when = enumList(CONDITIONS, raw.when), avoid = enumList(SCENES, raw.avoid);
   if (!Array.isArray(raw.sourceMessageIds) || raw.sourceMessageIds.length < 3 || raw.sourceMessageIds.length > 48 || raw.sourceMessageIds.some(id => typeof id !== 'string' || !/^[a-f\d]{24}$/.test(id))) throw Error('表达来源无效');
@@ -23,9 +24,15 @@ export function validateExpression(raw) {
   if (['help', 'technical'].includes(raw.scene) && ['acknowledge', 'conclude'].includes(raw.action)) throw Error('认真场景表达动作不适用');
   return { ...raw, when, avoid, sourceMessageIds: [...new Set(raw.sourceMessageIds)] };
 }
+export function validAbstractRule(value) {
+  if(typeof value!=='string'||value.length>120)return false;
+  const clauses=value.split(/[；;]/).map(s=>s.trim()).filter(Boolean);if(clauses.length>3)return false;
+  return clauses.every(p=>['简单场景简短完整','有依据时表达不同意见','必要时澄清信息','话题结束自然收尾','求助时清晰说明依据'].includes(p)||/^(?:简单闲聊|技术问题|明确求助|不同意见|话题结束|信息不足)时(?:用简短完整的句子|先说结论再给依据|先确认问题再解释|只补充相关观点|自然停下或保持沉默|提出必要澄清)(?:，(?:避免复读|避免套话|保留人物口吻|按需要补充例子))?$/.test(p));
+}
 export function expressionText(e) {
-  // Decode only the closed vocabulary; never serialize stored/model prose into a prompt.
+  // Decode enumerations and the bounded descriptive grammar; arbitrary stored prose is never serialized.
   if (!Object.hasOwn(SCENES, e.scene) || !Object.hasOwn(ACTIONS, e.action) || !Object.hasOwn(STRUCTURES, e.structure) || !Object.hasOwn(STRATEGIES, e.strategy)) return null;
   return { id: e.id, scene: SCENES[e.scene], action: ACTIONS[e.action], strategy: STRATEGIES[e.strategy], structure: STRUCTURES[e.structure],
-    when: (e.when || []).filter(k => Object.hasOwn(CONDITIONS, k)).map(k => CONDITIONS[k]), avoid: (e.avoid || []).filter(k => Object.hasOwn(SCENES, k)).map(k => SCENES[k]) };
+    when: (e.when || []).filter(k => Object.hasOwn(CONDITIONS, k)).map(k => CONDITIONS[k]), avoid: (e.avoid || []).filter(k => Object.hasOwn(SCENES, k)).map(k => SCENES[k]),
+    ...(e.abstractRule && validAbstractRule(e.abstractRule) ? { abstractRule:e.abstractRule } : {}) };
 }

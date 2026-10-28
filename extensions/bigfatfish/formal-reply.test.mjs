@@ -71,12 +71,7 @@ test('a real at addressing a casual opinion retains character expression without
   await incoming('opinion', [at(BOT), text('有时坚持原来的计划也挺累的')]);
   const data = await call('/api/socialV2/unread?key=' + KEY);
   assert.equal(data.response.mode, 'ASSISTANT', 'real-at handling remains enabled');
-  assert.match(h.buildWakePromptV2(KEY, 'addressed'), /不清除当前角色的用词、态度和个性/);
-  assert.match(h.buildWakePromptV2(KEY, 'addressed'), /简单问候、感慨或一句观点按原意简短回应/);
-  assert.match(h.buildWakePromptV2(KEY, 'addressed'), /不自动扩写成建议、评价或人生道理/);
-  const prompt = h.buildWakePromptV2(KEY, 'addressed');
-  assert.match(prompt, /平时喜欢开玩笑/);
-  assert.match(prompt, /不要求套统一的助手口吻/);
+  const prompt=h.buildWakePromptV2(KEY,'addressed');assert.match(prompt,/平时喜欢开玩笑/);assert.match(prompt,/沿用当前角色卡最初的口吻和个性/);assert.doesNotMatch(prompt,/【正式回答要求】/);assert.equal(data.response.style.scene,'casual_chat');
 });
 
 test('ongoing casual chat receives its own memory material, respects personalization and refreshes after edits', async t => {

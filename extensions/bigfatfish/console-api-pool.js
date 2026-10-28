@@ -24,7 +24,7 @@
     </form></details>`;
   grid.append(section);
   consolePages['model-pool'] = ['模型与 API 池', '管理模型接口与密钥。', '新增、编辑、测试接口，并选择当前使用的 API。'];
-  const nav = document.createElement('button'); nav.className = 'nav-item'; nav.dataset.view = 'model-pool'; nav.textContent = '⇄ 模型与 API 池'; document.getElementById('mainNav').append(nav);
+  const nav=document.querySelector('#consoleSubnav [data-subpage="model-pool"]');
   const $ = id => document.getElementById(id), form = $('poolForm');
   let cache, editingId = null, editRevision, busy = false;
   const notice = value => { $('poolNotice').textContent = value; };

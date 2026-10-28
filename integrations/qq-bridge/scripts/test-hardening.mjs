@@ -66,13 +66,12 @@ assert(typeof buildStickerStrategyHint() === 'string' && buildStickerStrategyHin
 const long = normalizeSlangEntry({ content: 'x'.repeat(500), meaning: 'y'.repeat(999), evidence: [{ text: 'z'.repeat(500), sender: 'a' }] });
 assert(long.content.length === 50, `黑话内容限长 50（实得 ${long.content.length}）`);
 assert(long.meaning.length === 300, `释义限长 300（实得 ${long.meaning.length}）`);
-assert(long.evidence[0].text.length === 80, `证据文本限长 80（实得 ${long.evidence[0].text.length}）`);
-assert(long.evidence[0].sender === 'a', '证据的其它字段保留');
+assert(long.evidence.every(e=>e.text===undefined&&e.sender===undefined),'全局证据只保留来源编号，不复制聊天原文或昵称');
 
 const many = [];
 for (let i = 0; i < 50; i += 1) {
   many.push(normalizeSlangEntry({
-    content: `词${i}`,
+    content: `词${i}`, schemaVersion:3,
     status: i < 5 ? SLANG_STATUS.CONFIRMED : SLANG_STATUS.CANDIDATE,
     count: i,
     updatedAt: new Date(2026, 0, 1 + i).toISOString()
@@ -109,6 +108,8 @@ try { loadSlang(slangFile); } catch { threw = true; }
 assert(threw, '顶层不是数组同样抛错（而不是当成空库）');
 
 // ── 5. saveSlang 落盘即裁剪 ─────────────────────────────────────────────
+threw=false;try{saveSlang(slangFile,many,{max:7});}catch{threw=true;}assert(threw,'损坏旧文件不得被保存覆盖');
+fs.unlinkSync(slangFile);
 const saveResult = saveSlang(slangFile, many, { max: 7 });
 assert(saveResult.entries.length === 7, 'saveSlang 写盘前就裁剪（不会先写大文件再压缩）');
 assert(JSON.parse(fs.readFileSync(slangFile, 'utf8')).length === 7, '磁盘上确实只有 7 条');

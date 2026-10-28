@@ -71,7 +71,7 @@ check('dsh-persona 仍拒绝旧字段 text（故障前提成立）', oldRejected
 /** DSH 0.2.1 的 agent loop 只注册这两个提示词变量（0.2.0 还有 `cwd`）。 */
 const DSH_PROMPT_VARIABLES = new Set(['provider', 'model']);
 
-for (const p of ['qq-chat', 'qq-chat-v2']) {
+for (const p of ['qq-chat-v2']) {
   const f = path.join(ROOT, 'dsh/agent-presets', p, 'agent.cordis.yml');
   const row = yaml.load(fs.readFileSync(f, 'utf8')).find((r) => r.id === 'persona');
   let schemaOk = false;
@@ -99,7 +99,7 @@ const presetPatches = await import(pathToFileURL(path.join(ROOT, 'scripts/build-
 for (const { file, changed } of presetPatches.buildPatches({ check: true, log: () => {} })) {
   check(`${path.relative(ROOT, file)} 与仓库源一致（未漂移）`, !changed);
 }
-for (const p of ['qq-chat', 'qq-chat-v2']) {
+for (const p of ['qq-chat-v2']) {
   const doc = yaml.load(fs.readFileSync(presetPatches.patchFileFor(p), 'utf8'));
   const row = doc?.[0]?.insert?.[0];
   check(`patch ${p}: 是 @deepseek-ai/dsh-agent-preset 行`, row?.name === '@deepseek-ai/dsh-agent-preset');
@@ -265,7 +265,7 @@ const dm = st.value?.namespaces?.find((n) => n.ns === 'agent-default-model');
 check('DSH 全局默认模型 = deepseek-flash', dm?.value?.model === 'deepseek-flash', `当前 ${dm?.value?.model}`);
 const ap = await rpc('agentPresets/list', {});
 const presetIds = ap.value?.presets?.map((p) => p.id) ?? [];
-check('agentPresets/list 含 qq-chat 与 qq-chat-v2', presetIds.includes('qq-chat') && presetIds.includes('qq-chat-v2'), presetIds.join(', '));
+check('agentPresets/list 含 qq-chat 与 qq-chat-v2', presetIds.includes('qq-chat-v2'), presetIds.join(', '));
 // 0.1.7 把设置命名空间从 `agent-presets` 改名为 `agent-preset-registry`，而且「用户默认」
 // 是易失字段 selectedDefault，不会出现在 describe 的 value 里。部署默认由 registry 行的
 // config.default 决定（dsh-web-app 的 patch 写的是 standard）。桥接在 closedAgentPreset

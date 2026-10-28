@@ -4,6 +4,7 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const repo = path.join(root, 'integrations/qq-bridge');
 function change(file, edit, marker) {
+  if (file === 'public/console.html') return; // V3 ships one authoritative console below.
   const full = path.join(repo, file), source = fs.readFileSync(full, 'utf8').replace(/\r\n/g, '\n');
   if (source.includes(marker)) return;
   const next = edit(source); fs.writeFileSync(full, next, 'utf8');
@@ -59,12 +60,6 @@ change('src/mcp-snowluma-safe.js', s => '// BigFatFish memory categories v1\n' +
   .replace('memberImpression=对某位群友的印象。', 'memberImpression=以群友QQ号记录的印象；longTerm=明确长期偏好/约定；summary=阶段摘要。')
   .replace('memberImpression 时的群友名字/昵称', 'memberImpression 时的真实群友QQ号，不使用昵称')
   .replace("      target: z.string().optional().describe('memberImpression", "      sourceMessageId: z.string().optional().describe('本会话来源消息ID'),\n      target: z.string().optional().describe('memberImpression"), '// BigFatFish memory categories v1');
-{
-  const file = path.join(repo, 'public/console.html'); let s = fs.readFileSync(file, 'utf8');
-  const script = '<script>\n' + fs.readFileSync(path.join(root, 'extensions/bigfatfish/console.js'), 'utf8') + '\n' + fs.readFileSync(path.join(root, 'extensions/bigfatfish/companion-console.js'), 'utf8') + '\n' + fs.readFileSync(path.join(root, 'extensions/bigfatfish/global-style-console.js'), 'utf8') + '\n' + fs.readFileSync(path.join(root, 'extensions/bigfatfish/group-style-console.js'), 'utf8') + '\n' + fs.readFileSync(path.join(root, 'extensions/bigfatfish/api-pool-console.js'), 'utf8') + '\n</script>';
-  s = s.includes('// BigFatFish console v1') ? s.replace(/<script>\s*\/\/ BigFatFish console v1[\s\S]*?<\/script>/, () => script) : once(s, '</body>', script + '\n</body>');
-  fs.writeFileSync(file, s, 'utf8');
-}
 change('src/bridge.js', s => {
   s = '// BigFatFish policies v2\n' + s;
   s = once(s, '    if (!bff.beginWake(key, st, reason)) { saveSocialV2State(); return; }\n', '');
@@ -705,4 +700,22 @@ change('src/bridge.js', s => {
   s = '// BigFatFish expression intake permissions v3\n' + s;
   return once(s, "styleSourceVersion: /^-?[1-9]\\d{0,19}$/.test(String(messageId)) ? 2 : 0,", "styleSourceVersion: bff.groupStyle.eligible(key) && /^-?[1-9]\\d{0,19}$/.test(String(messageId)) ? 2 : 0,");
 }, '// BigFatFish expression intake permissions v3');
+const v3Patch = require('./v3-bridge-patch.cjs');
+change('src/slang-learner.js', s => v3Patch.patchSlang(s, once), '// BigFatFish V3 global lexicon');
+change('src/bridge.js', s => v3Patch.patchBridge(s, once), '// BigFatFish V3 runtime');
+change('src/bridge.js', s => v3Patch.cleanupBridge(s, once), '// BigFatFish V3 retirement');
+change('src/bridge.js', s => v3Patch.finalizeBridge(s, once), '// BigFatFish V3 attribution and privacy');
+change('src/bridge.js', s => v3Patch.sourceSafety(s, once), '// BigFatFish V3 source and prompt diagnostics');
+change('src/slang-learner.js', s => v3Patch.slangPersistence(s, once), '// BigFatFish V3 deletion ledger');
+change('src/bridge.js', s => v3Patch.reliability(s, once), '// BigFatFish V3 transport settlement');
+change('src/bridge.js', s => v3Patch.sharedRecipient(s, once), '// BigFatFish V3 shared recipient helper');
+change('src/bridge.js', s => v3Patch.retireSleep(s, once), '// BigFatFish V3 server managed sleep');
+change('src/bridge.js', s => v3Patch.zeroSettings(s, once), '// BigFatFish V3 zero settings');
+change('src/mcp-snowluma-safe.js', s => '// BigFatFish V3 wait protocol\n' + s.replace('；沉睡前观察用 messages 并传 300000','；0 表示只检查当前消息，不长轮询'), '// BigFatFish V3 wait protocol');
+change('src/bridge.js', s => v3Patch.unknownDelivery(s, once), '// BigFatFish V3 delivery result classification');
+change('src/bridge.js', s => v3Patch.replyDiagnostics(s, once), '// BigFatFish confirmed recipient wake diagnostics');
+change('src/bridge.js', s => v3Patch.replyLatency(s, once), '// BigFatFish direct reply latency v1');
+const consoleTemplate = fs.readFileSync(path.join(root, 'extensions/bigfatfish/console-v3.html'), 'utf8');
+const consoleScript = ['console-policy.js','console-memory.js','console-api-pool.js','console-v3.js'].map(name=>fs.readFileSync(path.join(root,'extensions/bigfatfish',name),'utf8')).join('\n');
+fs.writeFileSync(path.join(repo, 'public/console.html'), consoleTemplate.replace('<!--V3_SCRIPT-->', () => '<script>\n' + consoleScript + '\n</script>'));
 console.log('BigFatFish integration applied (pinned anchors, idempotent).');

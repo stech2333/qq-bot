@@ -1,183 +1,23 @@
-// Optional browser acceptance check: supply Playwright through NODE_PATH; no QQ messages are sent.
-const fs = require('node:fs');
-const path = require('node:path');
-const assert = require('node:assert/strict');
-const { chromium } = require('playwright');
-const root = path.resolve(__dirname, '..');
-const config = JSON.parse(fs.readFileSync(path.join(root, 'integrations/qq-bridge/config.json'), 'utf8'));
-(async () => {
-  const browser = await chromium.launch({ channel: 'chrome', headless: true });
-  try {
-    const page = await browser.newPage({ viewport: { width: 1440, height: 1050 } });
-    await page.emulateMedia({ reducedMotion: 'reduce' });
-    const errors = []; page.on('pageerror', error => errors.push(error.message));
-    page.on('pageerror', error => console.error('Page script:', error.message.replaceAll(config.consoleToken, '[hidden]')));
-    await page.addInitScript(token => localStorage.setItem('consoleToken', token), config.consoleToken);
-    const port = config.consolePort || 3106, base = `http://127.0.0.1:${port}`;
-    const disabledMemoryKey = 'group:9900012345';
-    await page.route('**/api/bigfatfish/status', async route => {
-      const response = await route.fetch(), data = await response.json();
-      data.deny = { ...data.deny, groups: [...(data.deny?.groups || []), disabledMemoryKey.split(':')[1]] };
-      if (data.sessions.length) data.sessions[0].topics = { active: [{ id: 'topic-ui', topic: '页面验收话题', messages: 6, participants: 3, lastSeen: Date.now() }], candidates: [] };
-      await route.fulfill({ json: data });
-    });
-    await page.goto(base + '/?token=' + encodeURIComponent(config.consoleToken) + '#bff-policy');
-    await page.locator('#bfState').filter({ hasText: '登录目标' }).waitFor();
-    assert.equal(await page.locator('#section-bff-policy').isVisible(), true);
-    assert.match(await page.locator('#bfDecisions').textContent(), /页面验收话题.*6条不同消息 \/ 3人/);
-    assert.doesNotMatch(await page.locator('#bfDecisions').textContent(), /兴趣 \d+\/100/);
-    assert.match(await page.locator('#bfDecisions').textContent(), /队列：待处理.*明确待答/);
-    assert.equal(await page.locator('#bfSettings input[name=contextInitiative_probability]').inputValue(), '0.18');
-    assert.equal(await page.locator('#bfSettings input[name=contextInitiative_enabled]').isChecked(), true);
-    let topicScanBody;
-    await page.route('**/api/bigfatfish/topics', async route => { topicScanBody = route.request().postDataJSON(); await route.fulfill({ json: { ok: true, changed: 1 } }); });
-    await Promise.all([page.waitForResponse('**/api/bigfatfish/status'), page.locator('#bfTopicScan').click()]);
-    assert.deepEqual(topicScanBody, { action: 'scan' });
-    assert.equal(await page.locator('dialog').count(), 0);
-    await page.locator('#mainNav [data-view="sessions"]').click();
-    await page.locator('#section-bff-peers button').filter({ hasText: /^添加私聊$/ }).click();
-    assert.equal(await page.locator('#bfAccess select').inputValue(), 'private');
-    // Exercise the real browser event while intercepting its write: never alter the live allow list.
-    let accessBody;
-    await page.route('**/api/bigfatfish/access', async route => { accessBody = route.request().postDataJSON(); await route.fulfill({ json: { ok: true } }); });
-    await page.locator('#bfAccess input[name=target]').fill('123456789');
-    await Promise.all([page.waitForResponse('**/api/bigfatfish/status'), page.locator('#bfAccess button[value=yes]').click()]);
-    assert.deepEqual(accessBody, { kind: 'private', target: '123456789', enabled: true });
-    await page.locator('#mainNav [data-view=persona]').click();
-    await page.locator('#bfPersonaStatus').filter({ hasText: '全局默认' }).waitFor();
-    assert.equal(await page.locator('select#roleInput').count(), 1);
-    const initialPersonas = await page.evaluate(() => api('/api/bigfatfish/personas'));
-    assert.ok(initialPersonas.sessions.length > 0); assert.ok(initialPersonas.roles.length > 0);
-    assert.deepEqual(await page.locator('#roleInput option').evaluateAll(nodes => nodes.map(n => n.value).filter(Boolean)), initialPersonas.roles);
-    let defaultRoleBody;
-    await page.route('**/api/role', async route => { defaultRoleBody = route.request().postDataJSON(); await route.fulfill({ json: { ok: true } }); });
-    await page.locator('#roleInput').selectOption(initialPersonas.roles[0]);
-    await Promise.all([page.waitForResponse('**/api/roles'), page.locator('#roleSet').click()]);
-    assert.equal(defaultRoleBody.role, initialPersonas.roles[0]);
-    let mockPersonas = structuredClone(initialPersonas), personaSelectionBody;
-    await page.route('**/api/bigfatfish/personas', async route => {
-      if (route.request().method() === 'POST') {
-        personaSelectionBody = route.request().postDataJSON(); const row = mockPersonas.sessions.find(s => s.key === personaSelectionBody.key);
-        row.mode = personaSelectionBody.mode; row.role = personaSelectionBody.role;
-        row.effectiveRole = row.mode === 'template' ? row.role : row.mode === 'none' ? null : mockPersonas.defaultRole;
-        mockPersonas.revision++;
-      }
-      await route.fulfill({ json: mockPersonas });
-    });
-    const key = initialPersonas.sessions[0].key, chosenRole = initialPersonas.roles.at(-1);
-    for (const value of ['template:' + chosenRole, 'none', 'inherit']) {
-      const selection = page.locator('#bfPersonaRows select').first();
-      await Promise.all([page.waitForResponse(response => response.url().endsWith('/api/bigfatfish/personas') && response.request().method() === 'POST'), selection.selectOption(value)]);
-      await page.waitForFunction(() => document.querySelector('#bfPersonaRows select')?.disabled === false);
-      assert.equal(personaSelectionBody.key, key); assert.equal(personaSelectionBody.mode, value.startsWith('template:') ? 'template' : value);
-      if (value.startsWith('template:')) assert.equal(personaSelectionBody.role, chosenRole);
-    }
-    await page.unroute('**/api/bigfatfish/personas');
-    await Promise.all([page.waitForResponse('**/api/bigfatfish/personas'), page.locator('#mainNav [data-view=persona]').click()]);
-    await page.locator('#newRoleName').fill('existing draft');
-    await page.locator('#bfAddRole').click();
-    assert.equal(await page.locator('#newRoleName').inputValue(), '');
-    assert.equal(await page.locator('#newRoleName').isVisible(), true);
-    let personaBody;
-    await page.route('**/api/roles/create', async route => { personaBody = route.request().postDataJSON(); await route.fulfill({ json: { ok: true } }); });
-    await page.locator('#newRoleName').fill('页面验证人格'); await page.locator('#newRoleContent').fill('表达自然友好，尊重既定边界。');
-    await Promise.all([page.waitForResponse('**/api/roles'), page.locator('#roleCreate').click()]); assert.equal(personaBody.name, '页面验证人格');
-    if (await page.locator('#roleList .persona-item').count()) {
-      await Promise.all([page.waitForResponse(response => response.url().includes('/api/roles/content?')), page.locator('#roleList .persona-item').first().click()]);
-      await page.locator('#roleCreate').filter({ hasText: '保存修改' }).waitFor();
-      const existingName = await page.locator('#newRoleName').inputValue();
-      await page.route('**/api/roles/update', async route => { personaBody = route.request().postDataJSON(); await route.fulfill({ json: { ok: true } }); });
-      await page.locator('#newRoleContent').fill('浏览器验证用修改，不写入真实人格文件。');
-      await Promise.all([page.waitForResponse('**/api/roles'), page.locator('#roleCreate').click()]);
-      assert.equal(personaBody.name, existingName); assert.match(personaBody.content, /浏览器验证用修改/);
-    }
-    await page.locator('#mainNav [data-view="bff-memory"]').click();
-    await page.locator('#bfMemoryStatus').filter({ hasText: '当前会话' }).waitFor();
-    assert.equal(await page.locator('#bfRemember').isVisible(), true);
-    const memoryData = await page.evaluate(() => api('/api/bigfatfish/memory?key=' + encodeURIComponent(document.querySelector('#bfMemoryKey').value)));
-    assert.match(await page.locator('#bfMemoryKey option').filter({ hasText: disabledMemoryKey }).textContent(), /已停用/);
-    let disabledMemoryWrite;
-    await page.route('**/api/bigfatfish/memory*', async route => {
-      const request = route.request(), key = request.method() === 'POST' ? request.postDataJSON().key : new URL(request.url()).searchParams.get('key');
-      if (key !== disabledMemoryKey) return route.continue();
-      if (request.method() === 'POST') disabledMemoryWrite = request.postDataJSON();
-      await route.fulfill({ json: { ...memoryData, key: disabledMemoryKey, facts: [], revision: memoryData.revision + (disabledMemoryWrite ? 1 : 0) } });
-    });
-    await page.locator('#bfMemoryKey').selectOption(disabledMemoryKey);
-    await page.locator('#bfMemoryStatus').filter({ hasText: disabledMemoryKey }).waitFor();
-    assert.equal(await page.locator('#bfStyle').count(), 0);
-    assert.match(await page.locator('#section-bff-memory').textContent(), /统一风格学习/);
-    await Promise.all([page.waitForResponse(response => response.url().endsWith('/api/bigfatfish/memory') && response.request().method() === 'POST'), page.locator('#bfMemoryControls').click()]);
-    assert.equal(disabledMemoryWrite.key, disabledMemoryKey);
-    assert.deepEqual(accessBody, { kind: 'private', target: '123456789', enabled: true });
-    await page.unroute('**/api/bigfatfish/memory*');
-    await page.locator('#mainNav [data-view="slang"]').click();
-    await page.locator('#bfSlangStatus').filter({ hasText: '原词库' }).waitFor();
-    assert.equal(await page.locator('#bfSlangPolicy').isVisible(), true);
-    let slangBody;
-    await page.route('**/api/bigfatfish/settings', async route => { slangBody = route.request().postDataJSON(); await route.fulfill({ json: { ok: true } }); });
-    await page.locator('#bfSlangPolicy input[name=candidateMinMessages]').fill('5');
-    await page.locator('#bfSlangPolicy input[name=threshold]').fill('85'); await Promise.all([page.waitForResponse('**/api/bigfatfish/slang'), page.locator('#bfSlangPolicy button').click()]); assert.equal(slangBody.slangPolicy.threshold, 85);
-    assert.equal(slangBody.slangPolicy.candidateMinMessages, 5);
-    assert.equal(typeof slangBody.slangPolicy.autoResearch, 'boolean');
-    assert.ok(slangBody.slangPolicy.researchMinMessages >= 3);
-    let manualSubmitted = false, manualBody;
-    await page.route('**/api/slang', async route => {
-      const response = await route.fetch(), data = await response.json(), now = Date.now();
-      data.entries.unshift({ id: 'ui-manual-slang', content: '页面研究词', meaning: manualSubmitted ? '页面验证释义' : '', source: 'ai', status: 'candidate', count: 3, evidence: [],
-        research: manualSubmitted ? { status: 'approved', mode: 'manual', jobId: 'ui-job', at: now, confidence: 0.95, reason: '研究通过', result: { meaning: '页面验证释义', usage: '验证用法', sources: ['https://example.com/slang'] } } : undefined });
-      data.researchJobs = manualSubmitted ? [{ id: 'ui-job', words: ['页面研究词'], ids: ['ui-manual-slang'], status: 'completed', stage: '研究结束：通过1', done: 1, total: 1, approved: 1, uncertain: 0, failed: 0, createdAt: now,
-        returns: [{ batch: 1, at: now, text: '模型返回：页面验证释义' }] }] : [];
-      await route.fulfill({ json: data });
-    });
-    await page.route('**/api/slang/research', async route => { manualBody = route.request().postDataJSON(); manualSubmitted = true; await route.fulfill({ json: { ok: true, count: 1, jobId: 'ui-job' } }); });
-    await page.evaluate(() => refreshSlang());
-    await page.locator('[data-slang-select="ui-manual-slang"]').check();
-    await Promise.all([page.waitForResponse('**/api/slang/research'), page.locator('#slangBatchResearch').click()]);
-    assert.ok(manualBody.ids.includes('ui-manual-slang'));
-    await page.locator('#bfSlangResearchStatus').filter({ hasText: '研究结束：通过1' }).waitFor();
-    await page.locator('[data-research-key="word:ui-manual-slang"] > summary').click();
-    assert.match(await page.locator('#bfSlangResearchResults').textContent(), /页面验证释义.*验证用法/s);
-    await page.evaluate(() => refreshSlang());
-    assert.equal(await page.locator('[data-research-key="word:ui-manual-slang"]').getAttribute('open'), '');
-    await page.locator('[data-research-key="job:ui-job"] > summary').click();
-    await page.locator('[data-research-key="return:ui-job:1"] > summary').click();
-    assert.match(await page.locator('#bfSlangResearchJobs pre').textContent(), /模型返回：页面验证释义/);
-    await page.unroute('**/api/slang/research'); await page.unroute('**/api/slang'); await page.evaluate(() => refreshSlang());
-    await page.locator('#mainNav [data-view="operations"]').click();
-    await page.locator('#bfServicesStatus').filter({ hasText: '管理器已连接' }).waitFor();
-    assert.equal(await page.locator('#bfServicesRows p').count(), 3);
-    await page.locator('#mainNav [data-view="bff-policy"]').click();
-    await page.locator('#bfSettings input[name=casualMaxChars]').fill('65');
-    await page.locator('#bfSettings input[name=participation_idleProbability]').fill('0.5');
-    await page.locator('#bfSettings input[name=participation_interestProbability]').fill('0.6');
-    await page.locator('#bfSettings input[name=topicLearning_minMessages]').fill('7');
-    await page.locator('#bfSettings input[name=contextInitiative_probability]').fill('0.19');
-    await page.locator('#bfSettings input[name=participationAliases]').fill('肥鱼，古月方鲸');
-    await Promise.all([page.waitForResponse('**/api/bigfatfish/status'), page.locator('#mainNav [data-view="sessions"]').click()]);
-    await Promise.all([page.waitForResponse('**/api/bigfatfish/status'), page.locator('#mainNav [data-view="bff-policy"]').click()]);
-    assert.equal(await page.locator('#bfSettings input[name=casualMaxChars]').inputValue(), '65');
-    await Promise.all([page.waitForResponse('**/api/bigfatfish/status'), page.locator('#bfSettings>button').click()]);
-    assert.equal(slangBody.casualMaxChars, 65); assert.equal(Object.hasOwn(slangBody, 'slangPolicy'), false);
-    assert.equal(slangBody.participation.idleProbability, 0.5); assert.equal(slangBody.participation.interestProbability, 0.6);
-    assert.deepEqual(slangBody.participation.aliases, ['肥鱼', '古月方鲸']);
-    assert.equal(slangBody.topicLearning.minMessages, 7);
-    assert.equal(slangBody.contextInitiative.probability, 0.19); assert.equal(slangBody.contextInitiative.enabled, true);
-    const out = path.join(root, 'logs/acceptance'); fs.mkdirSync(out, { recursive: true });
-    await page.screenshot({ path: path.join(out, 'console-policy.png'), fullPage: true });
-    await Promise.all([page.waitForResponse('**/api/bigfatfish/slang'), page.locator('#mainNav [data-view="slang"]').click()]);
-    await page.screenshot({ path: path.join(out, 'console-slang.png'), fullPage: true });
-    await Promise.all([page.waitForResponse('**/api/bigfatfish/personas'), page.locator('#mainNav [data-view=persona]').click()]);
-    await page.locator('#section-bff-personas').screenshot({ path: path.join(out, 'console-personas.png') });
-    await page.setViewportSize({ width: 390, height: 844 });
-    assert.equal(await page.locator('#section-bff-personas').isVisible(), true);
-    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-    await page.setViewportSize({ width: 1440, height: 1050 });
-    await page.locator('#mainNav [data-view="slang"]').click();
-    await page.setViewportSize({ width: 390, height: 844 });
-    assert.equal(await page.locator('#section-bff-slang').isVisible(), true);
-    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-    assert.deepEqual(errors, []);
-    console.log('Console UI passed: native navigation, scope form, persona creation event, disabled conversation memory management, slang policy, service status, draft retention and mobile layout. Live writes intercepted; no QQ messages sent.');
-  } finally { await browser.close(); }
-})().catch(error => { console.error(String(error.stack || error).replaceAll(config.consoleToken, '[hidden]')); process.exitCode = 1; });
+// Restored-console acceptance: local disposable fixture only; never opens a production session.
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),os=require('node:os'),{pathToFileURL}=require('node:url');
+let playwright;try{playwright=require('playwright');}catch{playwright=require(require.resolve('playwright',{paths:[path.join(os.homedir(),'.cache/codex-runtimes/codex-primary-runtime/dependencies/node')]}));}
+const root=path.resolve(__dirname,'..');
+(async()=>{const {startConsoleFixture}=await import(pathToFileURL(path.join(root,'integrations/qq-bridge/scripts/console-ui-fixture.mjs')).href);const fixture=await startConsoleFixture();const browser=await playwright.chromium.launch({channel:'chrome',headless:true});try{
+ const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.accept());
+ await page.goto(fixture.url+'/#overview');await page.locator('#statusText').filter({hasText:'DSH 已连接'}).waitFor();assert.equal(await page.locator('#mainNav button[data-view]').count(),6);
+ assert.match(await page.locator('#activity').textContent(),/演示桥接已连接/);assert.equal(await page.locator('#section-mode').isVisible(),true);
+ await page.locator('#mainNav [data-view=sessions]').click();await page.locator('#bfAccess select[name=target] option[value="223456789"]').waitFor({state:'attached'});assert.match(await page.locator('#bfAccess select[name=target]').textContent(),/可选群聊.*223456789/);
+ await page.locator('#bfAccess select[name=target]').selectOption('223456789');await page.locator('#bfAccess button[value=yes]').click();await page.waitForFunction(()=>document.querySelector('#bfNotice').textContent.includes('参与范围已保存'));assert.ok(fixture.requests.some(r=>r.path==='/api/bigfatfish/access'&&r.body.kind==='group'&&r.body.target==='223456789'&&r.body.enabled));
+ await page.locator('#bfAccess select[name=kind]').selectOption('private');await page.locator('#bfAccess select[name=target]').selectOption('323456789');await page.locator('#bfAccess button[value=yes]').click();await page.waitForTimeout(100);assert.ok(fixture.requests.some(r=>r.path==='/api/bigfatfish/access'&&r.body.kind==='private'&&r.body.target==='323456789'&&r.body.enabled));
+ assert.equal(await page.locator('#sessionList').isVisible(),true);
+ await page.locator('#mainNav [data-view=persona]').click();await page.locator('#newRoleContent').fill('未保存的人格草稿');await page.locator('#mainNav [data-view=models]').click();await page.locator('#poolCurrent').filter({hasText:'当前'}).waitFor();assert.equal(await page.locator('#section-api-pool').isVisible(),true);await page.locator('[data-subpage=usage]').click();assert.equal(await page.locator('#section-usage').isVisible(),true);await page.locator('#usageChart svg').waitFor();
+ await page.locator('#mainNav [data-view=persona]').click();assert.equal(await page.locator('#newRoleContent').inputValue(),'未保存的人格草稿');
+ await page.locator('#mainNav [data-view=learning]').click();await page.locator('[data-subpage=bff-global-style]').click();await page.locator('#bfGlobalVersion').filter({hasText:'v0'}).waitFor();await page.locator('#bfReplyDelivery').selectOption('single');await page.locator('#bfDeliverySave').click();await page.waitForTimeout(100);assert.ok(fixture.requests.some(r=>r.path==='/api/bigfatfish/settings'&&r.body.replyDelivery==='single'));
+ await page.locator('[data-subpage=bff-memory]').click();await page.locator('#bfMemoryLoad').click();await page.locator('#bfMemoryStatus').filter({hasText:'版本'}).waitFor();
+ const ids=await page.locator('[id]').evaluateAll(nodes=>nodes.map(n=>n.id));assert.equal(ids.length,new Set(ids).size);assert.deepEqual(errors,[]);
+ // Test the real string response plus the supported legacy array and empty variants without assuming array.map.
+ for(const activity of [[],null,['一条数组日志']]){await page.route('**/api/status',async route=>{const response=await route.fetch();await route.fulfill({json:{...await response.json(),activity}});});await page.evaluate(()=>refresh());await page.unroute('**/api/status');}
+ assert.deepEqual(errors,[]);await page.locator('#mainNav [data-view=overview]').click();await page.locator('#refreshConsole').click();
+ const out=path.join(root,'logs/audit');fs.mkdirSync(out,{recursive:true});await page.screenshot({path:path.join(out,'console-restored-desktop.png'),fullPage:true});await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(out,'console-restored-mobile.png'),fullPage:true});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+ console.log('PASS: original overview/sessions/API pool/cost charts restored; activity string, contact selectors, writes, drafts, global style, unique IDs and mobile layout.');
+ }finally{await browser.close();await fixture.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

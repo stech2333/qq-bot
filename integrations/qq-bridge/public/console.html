@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="zh-CN">
-<head>
+<head><script>window.bffInitialHash=location.hash.slice(1);</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
@@ -1765,17 +1765,11 @@ button:active:not(:disabled) {
     <div class="nav-label">工作空间</div>
     <nav id="mainNav">
       <button data-view="overview" class="nav-item active" aria-current="page"><span class="nav-icon" aria-hidden="true">◫</span>运行总览</button>
-      <button data-view="sessions" class="nav-item"><span class="nav-icon" aria-hidden="true">☷</span>会话与审批<span class="nav-count" id="pendingCount">—</span></button>
-      <button data-view="persona" class="nav-item"><span class="nav-icon" aria-hidden="true">◉</span>人格与角色</button>
-      <div class="nav-label">聊天行为</div>
-      <button data-view="social-v2" class="nav-item"><span class="nav-icon" aria-hidden="true">◈</span>二代仿真<span class="nav-note">V2</span></button>
-      <button data-view="social-v1" class="nav-item"><span class="nav-icon" aria-hidden="true">◇</span>一代仿真<span class="nav-note">V1</span></button>
-      <button data-view="slang" class="nav-item"><span class="nav-icon" aria-hidden="true">▤</span>黑话词库</button>
-      <div class="nav-label">管理</div>
-      <button data-view="usage" class="nav-item"><span class="nav-icon" aria-hidden="true">◧</span>令牌与花费</button>
-      <button data-view="access" class="nav-item"><span class="nav-icon" aria-hidden="true">⊙</span>访问与安全</button>
-      <button data-view="operations" class="nav-item"><span class="nav-icon" aria-hidden="true">⌘</span>调试与运维</button>
-      <button data-view="reference" class="nav-item"><span class="nav-icon" aria-hidden="true">ⓘ</span>工具参考</button>
+      <button data-view="sessions" class="nav-item"><span class="nav-icon" aria-hidden="true">☷</span>会话管理<span class="nav-count" id="pendingCount">—</span></button>
+      <button data-view="persona" class="nav-item"><span class="nav-icon" aria-hidden="true">◉</span>人格与聊天</button>
+      <button data-view="learning" class="nav-item"><span class="nav-icon" aria-hidden="true">▤</span>记忆与学习</button>
+      <button data-view="models" class="nav-item"><span class="nav-icon" aria-hidden="true">◧</span>模型与成本</button>
+      <button data-view="settings" class="nav-item"><span class="nav-icon" aria-hidden="true">⌘</span>系统设置</button>
     </nav>
     <div class="sidebar-bottom"><span class="local-dot"></span>本地控制台<small>QQ ↔ DeepSeek Harness</small></div>
   </aside>
@@ -1796,13 +1790,14 @@ button:active:not(:disabled) {
         <button class="metric metric-link" data-view="sessions"><span>已建立会话</span><strong id="metricSessions">—</strong><small>查看会话映射 <span aria-hidden="true">↗</span></small></button>
         <button class="metric metric-link" data-view="sessions" data-target="section-pending"><span>待处理请求</span><strong id="metricPending">—</strong><small>提问与工具审批 <span aria-hidden="true">↗</span></small></button>
       </div>
+<div id="consoleSubnav" class="row" aria-label="当前功能分组"><div class="row" data-family="sessions" hidden><button type="button" data-subpage="sessions">会话与审批</button><button type="button" data-subpage="bff-mood">会话心情</button></div><div class="row" data-family="persona" hidden><button type="button" data-subpage="persona">人格模板</button><button type="button" data-subpage="social-v2">二代仿真</button><button type="button" data-subpage="bff-policy">话题与主动策略</button></div><div class="row" data-family="learning" hidden><button type="button" data-subpage="bff-memory">长期记忆</button><button type="button" data-subpage="bff-global-style">全局风格</button><button type="button" data-subpage="slang">全局黑话</button></div><div class="row" data-family="models" hidden><button type="button" data-subpage="model-pool">模型与 API 池</button><button type="button" data-subpage="usage">令牌与花费</button></div><div class="row" data-family="settings" hidden><button type="button" data-subpage="access">访问与安全</button><button type="button" data-subpage="operations">调试与运维</button><button type="button" data-subpage="reference">工具参考</button></div></div>
       <div class="grid">
         <section id="section-mode" data-page="overview" class="card span-all">
       <h2>运行模式</h2>
       <div class="mode-row" id="modeRow">
-        <button data-mode="chat" aria-pressed="false"><span class="mode-indicator" aria-hidden="true"></span><strong>聊天模式</strong><small>白名单内，随时对话</small></button>
+
         <button data-mode="closed-agent" aria-pressed="false"><span class="mode-indicator" aria-hidden="true"></span><strong>封闭 Agent</strong><small>仅管理员，完整工具</small></button>
-        <button data-mode="reserved" aria-pressed="false"><span class="mode-indicator" aria-hidden="true"></span><strong>一代仿真</strong><small>按策略自然参与群聊</small></button>
+
         <button data-mode="reserved2" aria-pressed="false"><span class="mode-indicator" aria-hidden="true"></span><strong>二代仿真</strong><small>自主阅读、发言与潜水</small></button>
       </div>
       <div class="row" style="margin-top:12px">
@@ -1881,9 +1876,8 @@ button:active:not(:disabled) {
         <label style="flex:0 0 auto">仿真代次</label>
         <select id="simPromptPreset" style="flex:0 1 280px">
           <option value="qq-chat-v2">二代仿真（reserved2 · qq-chat-v2）</option>
-          <option value="qq-chat">一代仿真（reserved · qq-chat）</option>
         </select>
-        <span class="meta">两代机制不同（一代空格分条 / 二代一切皆工具），提示词各自独立。</span>
+        <span class="meta">二代仿真是唯一日常聊天模式；人格仍由管理员统一设置。</span>
       </div>
       <div class="meta" id="simPromptWarnings"></div>
       <textarea id="simPromptText" class="code-area" spellcheck="false" readonly></textarea>
@@ -1896,108 +1890,7 @@ button:active:not(:disabled) {
       </div>
       <div class="meta" id="simPromptRestart"></div>
     </section>
-<section id="section-social-v1" data-page="social-v1" class="card span-all">
-      <h2>一代仿真模式（reserved）</h2>
-      <div class="meta" id="socialStatus">加载中…</div>
 
-      <div class="row" style="margin-top:10px">
-        <label style="flex:1">普通消息触发概率（观望期）</label><input type="number" id="sTrigger" step="0.05" min="0" max="1" style="width:80px">
-      </div>
-      <div class="row">
-        <label style="flex:1">活跃检测间隔（秒）</label>
-        <input type="number" id="sCheckMin" min="5" style="width:70px"> ~
-        <input type="number" id="sCheckMax" min="5" style="width:70px">
-      </div>
-      <div class="row">
-        <label style="flex:1">活跃回复延迟（秒）</label>
-        <input type="number" id="sActiveDelayMin" min="0" style="width:70px"> ~
-        <input type="number" id="sActiveDelayMax" min="0" style="width:70px">
-      </div>
-      <details class="settings-group"><summary>群聊活跃超时主动退出</summary><div class="settings-content">
-      <div class="row">
-        <label style="flex:1">启用</label><input type="checkbox" id="sActiveDurationEnabled" style="width:auto">
-      </div>
-      <div class="row">
-        <label style="flex:1">活跃最长持续时间（分）</label>
-        <input type="number" id="sActiveDurationMin" min="1" style="width:70px"> ~
-        <input type="number" id="sActiveDurationMax" min="1" style="width:70px">
-      </div>
-      <div class="meta">从进入群聊活跃那一刻起随机取一个时长；到点后即使群里还在聊，也会提示 AI 说一句收尾话并回到观望。私聊不自动退场。</div>
-
-      <div class="row">
-        <label style="flex:1">冷场窗口（分）</label><input type="number" id="sIdleWindow" min="1" style="width:80px">
-      </div>
-      <div class="row">
-        <label style="flex:1">冷场试探概率</label><input type="number" id="sIdleRetry" step="0.05" min="0" max="1" style="width:80px">
-      </div>
-      <div class="row">
-        <label style="flex:1">试探等待窗口（分）</label><input type="number" id="sIdleWait" min="1" style="width:80px">
-      </div>
-      <div class="row">
-        <label style="flex:1">普通消息沉默概率</label><input type="number" id="sSkipProb" step="0.05" min="0" max="1" style="width:80px">
-      </div>
-      <div class="row">
-        <label style="flex:1">抬杠时退让概率</label><input type="number" id="sSurrenderProb" step="0.05" min="0" max="1" style="width:80px">
-      </div>
-      <div class="row">
-        <label style="flex:1">附带上下文条数</label><input type="number" id="sContextWindow" min="1" max="100" style="width:80px">
-      </div>
-      <div class="row">
-        <label style="flex:1">单条消息长度上限（字）</label><input type="number" id="sMaxChars" min="1" style="width:80px">
-      </div>
-
-      </div></details>
-<details class="settings-group"><summary>分条发送（按空格分句）</summary><div class="settings-content">
-      <div class="meta" style="margin-bottom:8px">AI 用空格表示“分成下一条消息”；中英文/数字之间的空格也会被当成分条信号，不想分条就不要加空格、用标点连接。单条只做安全长度上限，不再限制条数。</div>
-      <div class="row">
-        <label style="flex:1">启用分条发送</label><input type="checkbox" id="sBurstEnabled" style="width:auto">
-      </div>
-      <div class="row">
-        <label style="flex:1">条间间隔（毫秒）</label>
-        <input type="number" id="sBurstIntervalMin" min="0" style="width:70px"> ~
-        <input type="number" id="sBurstIntervalMax" min="0" style="width:70px">
-      </div>
-      <div class="row">
-        <label style="flex:1">长间隔概率</label><input type="number" id="sLongGapProb" step="0.05" min="0" max="1" style="width:80px">
-      </div>
-      <div class="row">
-        <label style="flex:1">长间隔范围（毫秒）</label>
-        <input type="number" id="sLongGapMin" min="0" style="width:70px"> ~
-        <input type="number" id="sLongGapMax" min="0" style="width:70px">
-      </div>
-      <label>必回关键词（逗号分隔）</label>
-      <input type="text" id="sKeywords" placeholder="deepseek, 在吗">
-
-      </div></details>
-<details class="settings-group"><summary>主动开话题（观望期第三种触发）</summary><div class="settings-content">
-      <div class="row">
-        <label style="flex:1">启用主动开话题</label><input type="checkbox" id="sProactiveEnabled" style="width:auto">
-      </div>
-      <div class="row">
-        <label style="flex:1">群安静多久判定（分）</label><input type="number" id="sProactiveIdle" min="1" style="width:80px">
-      </div>
-      <div class="row">
-        <label style="flex:1">判定间隔（分）</label>
-        <input type="number" id="sProactiveCheckMin" min="1" style="width:70px"> ~
-        <input type="number" id="sProactiveCheckMax" min="1" style="width:70px">
-      </div>
-      <div class="row">
-        <label style="flex:1">判定成功概率</label><input type="number" id="sProactiveProb" step="0.05" min="0" max="1" style="width:80px">
-      </div>
-
-</div></details>
-<div class="save-bar">      <div class="row" style="margin-top:10px">
-        <button id="socialSave">保存社交配置</button>
-        <button id="socialFlush">立刻投喂摘要</button>
-        <span class="meta" id="socialMsg"></span>
-      </div>
-      <div class="row" style="margin-top:10px">
-        <select id="sStateKey" style="flex:1"><option value="">选择会话</option></select>
-        <button id="sStateActive" class="small">设为活跃</button>
-        <button id="sStateIdle" class="small">设为观望</button>
-      </div>
-      <div class="meta">一代仿真模式状态机：观望期按“明确点名 / 小概率”触发进入活跃；活跃期每 10~20 秒批量查看新消息并回应；群聊活跃超过随机上限会主动提示 AI 收尾退场；冷场后大概率回观望、小概率让 AI 试探一句。可手动强制切换状态。</div>
-    </div></section>
 <section id="section-social-v2" data-page="social-v2" class="card span-all">
       <h2>二代仿真模式（reserved2）控制台</h2>
       <div class="meta">配置保存后写入 config.json 并热更新；工具开关决定 AI 能调用哪些工具。已接入开关的工具在<b>重启 DSH 后</b>会从工具清单里彻底消失（少一份 schema 就少一份每次请求的 token）；发送类等跨模式共用的工具只在调用时被桥接拒绝，清单不变。</div>
@@ -2115,11 +2008,7 @@ button:active:not(:disabled) {
         <label style="flex:1">无行动兜底次数</label><input type="number" id="v2NoActionLimit" min="1" style="width:80px">
         <label style="flex:1">唤醒收尾提醒次数</label><input type="number" id="v2MaxWakeConfigReminders" min="1" style="width:80px">
       </div>
-      <div class="row">
-        <label style="flex:1">启用沉睡前强制等待</label><input type="checkbox" id="v2PreSleepWaitEnabled" style="width:auto">
-        <label style="flex:1">沉睡前强制等待（分）</label><input type="number" id="v2PreSleepWaitMin" min="0" step="1" style="width:80px">
-        <span class="meta" style="flex:2">AI 设置潜水/下一次唤醒前，默认必须先等够这个观察窗口；0 表示不限制。</span>
-      </div>
+
 
       </div></details>
 <details class="settings-group"><summary>发送限制</summary><div class="settings-content">
@@ -2650,6 +2539,7 @@ button:active:not(:disabled) {
 })();
 
 async function api(path, method, body, _retried = 0) {
+  if(body && /^\/api\/slang\/[^/]+(?:\/confirm)?$/.test(path) && body.meaning!==undefined){const current=typeof slangEntriesCache==='undefined'?null:slangEntriesCache.find(e=>path.includes(e.id));const primary=current?.senses?.find(s=>s.meaning===current.meaning)||current?.senses?.[0];body={...body,senses:[{meaning:body.meaning,usage:body.usage||'',contextTerms:primary?.contextTerms||[]},...(current?.senses||[]).filter(s=>s.id!==primary?.id).map(s=>({meaning:s.meaning,usage:s.usage||'',contextTerms:s.contextTerms||[]}))]};}
   const headers = body ? {'content-type':'application/json'} : {};
   const token = localStorage.getItem('consoleToken');
   if (token) headers['x-console-token'] = token;
@@ -2729,9 +2619,9 @@ async function refresh() {
     document.querySelectorAll('#modeRow button').forEach(b => (b.classList.toggle('active', b.dataset.mode === s.mode), b.setAttribute('aria-pressed', String(b.dataset.mode === s.mode))));
     document.getElementById('roleText').textContent = s.role || '无';
     document.getElementById('roleModeText').textContent = s.roleMode === 'silent' ? '静默' : '正常';
-    const modeLabel = s.mode === 'reserved' ? '一代仿真模式' : s.mode === 'reserved2' ? '二代仿真模式' : s.mode === 'closed-agent' ? '封闭 Agent' : '聊天模式';
+    const modeLabel = s.mode === 'reserved' ? '一代仿真模式' : s.mode === 'reserved2' ? '二代仿真模式' : s.mode === 'closed-agent' ? '封闭 Agent' : '已关闭';
     updateOverview(s, modeLabel);
-    document.getElementById('activity').textContent = s.activity || '（空）';
+    document.getElementById('activity').textContent = typeof s.activity === 'string' ? (s.activity || '（空）') : Array.isArray(s.activity) ? s.activity.map(row => typeof row === 'string' ? row : JSON.stringify(row)).join('\n') : '（暂无活动记录）';
     const presetSel = document.getElementById('closedPreset');
     if (presetSel && document.activeElement !== presetSel) presetSel.value = s.closedAgentPreset || '';
   } catch (e) { document.getElementById('statusText').textContent = '连接中断 · 请检查桥接服务'; setConnectionError(e); }
@@ -3298,8 +3188,6 @@ async function loadV2Config() {
     document.getElementById('v2BatchWindowMs').value = w.batchWindowMs ?? 8000;
     document.getElementById('v2NoActionLimit').value = w.noActionLimit ?? 3;
     document.getElementById('v2MaxWakeConfigReminders').value = w.maxWakeConfigReminders ?? 2;
-    document.getElementById('v2PreSleepWaitEnabled').checked = w.preSleepWaitEnabled !== false;
-    document.getElementById('v2PreSleepWaitMin').value = Number.isFinite(Number(w.preSleepWaitMs)) ? Math.round(Number(w.preSleepWaitMs) / 60000) : 5;
     const s = c.send || {};
     document.getElementById('v2BurstEnabled').checked = s.burstEnabled !== false;
     document.getElementById('v2BurstMax').value = s.burstMaxMessages ?? 8;
@@ -3361,8 +3249,6 @@ async function saveV2Config() {
     wake: {
       defaultMode: document.getElementById('v2WakeDefaultMode').value,
       recommendedDefaultInfinite: document.getElementById('v2RecDefaultInfinite').checked,
-      preSleepWaitEnabled: document.getElementById('v2PreSleepWaitEnabled').checked,
-      preSleepWaitMs: (Number.isFinite(Number(document.getElementById('v2PreSleepWaitMin').value)) && Number(document.getElementById('v2PreSleepWaitMin').value) >= 0 ? Math.round(Number(document.getElementById('v2PreSleepWaitMin').value)) : 5) * 60000,
       recommendedSleepMinMs: (Math.round(Number(document.getElementById('v2RecSleepMin').value) || 5)) * 60000,
       recommendedSleepMaxMs: (Math.round(Number(document.getElementById('v2RecSleepMax').value) || 120)) * 60000,
       recommendedProbability: Number(document.getElementById('v2RecProb').value) || 0,
@@ -3913,119 +3799,6 @@ document.getElementById('v2ToolLogClear').addEventListener('click', async () => 
   renderV2ToolLog([]);
 });
 
-// 只在页面加载/保存成功后填充输入框（避免自动刷新覆盖用户正在编辑的值）
-async function loadSocialForm() {
-  try {
-    const s = await api('/api/social');
-    const c = s.config;
-    document.getElementById('sTrigger').value = c.triggerProbability;
-    document.getElementById('sCheckMin').value = Math.round((c.activeCheckMinMs || 0) / 1000);
-    document.getElementById('sCheckMax').value = Math.round((c.activeCheckMaxMs || 0) / 1000);
-    document.getElementById('sActiveDelayMin').value = Math.round((c.activeReplyDelayMinMs || 0) / 1000);
-    document.getElementById('sActiveDelayMax').value = Math.round((c.activeReplyDelayMaxMs || 0) / 1000);
-    document.getElementById('sActiveDurationEnabled').checked = c.activeDurationEnabled !== false;
-    document.getElementById('sActiveDurationMin').value = Math.round((c.activeDurationMinMs || 0) / 60000);
-    document.getElementById('sActiveDurationMax').value = Math.round((c.activeDurationMaxMs || 0) / 60000);
-    document.getElementById('sIdleWindow').value = Math.round((c.idleWindowMs || 0) / 60000);
-    document.getElementById('sIdleRetry').value = c.idleRetryProbability;
-    document.getElementById('sIdleWait').value = Math.round((c.idleRetryWaitMs || 0) / 60000);
-    document.getElementById('sSkipProb').value = c.skipProbability ?? 0.15;
-    document.getElementById('sSurrenderProb').value = c.surrenderProbability ?? 0.08;
-    document.getElementById('sContextWindow').value = c.contextWindow;
-    document.getElementById('sMaxChars').value = c.maxReplyChars ?? 500;
-    document.getElementById('sBurstEnabled').checked = c.burstEnabled !== false;
-    document.getElementById('sBurstIntervalMin').value = c.burstIntervalMinMs ?? 1000;
-    document.getElementById('sBurstIntervalMax').value = c.burstIntervalMaxMs ?? 3000;
-    document.getElementById('sLongGapProb').value = c.longGapProbability ?? 0.1;
-    document.getElementById('sLongGapMin').value = c.longGapMinMs ?? 2500;
-    document.getElementById('sLongGapMax').value = c.longGapMaxMs ?? 5000;
-    document.getElementById('sKeywords').value = (c.mustReplyKeywords || []).join(', ');
-    document.getElementById('sProactiveEnabled').checked = c.proactiveEnabled !== false;
-    document.getElementById('sProactiveIdle').value = Math.round((c.proactiveIdleThresholdMs || 0) / 60000);
-    document.getElementById('sProactiveCheckMin').value = Math.round((c.proactiveCheckMinMs || 0) / 60000);
-    document.getElementById('sProactiveCheckMax').value = Math.round((c.proactiveCheckMaxMs || 0) / 60000);
-    document.getElementById('sProactiveProb').value = c.proactiveProbability;
-  } catch {}
-}
-
-// 每 3 秒只刷新状态徽章/摘要缓冲，不碰输入框
-async function refreshSocialStatus() {
-  try {
-    const s = await api('/api/social');
-    const buff = Object.entries(s.pendingSummaries || {}).map(([k, n]) => k + ':' + n).join('  ') || '无';
-    const phaseLabel = { idle: '观望', active: '活跃', probing: '试探', exiting: '退场中' };
-    const phaseClass = { idle: 'pill g', active: 'pill b', probing: 'pill r', exiting: 'pill' };
-    const stateEntries = Object.entries(s.states || {});
-    const sel = document.getElementById('sStateKey');
-    const prevSel = sel.value;
-    sel.innerHTML = '<option value="">选择会话</option>';
-    for (const [k] of stateEntries) {
-      const opt = document.createElement('option');
-      opt.value = k;
-      opt.textContent = k;
-      sel.appendChild(opt);
-    }
-    if (prevSel && [...sel.options].some(o => o.value === prevSel)) sel.value = prevSel;
-    let html = '摘要缓冲: ' + esc(buff) + '<br>状态:';
-    if (!stateEntries.length) html += ' 暂无（发过消息的群会显示状态）';
-    for (const [k, v] of stateEntries) {
-      html += ` <span class="${phaseClass[v.phase] || 'pill'}">${esc(k)} · ${phaseLabel[v.phase] || esc(v.phase)}</span>`;
-    }
-    document.getElementById('socialStatus').innerHTML = html;
-  } catch {}
-}
-
-document.getElementById('socialSave').addEventListener('click', async () => {
-  const n = (id) => Number(document.getElementById(id).value);
-  const r = await api('/api/social', 'POST', {
-    triggerProbability: Math.min(1, Math.max(0, n('sTrigger'))),
-    activeCheckMinMs: Math.max(5, n('sCheckMin')) * 1000,
-    activeCheckMaxMs: Math.max(5, n('sCheckMax')) * 1000,
-    activeReplyDelayMinMs: Math.max(0, n('sActiveDelayMin')) * 1000,
-    activeReplyDelayMaxMs: Math.max(0, n('sActiveDelayMax')) * 1000,
-    activeDurationEnabled: document.getElementById('sActiveDurationEnabled').checked,
-    activeDurationMinMs: Math.max(1, n('sActiveDurationMin')) * 60000,
-    activeDurationMaxMs: Math.max(1, n('sActiveDurationMax')) * 60000,
-    idleWindowMs: Math.max(1, n('sIdleWindow')) * 60000,
-    idleRetryProbability: Math.min(1, Math.max(0, n('sIdleRetry'))),
-    idleRetryWaitMs: Math.max(1, n('sIdleWait')) * 60000,
-    skipProbability: Math.min(1, Math.max(0, n('sSkipProb'))),
-    surrenderProbability: Math.min(1, Math.max(0, n('sSurrenderProb'))),
-    contextWindow: Math.min(100, Math.max(1, n('sContextWindow'))),
-    maxReplyChars: Math.max(1, n('sMaxChars')),
-    burstEnabled: document.getElementById('sBurstEnabled').checked,
-    burstIntervalMinMs: Math.max(0, n('sBurstIntervalMin')),
-    burstIntervalMaxMs: Math.max(0, n('sBurstIntervalMax')),
-    longGapProbability: Math.min(1, Math.max(0, n('sLongGapProb'))),
-    longGapMinMs: Math.max(0, n('sLongGapMin')),
-    longGapMaxMs: Math.max(0, n('sLongGapMax')),
-    mustReplyKeywords: document.getElementById('sKeywords').value.split(/[,，]/).map(x => x.trim()).filter(Boolean),
-    proactiveEnabled: document.getElementById('sProactiveEnabled').checked,
-    proactiveIdleThresholdMs: Math.max(1, n('sProactiveIdle')) * 60000,
-    proactiveCheckMinMs: Math.max(1, n('sProactiveCheckMin')) * 60000,
-    proactiveCheckMaxMs: Math.max(1, n('sProactiveCheckMax')) * 60000,
-    proactiveProbability: Math.min(1, Math.max(0, n('sProactiveProb')))
-  });
-  document.getElementById('socialMsg').textContent = r.ok ? '✅ 已保存' : ('❌ ' + (r.error || '失败'));
-  document.getElementById('socialMsg').className = r.ok ? 'meta ok' : 'meta err';
-  if (r.ok) { loadSocialForm(); refreshSocialStatus(); }
-});
-document.getElementById('socialFlush').addEventListener('click', async () => {
-  const r = await api('/api/social/flush', 'POST', {});
-  document.getElementById('socialMsg').textContent = r.ok ? '✅ 已触发摘要投喂' : ('❌ ' + (r.error || '失败'));
-  document.getElementById('socialMsg').className = r.ok ? 'meta ok' : 'meta err';
-});
-async function setSocialPhase(phase) {
-  const key = document.getElementById('sStateKey').value;
-  if (!key) { alert('请先选择会话'); return; }
-  const r = await api('/api/social/state', 'POST', { key, phase });
-  document.getElementById('socialMsg').textContent = r.ok ? ('✅ 已设为' + (phase === 'active' ? '活跃' : '观望')) : ('❌ ' + (r.error || '失败'));
-  document.getElementById('socialMsg').className = r.ok ? 'meta ok' : 'meta err';
-  refreshSocialStatus();
-}
-document.getElementById('sStateActive').addEventListener('click', () => setSocialPhase('active'));
-document.getElementById('sStateIdle').addEventListener('click', () => setSocialPhase('idle'));
-
 let slangEntriesCache = [];
 let slangSelected = new Set();
 let slangActiveTab = 'candidate';
@@ -4108,7 +3881,7 @@ function renderSlangPanel() {
   let html = `<div class="meta" style="padding:6px 8px">共 ${filtered.length} 条，显示 ${shown.length} 条（可滚动查找）</div>`;
   html += '<table><tr><th>选择</th><th>词条</th><th>次数</th><th>来源</th><th>含义 / 用法 / 示例</th><th>参考来源</th><th>语境证据</th><th>操作</th></tr>';
   for (const e of shown) {
-    const meaning = e.meaning ? esc(e.meaning) : (status === 'candidate' ? '<span class="meta">待研究</span>' : '<span class="meta">无</span>');
+    const meaning = e.senses?.length ? e.senses.map(s=>esc(s.meaning)+' <span class="meta">（'+esc({candidate:'待验证',confirmed:'已确认',revoked:'已撤销',rejected:'已拒绝'}[s.status]||s.status)+'）</span>').join('<br>') : e.meaning ? esc(e.meaning) : (status === 'candidate' ? '<span class="meta">待研究</span>' : '<span class="meta">无</span>');
     const checked = slangSelected.has(e.id) ? ' checked' : '';
     const actions = [];
     if (status === 'candidate') {
@@ -4442,12 +4215,13 @@ document.getElementById('consoleTokenSave').addEventListener('click', () => chan
 document.getElementById('consoleTokenRandom').addEventListener('click', () => changeConsoleToken(true));
 
 // Presentation layer: keep every existing control mounted so drafts and API contracts survive navigation.
+const pageFamilies={'social-v2':'persona','bff-policy':'persona','bff-memory':'learning','bff-global-style':'learning','slang':'learning','model-pool':'models','usage':'models','access':'settings','operations':'settings','reference':'settings','bff-mood':'sessions'};
+const defaultPages={learning:'bff-memory',models:'model-pool',settings:'access'};
 const consolePages = {
   overview: ['运行总览', '让每一次连接，都自然发生。', '掌握桥接状态，轻松管理你的 QQ 智能伙伴。'],
   sessions: ['会话与审批', '让每一段对话，都有迹可循。', '查看 QQ 与 DSH 的会话映射，以及等待你回复的审批和提问。'],
   persona: ['人格与角色', '给你的伙伴，一点独特个性。', '选择已有角色，或用自己的语言写下新的性格与表达方式。'],
   'social-v2': ['二代仿真', '自主参与，恰到好处。', '管理 AI 的工具、唤醒与发言节奏。展开需要调整的分组，修改后保存参数。'],
-  'social-v1': ['一代仿真', '为自然对话，设定合适的节奏。', '调整参与概率、活跃周期和分条发送；所有配置项完整保留。'],
   slang: ['黑话词库', '读懂群聊里的，言外之意。', '从候选到确认，让 AI 逐渐熟悉大家的表达习惯。'],
   usage: ['令牌与花费', '每一次思考，都算得清楚。', '实时查看 AI 的 token 消耗与花费，可下钻到每个群、每个好友、每一轮对话。'],
   access: ['访问与安全', '明确边界，安心连接。', '管理允许对话的对象、管理员权限与控制台访问凭证。'],
@@ -4464,11 +4238,15 @@ function showConsoleToast(message) {
   toastTimer = setTimeout(() => { toast.hidden = true; }, 4200);
 }
 function setConsolePage(page, { updateHash = true, focus = false, target = '' } = {}) {
+  page=defaultPages[page]||page;
   if (!Object.hasOwn(consolePages, page)) page = 'overview';
+  const family=pageFamilies[page]||page;
+  document.querySelectorAll('#consoleSubnav [data-family]').forEach(el=>{el.hidden=el.dataset.family!==family;});
+  document.querySelectorAll('#consoleSubnav [data-subpage]').forEach(el=>{el.classList.toggle('active',el.dataset.subpage===page);el.setAttribute('aria-pressed',String(el.dataset.subpage===page));});
   currentConsolePage = page;
   document.querySelectorAll('[data-page]').forEach(el => { el.hidden = el.dataset.page !== page; });
   document.querySelectorAll('#mainNav [data-view]').forEach(button => {
-    const selected = button.dataset.view === page;
+    const selected = button.dataset.view === family;
     button.classList.toggle('active', selected);
     if (selected) button.setAttribute('aria-current', 'page');
     else button.removeAttribute('aria-current');
@@ -4534,7 +4312,7 @@ function setConnectionError(error) {
 }
 document.getElementById('refreshConsole').addEventListener('click', async function () {
   this.disabled = true;
-  await Promise.allSettled([refresh(), refreshSessions(), refreshPending(), refreshSocialStatus(), refreshV2Activity()]);
+  await Promise.allSettled([refresh(), refreshSessions(), refreshPending(), refreshV2Activity()]);
   this.disabled = false;
   if (document.getElementById('connectionAlert').hidden) showConsoleToast('运行状态已刷新');
 });
@@ -4557,7 +4335,7 @@ document.querySelectorAll('input,select,textarea').forEach(input => {
     input.setAttribute('aria-label', names[input.id] || input.placeholder || input.closest('section')?.querySelector('h2')?.textContent || '设置');
   }
 });
-const primaryActions = ['roleSet','roleCreate','socialSave','v2ConfigSave','v2ConfigSaveTop','wlSave','secSave','consoleTokenSave','tsSend','aiNotifySend','slangAdd','slangConfigSave','slangModalDirectConfirm'];
+const primaryActions = ['roleSet','roleCreate','v2ConfigSave','v2ConfigSaveTop','wlSave','secSave','consoleTokenSave','tsSend','aiNotifySend','slangAdd','slangConfigSave','slangModalDirectConfirm'];
 primaryActions.forEach(id => document.getElementById(id)?.classList.add('primary'));
 document.querySelectorAll('.meta[id$="Msg"], .meta[id$="Msg2"]').forEach(el => el.setAttribute('role','status'));
 document.getElementById('section-mode').querySelector('h2').dataset.note = '选择后即时生效';
@@ -5066,8 +4844,8 @@ document.getElementById('usageClear').addEventListener('click', async () => {
 
 setConsolePage(location.hash.slice(1), { updateHash:false });
 
-refresh(); refreshRoles(); refreshWhitelist(); refreshSessions(); refreshPending(); refreshPresets(); loadSocialForm(); loadV2Config(); refreshV2Activity(); loadV2ToolLog(); loadV2SessionOptions(); refreshSocialStatus(); refreshSlang(); loadSlangConfig(); loadSecurity(); refreshSimPrompt(); refreshDshModel(); refreshUsage(); refreshUsageChart(); refreshUsageRecent();
-setInterval(() => { refresh(); refreshSessions(); refreshPending(); refreshSocialStatus(); refreshSlang(); }, 3000);
+refresh(); refreshRoles(); refreshWhitelist(); refreshSessions(); refreshPending(); refreshPresets();  loadV2Config(); refreshV2Activity(); loadV2ToolLog(); loadV2SessionOptions();  refreshSlang(); loadSlangConfig(); loadSecurity(); refreshSimPrompt(); refreshDshModel(); refreshUsage(); refreshUsageChart(); refreshUsageRecent();
+setInterval(() => { refresh(); refreshSessions(); refreshPending();  refreshSlang(); }, 3000);
 // 用量看板只在本页可见时轮询：既保证「实时」，又不让其它页白白多打两份接口。
 setInterval(() => { if (currentConsolePage !== 'usage') return; refreshUsage(); refreshUsageChart(); refreshUsageRecent(); }, 3000);
 // 主题切换（纯前端，不发任何请求；选择写入 localStorage，未选择时跟随系统）
@@ -5097,7 +4875,7 @@ setInterval(() => { if (currentConsolePage !== 'usage') return; refreshUsage(); 
 })();
 </script>
 <script>
-// BigFatFish console v1
+// BigFatFish original console integration, adapted for V3
 (() => {
   const grid = document.querySelector('#mainContent .grid');
   const sections = [];
@@ -5110,7 +4888,7 @@ setInterval(() => { if (currentConsolePage !== 'usage') return; refreshUsage(); 
   panel.innerHTML = `<h2>话题学习、定时与主动聊天</h2>
   <p id="bfState">读取状态…</p><p id="bfPolicyLayers"></p><p id="bfNotice" role="status"></p><button id="bfManagerOpen">启动 / 停止管理</button>
   <h3>启用群聊 / 私聊</h3><p>启用只控制机器人参与范围，不会自动加入群或添加好友。</p>
-  <form id="bfAccess"><select name="kind"><option value="group">QQ群</option><option value="private">个人QQ</option></select> <input name="target" required pattern="[1-9][0-9]{4,15}" placeholder="群号或QQ号"> <button name="enable" value="yes">启用</button> <button name="enable" value="no">停用</button></form><div id="bfPeers"></div>
+  <form id="bfAccess"><select name="kind"><option value="group">QQ群</option><option value="private">个人QQ</option></select> <select name="target" required aria-label="选择群聊或好友"><option value="">读取群聊与好友列表…</option></select><button type="button" id="bfContactsRefresh">刷新列表</button> <button name="enable" value="yes">启用</button> <button name="enable" value="no">停用</button></form><div id="bfPeers"></div>
   <h3>人格与行为</h3><p>人格正文在原控制台“人格与角色”编辑；这里修改闲聊与冷场开场策略。</p>
   <form id="bfSettings"><label>闲聊简练字数参考（不作为拆条门槛） <input name="casualMaxChars" type="number" min="5" max="200"></label> <span>真实 @ 优先回应；明确求助按完整准确的方式回答，其余沿用当前人格。</span><p><label>人工补充话题（逗号分隔，可留空）<input name="interests" style="width:70%"></label></p>
   <p><label><input name="dryRun" type="checkbox">冷场主动仅演练</label> <label>安静分钟 <input name="minIdleMinutes" type="number" min="1" max="10080"></label> <label>冷却分钟 <input name="cooldownMinutes" type="number" min="1" max="10080"></label> <label>每日上限 <input name="dailyCap" type="number" min="0" max="20"></label></p>
@@ -5141,14 +4919,9 @@ setInterval(() => { if (currentConsolePage !== 'usage') return; refreshUsage(); 
   el('bfSettings').addEventListener('input', () => { settingsDirty = true; });
   Object.assign(consolePages, {
     'bff-policy': ['话题与主动策略', '从共同讨论中学会参与。', '查看反复讨论的话题、学习门槛、接话概率和主动检查记录。'],
-    'bff-memory': ['长期记忆', '记住各会话中有价值的事。', '按群聊或私聊查看、纠正长期事实与阶段摘要；表达方式在通用表达经验与群聊风格学习中管理。']
+    'bff-memory': ['长期记忆', '记住各会话中有价值的事。', '按群聊或私聊查看、纠正长期事实与阶段摘要；表达方式由全局风格共同学习并自动巩固。']
   });
-  for (const page of ['bff-policy', 'bff-memory']) {
-    const nav = document.createElement('button'); nav.className = 'nav-item'; nav.dataset.view = page;
-    const icon = document.createElement('span'); icon.className = 'nav-icon'; icon.ariaHidden = 'true'; icon.textContent = page === 'bff-policy' ? '◷' : '▤';
-    nav.append(icon, consolePages[page][0]); el('mainNav').append(nav);
-    nav.onclick = () => { setConsolePage(page, { focus: true }); run(refresh); };
-  }
+  for(const page of ['bff-policy','bff-memory']){const nav=document.querySelector('#consoleSubnav [data-subpage="'+page+'"]');nav.onclick=()=>{setConsolePage(page,{focus:true});run(refresh);};}
   const quick = card('overview', 'section-bff-overview', '大肥鱼 · 功能管理');
   const summary = document.createElement('p'); summary.id = 'bfOverviewStatus'; summary.textContent = '正在读取本地设置…'; quick.append(summary);
   for (const [page, label, target] of [['sessions', '添加群聊 / 私聊', peers.id], ['persona', '新增与编辑人格', 'roleList'], ['bff-policy', '话题与主动策略', panel.id], ['bff-memory', '记忆与表达风格', 'section-bff-memory'], ['slang', '黑话评分与入库', 'section-bff-slang'], ['operations', '启动与服务管理', 'section-bff-services']]) {
@@ -5158,7 +4931,7 @@ setInterval(() => { if (currentConsolePage !== 'usage') return; refreshUsage(); 
   const accessActions = document.createElement('div'); accessActions.className = 'row';
   for (const [kind, title] of [['group', '添加群聊'], ['private', '添加私聊']]) {
     const b = document.createElement('button'); b.type = 'button'; b.textContent = title;
-    b.onclick = () => { el('bfAccess').elements.kind.value = kind; el('bfAccess').elements.target.focus(); }; accessActions.append(b);
+    b.onclick = () => { el('bfAccess').elements.kind.value = kind; el('bfAccess').elements.kind.dispatchEvent(new Event('change')); el('bfAccess').elements.target.focus(); }; accessActions.append(b);
   }
   peers.querySelector('h2').after(accessActions);
   // Use the native create/update events and role files, with a clear entry in the persona list.
@@ -5167,49 +4940,13 @@ setInterval(() => { if (currentConsolePage !== 'usage') return; refreshUsage(); 
   addRole.onclick = () => { resetRoleForm(); revealRoleEditor(); };
   el('roleList').before(addRole);
   el('roleList').addEventListener('click', event => { if (event.target.closest('.persona-item')) revealRoleEditor(); });
-  const personaCard = card('persona', 'section-bff-personas', '按群聊 / 私聊选择人格');
-  grid.insertBefore(personaCard, document.querySelector('[data-page="persona"]'));
-  const personaIntro = document.createElement('p'); personaIntro.textContent = '每个会话可单独选择已创建的人格模板，选择后保存并从下一轮对话生效。未单独设置时跟随全局默认；切换人格保留该会话记忆和参与设置。'; personaCard.append(personaIntro);
-  const defaultInput = el('roleInput'), defaultSelect = document.createElement('select'); defaultSelect.id = 'roleInput'; defaultSelect.setAttribute('aria-label', '全局默认人格模板'); defaultInput.replaceWith(defaultSelect);
-  const defaultBox = defaultSelect.closest('details'); defaultBox.open = true; defaultBox.querySelector('summary').textContent = '全局默认人格（未单独设置的会话使用）';
-  defaultBox.querySelector('.meta').textContent = '从已创建的模板中选择并应用；设置为“不使用人格模板”只影响跟随默认的会话。';
-  el('roleSet').textContent = '应用全局默认'; el('roleClear').textContent = '取消默认人格'; personaCard.append(defaultBox);
-  const personaStatus = document.createElement('p'); personaStatus.id = 'bfPersonaStatus'; personaStatus.setAttribute('role', 'status');
-  const personaRows = document.createElement('div'); personaRows.id = 'bfPersonaRows'; personaRows.className = 'bf-table'; personaCard.append(personaStatus, personaRows);
-  let personaRevision = 0, personaBusy = false, personaLoad = 0;
-  function option(value, text) { const node = document.createElement('option'); node.value = value; node.textContent = text; return node; }
-  async function refreshPersonas() {
-    const load = ++personaLoad, data = await call('/api/bigfatfish/personas'); if (load !== personaLoad) return;
-    personaRevision = data.revision;
-    const draft = defaultSelect.value, preserve = defaultSelect.dataset.dirty === 'true';
-    defaultSelect.replaceChildren(option('', '不使用人格模板'));
-    for (const name of data.roles) defaultSelect.append(option(name, name));
-    if (data.defaultRole && !data.roles.includes(data.defaultRole)) defaultSelect.append(option(data.defaultRole, data.defaultRole + '（模板缺失）'));
-    defaultSelect.value = preserve && [...defaultSelect.options].some(o => o.value === draft) ? draft : data.defaultRole || '';
-    personaStatus.textContent = `全局默认：${data.defaultRole || '不使用人格模板'} · ${data.sessions.length} 个会话 · 选择会话下拉框后立即保存`;
-    personaRows.replaceChildren();
-    if (!data.sessions.length) { personaRows.textContent = '暂无会话，请先到“会话与审批”添加群聊或私聊。'; return; }
-    const table = document.createElement('table'), head = document.createElement('tr');
-    for (const title of ['群聊 / 私聊', '人格模板选择', '当前生效']) { const th = document.createElement('th'); th.textContent = title; head.append(th); } table.append(head);
-    for (const row of data.sessions) {
-      const tr = document.createElement('tr'), peer = document.createElement('td'), control = document.createElement('td'), effective = document.createElement('td');
-      const [kind, id] = row.key.split(':'); peer.textContent = `${kind === 'group' ? '群聊' : '私聊'} ${id}${row.enabled ? '' : '（未启用参与）'}`;
-      const select = document.createElement('select'); select.dataset.key = row.key; select.setAttribute('aria-label', peer.textContent + '的人格模板');
-      select.append(option('inherit', '跟随全局默认：' + (data.defaultRole || '无人格')), option('none', '本会话不使用人格模板'));
-      for (const name of data.roles) select.append(option('template:' + name, name));
-      if (row.missing) select.append(option('template:' + row.role, row.role + '（模板缺失，暂用全局默认）'));
-      select.value = row.mode === 'template' ? 'template:' + row.role : row.mode; select.disabled = personaBusy;
-      effective.textContent = (row.effectiveRole || '不使用人格模板') + (row.missing ? '（原模板缺失）' : row.mode === 'inherit' ? '（跟随默认）' : '（单独设置）');
-      select.onchange = () => run(async () => {
-        const value = select.value; personaBusy = true; personaRows.querySelectorAll('select').forEach(input => { input.disabled = true; }); personaStatus.textContent = '正在保存当前会话人格…';
-        try {
-          await call('/api/bigfatfish/personas', 'POST', { key: row.key, revision: personaRevision, mode: value.startsWith('template:') ? 'template' : value, role: value.startsWith('template:') ? value.slice(9) : null });
-          notice('已保存 ' + peer.textContent + ' 的人格选择，下一轮对话生效');
-        } finally { personaBusy = false; await refreshPersonas(); }
-      }); control.append(select); tr.append(peer, control, effective); table.append(tr);
-    }
-    personaRows.append(table);
-  }
+  const personaCard=card('persona','section-bff-personas','全局人格');
+  const defaultInput=el('roleInput'),defaultSelect=document.createElement('select');defaultSelect.id='roleInput';defaultSelect.setAttribute('aria-label','全局人格模板');defaultInput.replaceWith(defaultSelect);
+  const defaultBox=defaultSelect.closest('details');defaultBox.open=true;defaultBox.querySelector('summary').textContent='所有群聊和私聊使用同一人格';
+  defaultBox.querySelector('.meta').textContent='选择管理员维护的人格模板，应用后所有会话统一使用；独立记忆保持不变。';personaCard.append(defaultBox);
+  const personaStatus=document.createElement('p');personaStatus.id='bfPersonaStatus';personaStatus.setAttribute('role','status');personaCard.append(personaStatus);
+  function option(value,title){const o=document.createElement('option');o.value=value;o.textContent=title;return o;}
+  async function refreshPersonas(){const data=await call('/api/bigfatfish/personas'),draft=defaultSelect.value,preserve=defaultSelect.dataset.dirty==='true';defaultSelect.replaceChildren(option('','不使用人格模板'));for(const role of data.roles)defaultSelect.append(option(role,role));defaultSelect.value=preserve?draft:data.defaultRole||'';personaStatus.textContent='当前全局人格：'+(data.defaultRole||'未选择')+'；所有群聊和私聊统一使用。';}
   defaultSelect.onchange = () => { defaultSelect.dataset.dirty = 'true'; };
   document.addEventListener('bff-roles-changed', () => { defaultSelect.dataset.dirty = 'false'; run(refreshPersonas); });
   document.addEventListener('click', event => { if (event.target.closest('#mainNav [data-view="persona"]')) run(refreshPersonas); });
@@ -5223,7 +4960,7 @@ setInterval(() => { if (currentConsolePage !== 'usage') return; refreshUsage(); 
     .bf-integrated td:first-child{min-width:150px}.bf-integrated td:nth-child(2){white-space:nowrap}
     #bfSlangFields{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px}
     #bfSlangFields label{display:flex;align-items:center;justify-content:space-between;gap:8px}
-    #bfAccess{grid-template-columns:140px minmax(160px,1fr) auto auto;align-items:center}
+    #bfAccess{grid-template-columns:130px minmax(180px,1fr) auto auto auto;align-items:center}
     @media(max-width:650px){#bfAccess{grid-template-columns:1fr}#bfSlangFields{grid-template-columns:1fr}}
   `; document.head.append(style);
   const fields = {
@@ -5594,7 +5331,7 @@ setInterval(() => { if (currentConsolePage !== 'usage') return; refreshUsage(); 
   });
 
   const section = document.createElement('section'); section.className = 'card span-all bf-integrated'; section.dataset.page = 'bff-mood'; section.id = 'section-bff-mood'; section.hidden = true;
-  section.innerHTML = `<h2>鱼的心情</h2><p>每个群聊或私聊各有一份角色心情。只在实际回复后判断，情绪会自然回稳。默认关闭；启用后使用现有模型，每会话有判断额度，所有会话每日合计最多40次。</p>
+  section.innerHTML = `<h2>鱼的心情</h2><p>每个群聊或私聊各有一份角色心情。只在实际回复后判断，情绪会自然回稳。新会话默认开启，旧关闭设置保留；明确情绪事件后使用现有模型，每会话有判断额度，所有会话每日合计最多40次。</p>
     <select id="bfMoodKey" aria-label="心情所属会话"></select> <button id="bfMoodLoad" type="button">加载 / 刷新</button><p id="bfMoodStatus"></p>
     <div id="bfMoodCurrent"></div><form id="bfMoodSettings"><p><label><input name="enabled" type="checkbox">启用本会话心情</label> <label><input name="autoJudge" type="checkbox">回复后自动判断</label></p>
     <p><label>伙伴称呼 <input name="selfName" maxlength="30"></label> <label>对回复的影响 <select name="injectMode"><option value="off">仅展示，不影响回复</option><option value="label">只告诉当前心情</option><option value="event">带上最近一次感受</option></select></label></p>
@@ -5609,7 +5346,7 @@ setInterval(() => { if (currentConsolePage !== 'usage') return; refreshUsage(); 
   }
   el('bfMoodSettings').oninput = () => { moodDirty = true; };
   consolePages['bff-mood'] = ['鱼的心情', '观察每个会话里的情绪变化。', '查看心情、七项情绪和历史记录，选择是否影响后续闲聊。'];
-  const nav = button('♡ 鱼的心情', async () => { setConsolePage('bff-mood', { focus: true }); await loadMoodScopes(); }); nav.className = 'nav-item'; nav.dataset.view = 'bff-mood'; el('mainNav').append(nav);
+  const nav = button('♡ 会话心情', async () => { setConsolePage('bff-mood', { focus: true }); await loadMoodScopes(); }); nav.className = 'nav-item'; nav.dataset.subpage = 'bff-mood';document.querySelector('#consoleSubnav [data-subpage="bff-mood"]').replaceWith(nav);
   el('section-bff-overview').append(button('鱼的心情', async () => { setConsolePage('bff-mood', { focus: true }); await loadMoodScopes(); }));
   function renderMood(r) {
     if (r.key !== el('bfMoodKey').value) return;
@@ -5648,115 +5385,6 @@ setInterval(() => { if (currentConsolePage !== 'usage') return; refreshUsage(); 
   if (location.hash.slice(1) === 'bff-mood') { setConsolePage('bff-mood', { updateHash: false }); run(loadMoodScopes); }
 })();
 
-// Curated global strategies; the legacy mixed-corpus file stays read-only.
-(() => {
-  const el = id => document.getElementById(id), section = document.createElement('section');
-  Object.assign(section, { id: 'section-bff-global-style', className: 'card span-all bf-integrated', hidden: true }); section.dataset.page = 'bff-global-style';
-  section.innerHTML = `<h2>通用表达经验</h2><p>仅管理员确认发布可迁移的表达策略。旧统一风格文件保留但不自动学习或注入；各群经验在“群聊风格学习”独立审核。</p><button id="bfGlobalLoad">加载 / 刷新</button><p id="bfGlobalStatus" role="status"></p><form id="bfGlobalPublish"><div id="bfGlobalChoices"></div><button>确认发布通用策略</button></form><h3>回复分条方式（全局）</h3><select id="bfReplyDelivery"><option value="natural">自然分条</option><option value="single">尽量一条</option><option value="flow">适度分条</option></select><button id="bfDeliverySave">保存分条方式</button><h3>版本</h3><select id="bfGlobalHistory"></select><button id="bfGlobalRollback">回滚</button>`;
-  document.querySelector('#mainContent .grid').append(section);
-  const run = async fn => { try { await fn(); } catch(e) { showConsoleToast(e.message); } }; let view;
-  const request = async (method='GET', body) => { const r = await api('/api/bigfatfish/global-style', method, body); if (r.ok === false) throw Error(r.error); return r; };
-  const load = async () => {
-    view = await request(); el('bfGlobalStatus').textContent = `v${view.version} · ${view.legacy.present ? '旧统一风格仅保留原文件，不应用' : '无旧统一风格'} · ${view.error || '管理员发布模式'}`;
-    el('bfReplyDelivery').value = view.replyDelivery; el('bfGlobalChoices').replaceChildren();
-    for (const [id, text] of Object.entries(view.choices)) { const label=document.createElement('label'), input=document.createElement('input'); input.type='checkbox'; input.value=id; input.checked=view.published.includes(id); label.append(input,document.createTextNode(text)); el('bfGlobalChoices').append(label,document.createElement('br')); }
-    el('bfGlobalHistory').replaceChildren(); for (const h of [...view.history].reverse()) { const o=document.createElement('option'); o.value=h.version; o.textContent=`v${h.version} · ${new Date(h.at).toLocaleString('zh-CN')}`; el('bfGlobalHistory').append(o); }
-  };
-  const action=async body=>{ if(!view) throw Error('请先加载'); await request('POST',{...body,revision:view.revision}); await load(); };
-  el('bfGlobalLoad').onclick=()=>run(load);
-  el('bfGlobalPublish').onsubmit=e=>{e.preventDefault();run(()=>action({action:'publish',strategies:[...el('bfGlobalChoices').querySelectorAll('input:checked')].map(i=>i.value)}));};
-  el('bfGlobalRollback').onclick=()=>run(()=>action({action:'rollback',version:Number(el('bfGlobalHistory').value)}));
-  el('bfDeliverySave').onclick=()=>run(async()=>{const r=await api('/api/bigfatfish/settings','POST',{replyDelivery:el('bfReplyDelivery').value});if(r.ok===false)throw Error(r.error);await load();});
-  consolePages['bff-global-style']=['通用表达经验','管理员发布的抽象表达策略。','原统一风格只读保留；群经验逐群隔离。'];
-  const nav=document.createElement('button');nav.type='button';nav.className='nav-item';nav.dataset.view='bff-global-style';nav.textContent='✦ 通用表达经验';nav.onclick=()=>{setConsolePage('bff-global-style',{focus:true});run(load);};el('mainNav').append(nav);
-  if(location.hash.slice(1)==='bff-global-style'){setConsolePage('bff-global-style',{updateHash:false});run(load);}
-})();
-
-// Integrated authenticated console page. All learned values are rendered as text nodes.
-(() => {
-  const el = id => document.getElementById(id), section = document.createElement('section');
-  Object.assign(section, { id: 'section-bff-group-style', className: 'card span-all bf-integrated', hidden: true }); section.dataset.page = 'bff-group-style';
-  section.innerHTML = `<h2>群聊风格学习</h2><p>同一人格适应不同群的表达氛围。自动学习只产生候选；审核发布后按场景选择，认真求助优先完整准确。</p>
-    <select id="bfGroupSelect" aria-label="选择已启用群"></select> <button id="bfGroupLoad">加载 / 刷新</button><p id="bfGroupStatus" role="status"></p>
-    <form id="bfGroupConfig"><label><input name="enabled" type="checkbox">允许学习</label> <label><input name="apply" type="checkbox">应用群风格与经验</label> <label><input name="locked" type="checkbox">锁定群风格</label><div id="bfGroupThresholds"></div><button>保存本群设置</button></form>
-    <h3>当前特征和候选</h3><div id="bfGroupFeatures"></div><select id="bfGroupTrait"></select><select id="bfGroupValue"></select><button id="bfGroupSet">人工指定并锁定该特征</button>
-    <h3>场景表达经验</h3><div id="bfGroupExpressions"></div><form id="bfGroupEdit"><select name="id" aria-label="选择编辑经验"></select><div id="bfGroupEditFields"></div><button>保存修改为候选并锁定</button></form>
-    <h3>版本历史</h3><select id="bfGroupHistory"></select><button id="bfGroupRollback">回滚并锁定</button><button id="bfGroupReset">清空本群风格数据</button>
-    <p>清空同时删除本群风格版本和审核记录，并阻止旧任务回写。原事实记忆、黑话词库和共享学习日志保留；旧消息不会重新成为本群风格来源。关闭应用只影响本群表达，不清空聊天队列。</p>
-    <h3>本群黑话与待确认旧词</h3><div id="bfGroupSlang"></div><p>公开用语需管理员确认，多个群共同使用须逐群确认；同词不同群可保留不同释义。原词库编辑和研究仍在“黑话词库”。</p>
-    <h3>只读模拟检索</h3><form id="bfGroupPreview"><input name="message" required maxlength="1000" placeholder="输入模拟消息"><button>预览</button></form><pre id="bfGroupPreviewResult" style="white-space:pre-wrap"></pre><h3>最近提示词诊断</h3><pre id="bfGroupDiagnostics" style="white-space:pre-wrap"></pre>`;
-  document.querySelector('#mainContent .grid').append(section);
-  let view, groups = [], requestSerial = 0;
-  el('bfGroupThresholds').style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:16px 0';
-  el('bfGroupEditFields').style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px';
-  for (const label of el('bfGroupConfig').querySelectorAll('label')) label.style.cssText = 'display:inline-flex;align-items:center;gap:6px;margin-right:20px';
-  const run = async fn => { try { await fn(); } catch(e) { showConsoleToast(e.message); } };
-  const call = async (route, method = 'GET', body) => { const r = await api(route, method, body); if (r.ok === false) throw Error(r.error || '群风格操作失败'); return r; };
-  const option = (value, text) => { const o = document.createElement('option'); o.value = value; o.textContent = text; return o; };
-  const button = (text, fn) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = text; b.onclick = () => run(fn); return b; };
-  const fields = { minMessages: '至少有效消息', minDays: '至少日期数', minSpeakers: '至少发言者', featureMinMessages: '单项至少证据', lookbackHours: '回看小时', refreshHours: '研究间隔小时', minNewMessages: '再次研究新增消息', dailyCap: '本群每日研究上限', maxChanges: '每轮最多更新' };
-  for (const [key, text] of Object.entries(fields)) { const label = document.createElement('label'), input = document.createElement('input'); input.name = key; input.type = 'number'; input.style.width = '80px'; label.style.cssText = 'display:flex;align-items:center;gap:8px;margin:0'; label.append(document.createTextNode(text + ' '), input); el('bfGroupThresholds').append(label); }
-  const editInputs = {};
-  function evidence(node, entry, target) {
-    const details = document.createElement('details'), summary = document.createElement('summary'); summary.textContent = `来源 ${entry.evidence?.sources.length || 0} 条 / ${entry.evidence?.speakerCount || 0} 人 / ${entry.evidence?.dayCount || 0} 天；${entry.status}；支持分 ${Number(entry.confidence || 0).toFixed(2)}（非正确率）`; details.append(summary);
-    const text = document.createElement('pre'); text.style.whiteSpace = 'pre-wrap'; text.textContent = JSON.stringify(entry.evidence || {}, null, 2); details.append(text);
-    const key = view.scope;
-    details.append(button('查看本群来源原文（仅管理员）', async () => { const params = new URLSearchParams({ key, action: 'evidence', ...target }); const r = await call('/api/bigfatfish/group-style?' + params); text.textContent = JSON.stringify(r.sources, null, 2); })); node.append(details);
-  }
-  function controls(node, target, entry) {
-    for (const [action, title] of [['approve', '审核发布'], ['reject', '拒绝'], ['delete', '删除']]) node.append(button(title, () => actionRequest({ action, ...target })));
-    node.append(button(entry.locked ? '解锁该项' : '锁定该项', () => actionRequest({ action: 'lock', ...target, locked: !entry.locked })));
-  }
-  async function actionRequest(body) {
-    if (!view || view.scope !== el('bfGroupSelect').value) throw Error('请先加载本群');
-    await call('/api/bigfatfish/group-style', 'POST', { ...body, key: view.scope, revision: view.revision }); await load();
-  }
-  function editSelection() {
-    const e = view?.expressionExamples.find(e => e.id === el('bfGroupEdit').elements.id.value);
-    for (const [k, input] of Object.entries(editInputs)) {
-      if (input.multiple) { for (const option of input.options) option.selected = (e?.[k] || (k === 'when' ? ['general'] : [])).includes(option.value); }
-      else input.value = e?.[k] || input.options[0]?.value;
-    }
-  }
-  function values() { el('bfGroupValue').replaceChildren(); for (const [v, label] of Object.entries(view?.traits[el('bfGroupTrait').value] || {})) el('bfGroupValue').append(option(v, label)); }
-  async function load() {
-    const serial = ++requestSerial, key = el('bfGroupSelect').value; if (!key) return;
-    const data = await call('/api/bigfatfish/group-style?key=' + encodeURIComponent(key)); if (serial !== requestSerial) return; view = data;
-    const stages = { candidates: '等待审核', unchanged: '表达经验无实质变化', researching: '正在研究', failed: '研究失败，等待重试' };
-    el('bfGroupStatus').textContent = `${key} · v${view.version} / r${view.revision} · 有效 ${view.sample.messages} 条 / ${view.sample.days} 天 / ${view.sample.speakers} 人 · ${view.sample.qualified ? '达到研究门槛' : '等待真实语料'} · ${stages[view.research.status] || '尚未研究'} · ${view.error || ''} · 句长中位数 ${view.sample.statistics.medianChars} 字，短句 ${Math.round(view.sample.statistics.shortFraction * 100)}%`;
-    for (const k of ['enabled', 'apply', 'locked']) el('bfGroupConfig').elements[k].checked = view[k];
-    for (const k of Object.keys(fields)) el('bfGroupConfig').elements[k].value = view.policy[k];
-    el('bfGroupFeatures').replaceChildren();
-    for (const [key, entry] of Object.entries(view.features)) { const row = document.createElement('div'); row.textContent = `${key}：${view.traits[key]?.[entry.value] || entry.value} · ${view.active?.features[key] ? '生效' : '未生效'} `; evidence(row, entry, { feature: key }); controls(row, { feature: key }, entry); el('bfGroupFeatures').append(row); }
-    el('bfGroupExpressions').replaceChildren(); el('bfGroupEdit').elements.id.replaceChildren();
-    for (const entry of view.expressionExamples) { const row = document.createElement('div'); row.textContent = `${view.vocabulary.scene[entry.scene]} / ${view.vocabulary.action[entry.action]} / ${view.vocabulary.strategy[entry.strategy]} / ${view.vocabulary.structure[entry.structure]} · 适用 ${entry.when.join('、')} · 避免 ${entry.avoid.join('、')} · 最近使用 ${entry.lastUsedAt ? new Date(entry.lastUsedAt).toLocaleString('zh-CN') : '尚无'} `; evidence(row, entry, { id: entry.id }); controls(row, { id: entry.id }, entry); el('bfGroupExpressions').append(row); el('bfGroupEdit').elements.id.append(option(entry.id, entry.scene + ' · ' + entry.id)); }
-    const fieldNames = { scene: '场景', action: '回应动作', structure: '表达结构', strategy: '表达策略', when: '适用条件（可多选）', avoid: '不适用场景（可多选）' };
-    el('bfGroupEditFields').replaceChildren(); for (const [k, table] of Object.entries(view.vocabulary)) { const label = document.createElement('label'), input = document.createElement('select'); input.name = k; input.multiple = ['when', 'avoid'].includes(k); if (input.multiple) input.size = 3; for (const [value, title] of Object.entries(table)) input.append(option(value, title)); label.append(document.createTextNode(fieldNames[k] + ' '), input); el('bfGroupEditFields').append(label); editInputs[k] = input; } editSelection();
-    el('bfGroupTrait').replaceChildren(); for (const k of Object.keys(view.traits)) el('bfGroupTrait').append(option(k, k)); values();
-    el('bfGroupHistory').replaceChildren(); for (const h of [...view.history].reverse()) el('bfGroupHistory').append(option(h.version, `v${h.version} · ${h.reason} · ${new Date(h.at).toLocaleString('zh-CN')}`));
-    el('bfGroupDiagnostics').textContent = JSON.stringify(view.promptDiagnostics || { status: '尚无回复诊断', tokens: null }, null, 2);
-    const slang = await call('/api/slang'); if (serial !== requestSerial) return; el('bfGroupSlang').replaceChildren();
-    for (const e of slang.entries.filter(e => e.scope === key || e.scope === 'public' || e.scope === 'legacy' || e.confirmedScopes?.includes(key))) {
-      const row = document.createElement('p'); row.textContent = `${e.content}：${e.meaning || '待研究'} · ${e.scope || 'legacy'} · ${e.status} `;
-      const scope = document.createElement('select'); for (const v of ['legacy', 'public', 'shared', ...groups]) scope.append(option(v, v)); scope.value = e.scope || 'legacy'; row.append(scope);
-      const confirmed = document.createElement('input'); confirmed.placeholder = '独立确认的 group:群号，逗号分隔'; confirmed.value = (e.confirmedScopes || []).join(','); row.append(confirmed);
-      row.append(button('确认范围', async () => { await call('/api/bigfatfish/slang-scope', 'POST', { id: e.id, revision: e.revision || 0, scope: scope.value, confirmedScopes: confirmed.value.split(',').map(s => s.trim()).filter(Boolean) }); await load(); })); el('bfGroupSlang').append(row);
-    }
-  }
-  async function refresh() { const r = await call('/api/bigfatfish/group-style'), old = el('bfGroupSelect').value; groups = r.groups; el('bfGroupSelect').replaceChildren(...groups.map(k => option(k, k))); if (groups.includes(old)) el('bfGroupSelect').value = old; await load(); }
-  el('bfGroupLoad').onclick = () => run(refresh); el('bfGroupSelect').onchange = () => run(load); el('bfGroupTrait').onchange = values; el('bfGroupEdit').elements.id.onchange = editSelection;
-  el('bfGroupConfig').onsubmit = e => { e.preventDefault(); run(() => { const f = e.target.elements, policy = Object.fromEntries(Object.keys(fields).map(k => [k, Number(f[k].value)])); return actionRequest({ action: 'configure', enabled: f.enabled.checked, apply: f.apply.checked, locked: f.locked.checked, policy }); }); };
-  el('bfGroupSet').onclick = () => run(() => actionRequest({ action: 'setFeature', feature: el('bfGroupTrait').value, value: el('bfGroupValue').value }));
-  el('bfGroupEdit').onsubmit = e => { e.preventDefault(); run(() => actionRequest({ action: 'editExpression', id: e.target.elements.id.value, ...Object.fromEntries(Object.entries(editInputs).map(([k, i]) => [k, i.multiple ? [...i.selectedOptions].map(o => o.value) : i.value])) })); };
-  el('bfGroupRollback').onclick = () => run(() => actionRequest({ action: 'rollback', version: Number(el('bfGroupHistory').value) }));
-  el('bfGroupReset').onclick = () => run(() => actionRequest({ action: 'reset' }));
-  el('bfGroupPreview').onsubmit = e => { e.preventDefault(); run(async () => { const r = await call('/api/bigfatfish/group-style', 'POST', { key: el('bfGroupSelect').value, action: 'preview', message: e.target.elements.message.value }); el('bfGroupPreviewResult').textContent = JSON.stringify(r, null, 2); }); };
-  consolePages['bff-group-style'] = ['群聊风格学习', '独立学习，审核发布，按场景检索。', '群风格、表达经验、来源、黑话范围、版本与提示诊断。'];
-  const nav = button('✦ 群聊风格学习', async () => { setConsolePage('bff-group-style', { focus: true }); await refresh(); }); nav.className = 'nav-item'; nav.dataset.view = 'bff-group-style'; el('mainNav').append(nav);
-  if (typeof featureIndex !== 'undefined') featureIndex.push({ page: 'bff-group-style', label: '群聊风格 表达经验 审核 隔离 检索 诊断', target: section });
-  if (location.hash.slice(1) === 'bff-group-style') { setConsolePage('bff-group-style', { updateHash: false }); run(refresh); }
-})();
-
 // BigFatFish API pool console v1
 (() => {
   const grid = document.querySelector('#mainContent .grid');
@@ -5783,7 +5411,7 @@ setInterval(() => { if (currentConsolePage !== 'usage') return; refreshUsage(); 
     </form></details>`;
   grid.append(section);
   consolePages['model-pool'] = ['模型与 API 池', '管理模型接口与密钥。', '新增、编辑、测试接口，并选择当前使用的 API。'];
-  const nav = document.createElement('button'); nav.className = 'nav-item'; nav.dataset.view = 'model-pool'; nav.textContent = '⇄ 模型与 API 池'; document.getElementById('mainNav').append(nav);
+  const nav=document.querySelector('#consoleSubnav [data-subpage="model-pool"]');
   const $ = id => document.getElementById(id), form = $('poolForm');
   let cache, editingId = null, editRevision, busy = false;
   const notice = value => { $('poolNotice').textContent = value; };
@@ -5851,7 +5479,43 @@ setInterval(() => { if (currentConsolePage !== 'usage') return; refreshUsage(); 
   setInterval(() => { if (currentConsolePage === 'model-pool' && !busy) refresh().catch(() => {}); }, 5000);
 })();
 
+// V3 adaptations on the original console; original native pages and controls are retained.
+(() => {
+  const el=id=>document.getElementById(id),run=async fn=>{try{await fn();}catch(e){showConsoleToast(e.message);}};
+  const request=async(path,method='GET',body)=>{const r=await api(path,method,body);if(r.ok===false)throw Error(r.error||'操作失败');return r;};
+  document.querySelectorAll('#consoleSubnav [data-subpage]').forEach(b=>b.addEventListener('click',()=>setConsolePage(b.dataset.subpage,{focus:true})));
+  document.querySelector('#mainNav [data-view=models]').addEventListener('click',()=>document.querySelector('[data-subpage="model-pool"]').click());
+  const access=el('bfAccess'),hint=document.createElement('p'),search=document.createElement('input');
+  hint.id='bfContactsStatus';hint.className='meta';hint.setAttribute('role','status');search.id='bfContactSearch';search.type='search';search.placeholder='筛选群名、群号、好友备注或 QQ 号';search.setAttribute('aria-label','筛选可选群聊或好友');access.before(search);access.after(hint);
+  let directory,loading=false;
+  function renderContacts(){const kind=access.elements.kind.value,rows=kind==='group'?directory?.groups:directory?.friends,previous=access.elements.target.value,q=search.value.trim().toLowerCase(),select=access.elements.target;select.replaceChildren();
+    const first=document.createElement('option');first.value='';first.textContent=loading?'正在读取 QQ 列表…':kind==='group'?'请选择已加入的群聊':'请选择好友或已配置私聊';select.append(first);
+    const filtered=(Array.isArray(rows)?rows:[]).filter(r=>(r.name+' '+r.id).toLowerCase().includes(q));for(const r of filtered){const o=document.createElement('option');o.value=r.id;o.textContent=`${r.name||(kind==='group'?'群聊':'好友')}（${kind==='group'?'群号':'QQ'}：${r.id}）${r.enabled?' · 已启用':''}${r.available===false?' · 已配置 / 当前列表未返回':''}`;select.append(o);}if(filtered.some(r=>r.id===previous))select.value=previous;
+    hint.textContent=(directory?.errors||[]).join('；')||`可选 ${filtered.length}/${rows?.length||0} 个${kind==='group'?'群聊':'好友'}。选择后启用，无需输入号码；不会自动加群或加好友。`;
+  }
+  async function loadContacts(){if(loading)return;loading=true;renderContacts();try{directory=await request('/api/bigfatfish/contacts');}finally{loading=false;renderContacts();}}
+  access.elements.kind.addEventListener('change',()=>{search.value='';renderContacts();});search.addEventListener('input',renderContacts);el('bfContactsRefresh').onclick=()=>run(loadContacts);document.querySelector('#mainNav [data-view=sessions]').addEventListener('click',()=>run(loadContacts));
+  const submit=access.onsubmit;access.onsubmit=e=>{if(!access.elements.target.value){e.preventDefault();showConsoleToast('请先从列表选择群聊或好友');return;}submit(e);};run(loadContacts);
+  const card=document.createElement('section');card.id='section-bff-global-style';card.className='card span-all bf-integrated';card.dataset.page='bff-global-style';card.hidden=true;
+  card.innerHTML=`<h2>全局风格学习</h2><p class="meta">所有群聊共同学习一份风格，群聊与私聊统一使用；具体事实和上下文各自隔离。跨日、多成员和多轮证据验证后自动巩固，无需逐条审核。</p><p id="bfGlobalStatus" role="status"></p><div class="row"><span class="pill" id="bfGlobalVersion"></span><span id="bfGlobalSamples" class="meta"></span><button id="bfGlobalLoad">刷新学习状态</button></div>
+  <form id="bfGlobalPolicy"><fieldset><legend>学习与应用</legend><div class="row"><label><input name="enabled" type="checkbox">允许后台学习</label><label><input name="apply" type="checkbox">全局应用风格</label></div><div class="row"><label>至少消息数 <input name="minMessages" type="number" min="20" max="500"></label><label>至少日期数 <input name="minDays" type="number" min="3" max="30"></label><label>至少参与人数 <input name="minSpeakers" type="number" min="2" max="20"></label></div><button>保存学习设置</button></fieldset></form>
+  <h3>稳定特征</h3><div id="bfGlobalFeatures"></div><h3>候选积累</h3><div id="bfGlobalCandidates"></div><h3>回复分条方式</h3><div class="row"><select id="bfReplyDelivery"><option value="natural">自然分条</option><option value="single">尽量一条</option><option value="flow">适度分条</option></select><button id="bfDeliverySave">保存分条方式</button></div>
+  <details><summary>版本回滚与管理员补充策略</summary><p class="meta">回滚后会锁定，防止在途学习覆盖；解除锁定后才继续学习。</p><div class="row"><select id="bfGlobalHistory"></select><button id="bfGlobalRollback">回滚并锁定</button><button id="bfGlobalUnlock">解除学习锁定</button></div><form id="bfGlobalPublish"><div id="bfGlobalChoices"></div><button>保存补充策略</button></form></details>`;
+  document.querySelector('#mainContent .grid').append(card);consolePages['bff-global-style']=['全局风格学习','从共同表达中，积累稳定经验。','跨群共享一份风格；候选自动验证，私人事实留在原会话。'];
+  let profile,dirty=false;el('bfGlobalPolicy').oninput=()=>{dirty=true;};const line=(parent,value)=>{const p=document.createElement('p');p.textContent=value;parent.append(p);};
+  async function loadStyle(){profile=await request('/api/bigfatfish/global-style');el('bfGlobalStatus').textContent=profile.error||`${profile.policy.enabled?'自动学习开启':'学习已暂停'} · ${profile.locked?'版本锁定':'自动巩固'} · ${profile.policy.apply?'全局应用开启':'应用已暂停'}`;el('bfGlobalVersion').textContent='全局 v'+profile.version;el('bfGlobalSamples').textContent=`有效来源 ${profile.sample?.messages||0} 条 · ${profile.sample?.groups||0} 个群 · ${profile.sample?.speakers||0} 位成员 · ${profile.sample?.days||0} 天`;
+    if(!dirty)for(const k of ['enabled','apply','minMessages','minDays','minSpeakers']){const input=el('bfGlobalPolicy').elements[k];input[input.type==='checkbox'?'checked':'value']=profile.policy[k];}
+    const features=el('bfGlobalFeatures');features.replaceChildren();for(const [k,f]of Object.entries(profile.features||{}))line(features,`${k}：${profile.traits?.[k]?.[f.value]||f.value}`);for(const e of profile.expressionExamples||[])line(features,`${e.scene} · ${e.action} · ${e.strategy}`);if(!features.children.length)line(features,'暂无稳定成果，正在积累跨日和多成员证据。');
+    const candidates=el('bfGlobalCandidates');candidates.replaceChildren();for(const c of (profile.candidates||[]).slice(-30))line(candidates,`${c.trait||c.scene||'迁移候选'} · ${c.value||c.strategy||''} · 已观察 ${c.observations||0} 轮`);if(!candidates.children.length)line(candidates,'暂无待验证候选，后台按额度自动研究。');
+    const history=el('bfGlobalHistory');history.replaceChildren();for(const h of [...(profile.history||[])].reverse()){const o=document.createElement('option');o.value=h.version;o.textContent=`v${h.version} · ${new Date(h.at).toLocaleString('zh-CN')} · ${h.reason}`;history.append(o);}el('bfGlobalChoices').replaceChildren();for(const [id,title]of Object.entries(profile.choices||{})){const label=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.value=id;input.checked=profile.published.includes(id);label.append(input,document.createTextNode(title));el('bfGlobalChoices').append(label,document.createElement('br'));}el('bfReplyDelivery').value=profile.replyDelivery;
+  }
+  const action=async body=>{if(!profile)throw Error('请先读取风格状态');await request('/api/bigfatfish/global-style','POST',{...body,revision:profile.revision});await loadStyle();};
+  el('bfGlobalLoad').onclick=()=>run(loadStyle);document.querySelector('[data-subpage="bff-global-style"]').addEventListener('click',()=>run(loadStyle));
+  el('bfGlobalPolicy').onsubmit=e=>{e.preventDefault();run(async()=>{const f=e.target.elements;await request('/api/bigfatfish/settings','POST',{globalStyleLearning:{enabled:f.enabled.checked,apply:f.apply.checked,minMessages:Number(f.minMessages.value),minDays:Number(f.minDays.value),minSpeakers:Number(f.minSpeakers.value)}});dirty=false;await loadStyle();showConsoleToast('全局学习设置已保存');});};
+  el('bfGlobalRollback').onclick=()=>run(()=>action({action:'rollback',version:Number(el('bfGlobalHistory').value)}));el('bfGlobalUnlock').onclick=()=>run(()=>action({action:'configure',locked:false}));el('bfGlobalPublish').onsubmit=e=>{e.preventDefault();run(()=>action({action:'publish',strategies:[...el('bfGlobalChoices').querySelectorAll('input:checked')].map(i=>i.value)}));};el('bfDeliverySave').onclick=()=>run(async()=>{await request('/api/bigfatfish/settings','POST',{replyDelivery:el('bfReplyDelivery').value});showConsoleToast('分条偏好已保存');});
+  featureIndex.push({page:'bff-global-style',label:'全局风格 自动学习 版本 回滚',target:card});const initial=window.bffInitialHash||'overview';setConsolePage(initial,{updateHash:false});if(initial==='models'||initial==='model-pool')document.querySelector('[data-subpage="model-pool"]').click();if(initial==='bff-global-style')run(loadStyle);
+})();
+
 </script>
 </body>
 </html>
-

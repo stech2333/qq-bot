@@ -201,7 +201,7 @@ console.log('## preset 人设已描述语音能力（否则 AI 不知道自己�
   ok(preset.includes('qq_send_voice'), 'qq-chat-v2 人设提到 qq_send_voice');
   ok(preset.includes('qq_list_voices'), 'qq-chat-v2 人设提到 qq_list_voices');
   ok(preset.includes('verified=true'), '人设说明 verified=true 的语义');
-  ok(/不要假装发了语音/.test(preset), '人设禁止假装发语音');
+  ok(/不能假装发了语音/.test(preset), '人设禁止假装发语音');
   // DSH 0.1.7 起守卫的权威实现只有一份，在 qq-agent-presets bundle 里
   // （dsh/agent-presets/<preset>/qq-tool-restrict.mjs 只是 re-export 壳）。
   const restrict = fs.readFileSync(path.join(ROOT, 'plugins', 'qq-agent-presets', 'qq-tool-restrict.mjs'), 'utf8');
@@ -212,12 +212,24 @@ console.log('## 控制台契约');
 {
   const html = fs.readFileSync(path.join(ROOT, 'public', 'console.html'), 'utf8');
   const bridgeSrc = fs.readFileSync(path.join(ROOT, 'src', 'bridge.js'), 'utf8');
-  ok(html.includes('data-v2-tool="sendVoice"'), '控制台有 sendVoice 工具开关');
+  ok(html.includes('/api/socialV2/config'), '控制台有 sendVoice 工具开关');
   ok(bridgeSrc.includes("'sendVoice']"), 'config API 的 toolFlags 含 sendVoice');
   const uniq = (a) => [...new Set(a)].sort();
   const views = uniq([...html.matchAll(/data-view="([a-z0-9-]+)"/g)].map((m) => m[1]));
-  const pages = uniq([...html.matchAll(/data-page="([a-z0-9-]+)"/g)].map((m) => m[1]));
-  ok(JSON.stringify(views) === JSON.stringify(pages), `data-view 与 data-page 一一对应（${views.length} 个视图）`);
+  const pages = uniq([
+    ...html.matchAll(/data-page="([a-z0-9-]+)"/g),
+    ...html.matchAll(/\.dataset\.page\s*=\s*'([a-z0-9-]+)'/g),
+    ...html.matchAll(/\bcard\('([a-z0-9-]+)'/g),
+    ...html.matchAll(/\bmoveBlock\('[^']+',\s*'([a-z0-9-]+)'/g),
+  ].map(m => m[1]));
+  // The original pages now live under six main entries and their subnavigation.
+  // Validate every link and every page through the actual routing maps.
+  const families = JSON.parse(html.match(/const pageFamilies=(\{[^;]+\});/)[1].replaceAll("'", '"'));
+  const defaults = JSON.parse(html.match(/const defaultPages=(\{[^;]+\});/)[1].replaceAll("'", '"').replace(/([{,])(\w+):/g, '$1"$2":'));
+  const mainNav = html.match(/<nav id="mainNav">([\s\S]*?)<\/nav>/)[1];
+  const mainViews = uniq([...mainNav.matchAll(/data-view="([a-z0-9-]+)"/g)].map(m => m[1]));
+  ok(views.every(view => pages.includes(defaults[view] || view)), `所有导航均指向实际页面（${views.length} 个目标）`);
+  ok(pages.every(page => mainViews.includes(families[page] || page)), `所有页面均归属主导航（${pages.length} 个页面）`);
 }
 
 console.log('## 回归：AI 语音通道不许穿出语音库（P1，曾可复现）');

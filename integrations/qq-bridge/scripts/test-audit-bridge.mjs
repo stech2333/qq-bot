@@ -9,13 +9,13 @@ async function test(name, run) {
   catch (error) { failures++; console.error('FAIL', name, error.message); }
   finally { await h.close(); }
 }
-await test('closed-agent session is not reused after switching to chat', async (h) => {
+await test('closed-agent session is not reused after switching to reserved2', async (h) => {
   h.setMode('closed-agent');
   const privileged = await h.ensureSession('private:123123');
-  h.setMode('chat');
+  h.setMode('reserved2');
   const restricted = await h.ensureSession('private:123123');
   assert.notEqual(restricted, privileged);
-  assert.equal(h.calls.created.at(-1).agentPreset, 'qq-chat');
+  assert.equal(h.calls.created.at(-1).agentPreset, 'qq-chat-v2');
   assert.ok(h.calls.cancelled.includes(privileged));
 });
 await test('unavailable preset catalogue fails closed for QQ and learner sessions', async (h) => {
@@ -36,7 +36,7 @@ await test('session creation crossing a mode change never accepts stale permissi
   };
   const pending = h.ensureSession('private:123123');
   while (!release) await new Promise((resolve) => setImmediate(resolve));
-  h.setMode('chat');
+  h.setMode('reserved2');
   release();
   await assert.rejects(pending);
   assert.equal(h.state.sessions['private:123123'], undefined);

@@ -59,8 +59,8 @@ export const QqModeSchema = z.object({
   // schema 直接拒掉，而 schema 校验失败会把整个命名空间一起打掉 —— 连 ownerQQ 都读不到，
   // 桥接只能回退本地 mode.json 且**没有任何提示**。默认值保持 `reserved2`（不改变现有用户行为）。
   mode: z.union([
-    z.const('chat'), z.const('closed-agent'), z.const('reserved'), z.const('reserved2'), z.const('simulation')
-  ]).default('reserved2'),
+    z.const('disabled'), z.const('closed-agent'), z.const('reserved2'), z.const('simulation')
+  ]).default('disabled'),
   ownerQQ: z.string().description('管理员 QQ（ownerQQ）；留空表示不通过 DSH 设置覆盖 config.json'),
 });
 
@@ -94,8 +94,8 @@ export const QqModeSchema = z.object({
  */
 export const Config = z.object({
   mode: z.union([
-    z.const('chat'), z.const('closed-agent'), z.const('reserved'), z.const('reserved2'), z.const('simulation')
-  ]).default('reserved2').extra('volatile', true),
+    z.const('disabled'), z.const('closed-agent'), z.const('reserved2'), z.const('simulation')
+  ]).default('disabled').extra('volatile', true),
   ownerQQ: z.string().description('管理员 QQ（ownerQQ）；留空表示不通过 DSH 设置覆盖 config.json').extra('volatile', true),
 });
 

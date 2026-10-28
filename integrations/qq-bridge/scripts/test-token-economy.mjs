@@ -134,18 +134,9 @@ await test('my-recent returns an existing safe cursor without authorizing unrela
   assert.deepEqual(seqs(st.unread), [1]);
 });
 
-await test('combined close cannot bypass the pre-sleep observation guard', async ({ st, request, append }) => {
-  append('still discussing a normal topic');
-  const read = await request('unread');
-  const before = plain(st.wakeConfig);
-  for (const route of ['mark-read', 'wake-config']) {
-    const result = await request(route, { body: { throughSeq: read.data.readThroughSeq, config: DIVING } });
-    assert.equal(result.status, 400);
-    assert.ok(result.data.preSleepWaitRemainingMs > 0);
-    assert.deepEqual(seqs(st.unread), [1]);
-    assert.deepEqual(plain(st.wakeConfig), before);
-  }
-}, { observe: true });
+await test('server-managed close needs no artificial observation when unread watermark is supplied',async({st,request,append})=>{
+ append('still discussing a normal topic');const read=await request('unread');const result=await request('wake-config',{body:{throughSeq:read.data.readThroughSeq,config:DIVING}});assert.equal(result.status,200);assert.equal(st.unread.length,0);
+},{observe:true});
 
 await test('a full quiet observation allows a single combined close', async ({ h, st, request, append }) => {
   h.cfg.socialV2.wake.preSleepWaitMs = 100;

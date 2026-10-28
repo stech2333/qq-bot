@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { backupOnce, atomicJson } from './state-store.mjs';
 import { createHash } from 'node:crypto';
 
 const KEY = /^(group|private):[1-9]\d{4,15}$/;
@@ -10,6 +11,7 @@ export class PersonaManager {
     this.data = fs.existsSync(this.file) ? JSON.parse(fs.readFileSync(this.file, 'utf8')) : { version: 1, revision: 0, bindings: {} };
     if (this.data.version !== 1 || !Number.isInteger(this.data.revision) || !this.data.bindings || Array.isArray(this.data.bindings)
       || Object.entries(this.data.bindings).some(([key, role]) => !KEY.test(key) || (role !== null && (typeof role !== 'string' || !NAME.test(role))))) throw Error('会话人格配置无效，请检查配置文件');
+    if(fs.existsSync(this.file)&&this.data.migration?.version!==3){backupOnce(this.file);const next={...this.data,migration:{version:3,activePolicy:'global-only'}};atomicJson(this.file,next);this.data=next;}
   }
   templatePath(name) {
     if (typeof name !== 'string' || !NAME.test(name) || name.length > 100) throw Error('请选择已经创建的人格模板');
@@ -19,7 +21,8 @@ export class PersonaManager {
     try { const stat = fs.lstatSync(this.templatePath(name)); return stat.isFile() && !stat.isSymbolicLink(); } catch { return false; }
   }
   commit(bindings) {
-    const next = { version: 1, revision: this.data.revision + 1, bindings };
+    backupOnce(this.file);
+    const next = { version: 1, revision: this.data.revision + 1, bindings, migration: { version: 3, activePolicy: 'global-only' } };
     fs.mkdirSync(path.dirname(this.file), { recursive: true }); const tmp = this.file + '.' + process.pid + '.tmp';
     fs.writeFileSync(tmp, JSON.stringify(next, null, 2) + '\n', { mode: 0o600 }); fs.renameSync(tmp, this.file); this.data = next;
   }
@@ -27,19 +30,14 @@ export class PersonaManager {
     return [...new Set([...(this.app.config.allow.groups || []).map(id => 'group:' + id), ...(this.app.config.allow.private || []).map(id => 'private:' + id),
       ...this.app.states.keys(), ...Object.keys(this.data.bindings)])].filter(key => KEY.test(key));
   }
-  resolve(key, globalState) {
-    const bound = KEY.test(key || '') && Object.hasOwn(this.data.bindings, key), assigned = bound ? this.data.bindings[key] : undefined;
-    const missing = typeof assigned === 'string' && !this.exists(assigned);
-    return { ...globalState, role: bound && !missing ? assigned : globalState.role ?? null,
-      source: bound && !missing ? (assigned === null ? 'none' : 'template') : 'inherit', assigned, missing };
-  }
+  resolve(key, globalState) { return { ...globalState, role: globalState.role ?? null, source: 'global', missing: false }; }
   snapshot(globalState, roles) {
     return { ok: true, revision: this.data.revision, defaultRole: globalState.role ?? null, roles: roles.filter(name => this.exists(name)),
       sessions: this.keys().map(key => {
         const selected = this.resolve(key, globalState), [kind, id] = key.split(':');
         const field = kind === 'group' ? 'groups' : 'private';
-        return { key, mode: Object.hasOwn(this.data.bindings, key) ? (this.data.bindings[key] === null ? 'none' : 'template') : 'inherit',
-          role: selected.assigned ?? null, effectiveRole: selected.role, missing: selected.missing,
+        return { key, mode: 'global',
+          role: selected.role, effectiveRole: selected.role, missing: selected.missing,
           enabled: (this.app.config.allow[field] || []).map(String).includes(id) && !(this.app.config.deny[field] || []).map(String).includes(id) };
       }) };
   }
@@ -65,16 +63,7 @@ export class PersonaManager {
     // untagged legacy self-introductions cannot establish the current identity.
     return messages.filter(message => !message?.isSelf || message.personaSignature === signature);
   }
-  set(body) {
-    const key = String(body.key || '');
-    if (!KEY.test(key) || !this.keys().includes(key)) throw Error('请先在会话与审批中添加此群聊或私聊');
-    if (body.revision !== this.data.revision) throw Error('会话人格已被更新，请刷新后重新选择');
-    if (!['inherit', 'none', 'template'].includes(body.mode)) throw Error('人格选择无效');
-    if (body.mode === 'template' && !this.exists(body.role)) throw Error('所选人格模板不存在，请先创建或刷新模板列表');
-    const bindings = { ...this.data.bindings };
-    if (body.mode === 'inherit') delete bindings[key]; else bindings[key] = body.mode === 'none' ? null : body.role;
-    this.commit(bindings); return key;
-  }
+  set() { throw Error('V3 仅支持全局人格，请使用全局人格模板设置'); }
   rename(from, to) {
     const source = this.templatePath(from), target = this.templatePath(to);
     if (!this.exists(from) || fs.existsSync(target)) throw Error('人格模板不存在或目标名称已存在');

@@ -22,7 +22,7 @@ test('global delivery preference validates, persists and immediately reaches cas
     await app.handle({ method: 'POST', headers: {} }, new URL('http://localhost/api/bigfatfish/settings'), async () => ({ replyDelivery }), value => { response = value; }, {});
     assert.equal(response.ok, true); assert.equal(new BigFatFish(root, config).settings.replyDelivery, replyDelivery);
     assert.match(app.instruction('group:123456', state), new RegExp(label));
-    state.unread = [{ messageId: 'delivery-at', isSelf: false }]; state.bigfatfish.assistantMessageIds = ['delivery-at'];
+    state.unread = [{ messageId: 'delivery-at', plain:'请解释这个问题', isSelf: false }]; state.bigfatfish.assistantMessageIds = ['delivery-at'];
     assert.match(app.instruction('group:123456', state), /正式回答要求/);
     assert.match(app.instruction('group:123456', state), new RegExp(label));
     state.unread = []; state.bigfatfish.assistantMessageIds = []; app.responseMode('group:123456', state);

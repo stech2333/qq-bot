@@ -4,7 +4,7 @@ export const PARTICIPATION_DEFAULTS = Object.freeze({ enabled: true, idleProbabi
   requireDirected: false, quoteReplies: true,
   aliases: Object.freeze(['大肥鱼', '肥鱼', '小鲸鱼', '蓝色大肥鱼', '古月方鲸']),
   floorProbability: 0.03, halfLifeMessages: 2, halfLifeSeconds: 90, exitSeconds: 300, followUpSeconds: 120,
-  maxOffTopicMessages: 8, directBatchMs: 500, engagedBatchMs: 1000, ambientBatchMs: 1500 });
+  maxOffTopicMessages: 8, directBatchMs: 100, engagedBatchMs: 250, ambientBatchMs: 1500 });
 export function participationSettings(value = {}) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw Error('接话设置须为对象');
   const out = { ...PARTICIPATION_DEFAULTS, ...value };
@@ -36,7 +36,7 @@ export function isDirectCall(text, aliases) {
   const body = String(text || '').trim();
   return aliases.some(name => {
     const escaped = String(name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return new RegExp('(?:^|[，,。！？!?\\s])@?' + escaped + '(?:$|[，,、:：\\s！？!?]|你|您|帮(?:我|忙)|请|来(?:下|一下|看看)|说(?:下|一下|说)|讲(?:下|一下|讲)|在(?:吗|不在)|能(?:否|不能|帮)|可(?:以|否)|给(?:我|个))', 'i').test(body);
+    return new RegExp('(?:^|[，,。！？!?\\s])@?' + escaped + '(?:$|[，,、:：\\s！？!?]|你|您|帮(?:我|忙)|请|来(?:下|一下|看看)|说(?:下|一下|说|话|句话|两句)|讲(?:下|一下|讲)|在(?:吗|不在)|在线(?:吗|不)|怎么|为什么|如何|什么|啥|哪|多少|回我|理我|别装死|能(?:否|不能|帮)|可(?:以|否)|给(?:我|个))', 'i').test(body);
   });
 }
 export function participationDecision(state, event, { kind, text, quoteTargetIsSelf, nickname, interests = [], recentMessages = [], now = Date.now(), random = Math.random } = {}, config = PARTICIPATION_DEFAULTS) {
@@ -77,8 +77,12 @@ export function participationDecision(state, event, { kind, text, quoteTargetIsS
     || (!otherTarget && (!strict || sameSpeaker && recent && p.offTopicMessages === 0) && (robotQuestion || nudge));
   const recipientConfirmed = !!(direct || continuation);
   const closing = /^(?:不聊了|晚安|先走了|拜拜|再见|先这样|不用回了)[。！!～~\s]*$/.test(body);
+  // Recipient identity has already been established above. Explicit questions from that
+  // uninterrupted partner are requests to the bot, not ambient participation lottery draws.
+  const requestedFollowUp = strict && config.enabled && continuation && !closing
+    && /[?？]|(?:怎么|如何|为什么|什么|多少|能不能|可不可以|解释|讲讲|展开|详细|继续说|接着说|帮我|请)|(?:吗|呢)[。！!～~\s]*$/.test(body);
   if (direct || continuation) {
-    probability = direct ? 1 : config.engagedProbability;
+    probability = direct || requestedFollowUp ? 1 : config.engagedProbability;
     reason = kind === 'private' ? 'private' : direct ? 'addressed' : 'followUp';
     p.phase = closing ? 'cooling' : 'engaged'; p.lastRelevantAt = now; p.offTopicMessages = closing ? 3 : 0;
     if (speaker) p.participants = [...new Set([...p.participants, speaker])].slice(-6);
@@ -100,7 +104,7 @@ export function participationDecision(state, event, { kind, text, quoteTargetIsS
     if (['ambient', 'cooling'].includes(reason)) reason = 'interest';
   }
   if (strict && !recipientConfirmed) { probability = 0; reason = null; }
-  p.lastDecision = { at: now, speaker, probability, recipientConfirmed, involved: !!(direct || continuation), reason, direct, interestMatch, addressedElsewhere: otherTarget && !direct,
+  p.lastDecision = { at: now, speaker, probability, recipientConfirmed, requestedFollowUp, involved: !!(direct || continuation), reason, direct, interestMatch, addressedElsewhere: otherTarget && !direct,
     selected: probability === 1 || random() < probability };
   return { ...p.lastDecision, handled: config.enabled || strict && !recipientConfirmed, reason: p.lastDecision.selected ? reason : null };
 }

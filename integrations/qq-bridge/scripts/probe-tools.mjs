@@ -12,7 +12,7 @@ import { probeCookie, probeRpc, probeMuxSocket, probeWorkspaceDir } from './prob
 const cookie = probeCookie();
 const rpc = probeRpc(cookie);
 
-const PRESET = process.argv[2] || 'qq-chat';
+const PRESET = process.argv[2] || 'qq-chat-v2';
 // 探测工作区建在系统临时目录：state/ 的 ACL 被收紧过，沙箱里写不进去。
 const dir = probeWorkspaceDir('tools');
 const ws = await rpc('workspace/create', { request: { path: dir } });

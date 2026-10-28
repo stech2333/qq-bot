@@ -85,16 +85,6 @@ test('expired preference facts are removed; legacy scoped style cannot survive b
   assert.equal(st.bigfatfish.style, undefined);
 });
 
-test('slang is researched then confirmed in the original shared library with durable metadata', async t => {
-  const f = fixture(t), now = Date.now(); f.app.settings.slangPolicy.autoConfirm = true;
-  for (let i = 0; i < 6; i++) f.feed(A, i, '又到月亮馒头时间' + i, now - i * 600000);
-  let entries = [createSlangEntry({ content: '月亮馒头', scope: A, status: 'candidate' })]; const file = path.join(f.root, 'slang.json');
-  const store = { entries: () => entries, writable: () => true, save() { saveSlang(file, entries); entries = loadSlang(file); return true; } };
-  f.app.research.connect(async job => ({ ...approved(job), meaning: '一种群内约定的轻松说法', usage: '轻松聊天时使用', example: '月亮馒头时间到了', risk: '无' }), () => true);
-  await f.app.research.tick(store); assert.equal(entries[0].status, 'confirmed'); assert.equal(entries[0].research.status, 'approved');
-  assert.equal(loadSlang(file)[0].research.confidence, 0.95);
-});
-
 test('daily research quota survives restart and failure or paused memory never activates a candidate', async t => {
   const f = fixture(t); topic(f); f.app.settings.learningResearch.maxPerDay = 1;
   f.app.research.connect(async () => { throw Error('offline'); }, () => true); await f.app.research.tick();

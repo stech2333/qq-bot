@@ -13,8 +13,8 @@ function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bff-mood-'));
   t.after(() => { assert.equal(path.dirname(root), os.tmpdir()); fs.rmSync(root, { recursive: true, force: true }); });
   const app = new BigFatFish(root, { bigfatfish: { expectedQQ: '123456789' }, allow: { groups: ['123456'], private: ['123457'] } });
-  const states = new Map([KEY, OTHER].map(key => [key, { agentToken: key, recentMessages: [{ messageId: 'real', userId: '111111', plain: '模型训练有了进展', time: Date.now() }], activeTopics: [], pendingThoughts: [] }]));
-  for (const [key, st] of states) app.bind(key, st);
+  const states = new Map([KEY, OTHER].map(key => [key, { agentToken: key, recentMessages: [{ messageId: 'real', userId: '111111', plain: '谢谢，模型训练有了进展，真开心', time: Date.now() }], activeTopics: [], pendingThoughts: [] }]));
+  for (const [key, st] of states) { app.bind(key, st); st.bigfatfish.mood=normalizeMood({config:{enabled:false}}); }
   const hooks = { state: key => states.get(key), save: () => { fs.writeFileSync(path.join(root, 'saved.json'), JSON.stringify([...states])); return true; } };
   const call = async (body = {}, { key = KEY, method = 'POST', agent = false } = {}) => {
     let result, code = 200; const data = { key, revision: states.get(key)?.bigfatfish.mood.revision, ...body }, url = new URL('http://localhost/api/bigfatfish/mood');

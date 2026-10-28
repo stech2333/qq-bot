@@ -1,4 +1,4 @@
-// BigFatFish console v1
+// BigFatFish original console integration, adapted for V3
 (() => {
   const grid = document.querySelector('#mainContent .grid');
   const sections = [];
@@ -11,7 +11,7 @@
   panel.innerHTML = `<h2>话题学习、定时与主动聊天</h2>
   <p id="bfState">读取状态…</p><p id="bfPolicyLayers"></p><p id="bfNotice" role="status"></p><button id="bfManagerOpen">启动 / 停止管理</button>
   <h3>启用群聊 / 私聊</h3><p>启用只控制机器人参与范围，不会自动加入群或添加好友。</p>
-  <form id="bfAccess"><select name="kind"><option value="group">QQ群</option><option value="private">个人QQ</option></select> <input name="target" required pattern="[1-9][0-9]{4,15}" placeholder="群号或QQ号"> <button name="enable" value="yes">启用</button> <button name="enable" value="no">停用</button></form><div id="bfPeers"></div>
+  <form id="bfAccess"><select name="kind"><option value="group">QQ群</option><option value="private">个人QQ</option></select> <select name="target" required aria-label="选择群聊或好友"><option value="">读取群聊与好友列表…</option></select><button type="button" id="bfContactsRefresh">刷新列表</button> <button name="enable" value="yes">启用</button> <button name="enable" value="no">停用</button></form><div id="bfPeers"></div>
   <h3>人格与行为</h3><p>人格正文在原控制台“人格与角色”编辑；这里修改闲聊与冷场开场策略。</p>
   <form id="bfSettings"><label>闲聊简练字数参考（不作为拆条门槛） <input name="casualMaxChars" type="number" min="5" max="200"></label> <span>真实 @ 优先回应；明确求助按完整准确的方式回答，其余沿用当前人格。</span><p><label>人工补充话题（逗号分隔，可留空）<input name="interests" style="width:70%"></label></p>
   <p><label><input name="dryRun" type="checkbox">冷场主动仅演练</label> <label>安静分钟 <input name="minIdleMinutes" type="number" min="1" max="10080"></label> <label>冷却分钟 <input name="cooldownMinutes" type="number" min="1" max="10080"></label> <label>每日上限 <input name="dailyCap" type="number" min="0" max="20"></label></p>
@@ -42,14 +42,9 @@
   el('bfSettings').addEventListener('input', () => { settingsDirty = true; });
   Object.assign(consolePages, {
     'bff-policy': ['话题与主动策略', '从共同讨论中学会参与。', '查看反复讨论的话题、学习门槛、接话概率和主动检查记录。'],
-    'bff-memory': ['长期记忆', '记住各会话中有价值的事。', '按群聊或私聊查看、纠正长期事实与阶段摘要；表达方式在通用表达经验与群聊风格学习中管理。']
+    'bff-memory': ['长期记忆', '记住各会话中有价值的事。', '按群聊或私聊查看、纠正长期事实与阶段摘要；表达方式由全局风格共同学习并自动巩固。']
   });
-  for (const page of ['bff-policy', 'bff-memory']) {
-    const nav = document.createElement('button'); nav.className = 'nav-item'; nav.dataset.view = page;
-    const icon = document.createElement('span'); icon.className = 'nav-icon'; icon.ariaHidden = 'true'; icon.textContent = page === 'bff-policy' ? '◷' : '▤';
-    nav.append(icon, consolePages[page][0]); el('mainNav').append(nav);
-    nav.onclick = () => { setConsolePage(page, { focus: true }); run(refresh); };
-  }
+  for(const page of ['bff-policy','bff-memory']){const nav=document.querySelector('#consoleSubnav [data-subpage="'+page+'"]');nav.onclick=()=>{setConsolePage(page,{focus:true});run(refresh);};}
   const quick = card('overview', 'section-bff-overview', '大肥鱼 · 功能管理');
   const summary = document.createElement('p'); summary.id = 'bfOverviewStatus'; summary.textContent = '正在读取本地设置…'; quick.append(summary);
   for (const [page, label, target] of [['sessions', '添加群聊 / 私聊', peers.id], ['persona', '新增与编辑人格', 'roleList'], ['bff-policy', '话题与主动策略', panel.id], ['bff-memory', '记忆与表达风格', 'section-bff-memory'], ['slang', '黑话评分与入库', 'section-bff-slang'], ['operations', '启动与服务管理', 'section-bff-services']]) {
@@ -59,7 +54,7 @@
   const accessActions = document.createElement('div'); accessActions.className = 'row';
   for (const [kind, title] of [['group', '添加群聊'], ['private', '添加私聊']]) {
     const b = document.createElement('button'); b.type = 'button'; b.textContent = title;
-    b.onclick = () => { el('bfAccess').elements.kind.value = kind; el('bfAccess').elements.target.focus(); }; accessActions.append(b);
+    b.onclick = () => { el('bfAccess').elements.kind.value = kind; el('bfAccess').elements.kind.dispatchEvent(new Event('change')); el('bfAccess').elements.target.focus(); }; accessActions.append(b);
   }
   peers.querySelector('h2').after(accessActions);
   // Use the native create/update events and role files, with a clear entry in the persona list.
@@ -68,49 +63,13 @@
   addRole.onclick = () => { resetRoleForm(); revealRoleEditor(); };
   el('roleList').before(addRole);
   el('roleList').addEventListener('click', event => { if (event.target.closest('.persona-item')) revealRoleEditor(); });
-  const personaCard = card('persona', 'section-bff-personas', '按群聊 / 私聊选择人格');
-  grid.insertBefore(personaCard, document.querySelector('[data-page="persona"]'));
-  const personaIntro = document.createElement('p'); personaIntro.textContent = '每个会话可单独选择已创建的人格模板，选择后保存并从下一轮对话生效。未单独设置时跟随全局默认；切换人格保留该会话记忆和参与设置。'; personaCard.append(personaIntro);
-  const defaultInput = el('roleInput'), defaultSelect = document.createElement('select'); defaultSelect.id = 'roleInput'; defaultSelect.setAttribute('aria-label', '全局默认人格模板'); defaultInput.replaceWith(defaultSelect);
-  const defaultBox = defaultSelect.closest('details'); defaultBox.open = true; defaultBox.querySelector('summary').textContent = '全局默认人格（未单独设置的会话使用）';
-  defaultBox.querySelector('.meta').textContent = '从已创建的模板中选择并应用；设置为“不使用人格模板”只影响跟随默认的会话。';
-  el('roleSet').textContent = '应用全局默认'; el('roleClear').textContent = '取消默认人格'; personaCard.append(defaultBox);
-  const personaStatus = document.createElement('p'); personaStatus.id = 'bfPersonaStatus'; personaStatus.setAttribute('role', 'status');
-  const personaRows = document.createElement('div'); personaRows.id = 'bfPersonaRows'; personaRows.className = 'bf-table'; personaCard.append(personaStatus, personaRows);
-  let personaRevision = 0, personaBusy = false, personaLoad = 0;
-  function option(value, text) { const node = document.createElement('option'); node.value = value; node.textContent = text; return node; }
-  async function refreshPersonas() {
-    const load = ++personaLoad, data = await call('/api/bigfatfish/personas'); if (load !== personaLoad) return;
-    personaRevision = data.revision;
-    const draft = defaultSelect.value, preserve = defaultSelect.dataset.dirty === 'true';
-    defaultSelect.replaceChildren(option('', '不使用人格模板'));
-    for (const name of data.roles) defaultSelect.append(option(name, name));
-    if (data.defaultRole && !data.roles.includes(data.defaultRole)) defaultSelect.append(option(data.defaultRole, data.defaultRole + '（模板缺失）'));
-    defaultSelect.value = preserve && [...defaultSelect.options].some(o => o.value === draft) ? draft : data.defaultRole || '';
-    personaStatus.textContent = `全局默认：${data.defaultRole || '不使用人格模板'} · ${data.sessions.length} 个会话 · 选择会话下拉框后立即保存`;
-    personaRows.replaceChildren();
-    if (!data.sessions.length) { personaRows.textContent = '暂无会话，请先到“会话与审批”添加群聊或私聊。'; return; }
-    const table = document.createElement('table'), head = document.createElement('tr');
-    for (const title of ['群聊 / 私聊', '人格模板选择', '当前生效']) { const th = document.createElement('th'); th.textContent = title; head.append(th); } table.append(head);
-    for (const row of data.sessions) {
-      const tr = document.createElement('tr'), peer = document.createElement('td'), control = document.createElement('td'), effective = document.createElement('td');
-      const [kind, id] = row.key.split(':'); peer.textContent = `${kind === 'group' ? '群聊' : '私聊'} ${id}${row.enabled ? '' : '（未启用参与）'}`;
-      const select = document.createElement('select'); select.dataset.key = row.key; select.setAttribute('aria-label', peer.textContent + '的人格模板');
-      select.append(option('inherit', '跟随全局默认：' + (data.defaultRole || '无人格')), option('none', '本会话不使用人格模板'));
-      for (const name of data.roles) select.append(option('template:' + name, name));
-      if (row.missing) select.append(option('template:' + row.role, row.role + '（模板缺失，暂用全局默认）'));
-      select.value = row.mode === 'template' ? 'template:' + row.role : row.mode; select.disabled = personaBusy;
-      effective.textContent = (row.effectiveRole || '不使用人格模板') + (row.missing ? '（原模板缺失）' : row.mode === 'inherit' ? '（跟随默认）' : '（单独设置）');
-      select.onchange = () => run(async () => {
-        const value = select.value; personaBusy = true; personaRows.querySelectorAll('select').forEach(input => { input.disabled = true; }); personaStatus.textContent = '正在保存当前会话人格…';
-        try {
-          await call('/api/bigfatfish/personas', 'POST', { key: row.key, revision: personaRevision, mode: value.startsWith('template:') ? 'template' : value, role: value.startsWith('template:') ? value.slice(9) : null });
-          notice('已保存 ' + peer.textContent + ' 的人格选择，下一轮对话生效');
-        } finally { personaBusy = false; await refreshPersonas(); }
-      }); control.append(select); tr.append(peer, control, effective); table.append(tr);
-    }
-    personaRows.append(table);
-  }
+  const personaCard=card('persona','section-bff-personas','全局人格');
+  const defaultInput=el('roleInput'),defaultSelect=document.createElement('select');defaultSelect.id='roleInput';defaultSelect.setAttribute('aria-label','全局人格模板');defaultInput.replaceWith(defaultSelect);
+  const defaultBox=defaultSelect.closest('details');defaultBox.open=true;defaultBox.querySelector('summary').textContent='所有群聊和私聊使用同一人格';
+  defaultBox.querySelector('.meta').textContent='选择管理员维护的人格模板，应用后所有会话统一使用；独立记忆保持不变。';personaCard.append(defaultBox);
+  const personaStatus=document.createElement('p');personaStatus.id='bfPersonaStatus';personaStatus.setAttribute('role','status');personaCard.append(personaStatus);
+  function option(value,title){const o=document.createElement('option');o.value=value;o.textContent=title;return o;}
+  async function refreshPersonas(){const data=await call('/api/bigfatfish/personas'),draft=defaultSelect.value,preserve=defaultSelect.dataset.dirty==='true';defaultSelect.replaceChildren(option('','不使用人格模板'));for(const role of data.roles)defaultSelect.append(option(role,role));defaultSelect.value=preserve?draft:data.defaultRole||'';personaStatus.textContent='当前全局人格：'+(data.defaultRole||'未选择')+'；所有群聊和私聊统一使用。';}
   defaultSelect.onchange = () => { defaultSelect.dataset.dirty = 'true'; };
   document.addEventListener('bff-roles-changed', () => { defaultSelect.dataset.dirty = 'false'; run(refreshPersonas); });
   document.addEventListener('click', event => { if (event.target.closest('#mainNav [data-view="persona"]')) run(refreshPersonas); });
@@ -124,7 +83,7 @@
     .bf-integrated td:first-child{min-width:150px}.bf-integrated td:nth-child(2){white-space:nowrap}
     #bfSlangFields{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px}
     #bfSlangFields label{display:flex;align-items:center;justify-content:space-between;gap:8px}
-    #bfAccess{grid-template-columns:140px minmax(160px,1fr) auto auto;align-items:center}
+    #bfAccess{grid-template-columns:130px minmax(180px,1fr) auto auto auto;align-items:center}
     @media(max-width:650px){#bfAccess{grid-template-columns:1fr}#bfSlangFields{grid-template-columns:1fr}}
   `; document.head.append(style);
   const fields = {
