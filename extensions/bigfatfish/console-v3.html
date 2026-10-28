@@ -1790,7 +1790,7 @@ button:active:not(:disabled) {
         <button class="metric metric-link" data-view="sessions"><span>已建立会话</span><strong id="metricSessions">—</strong><small>查看会话映射 <span aria-hidden="true">↗</span></small></button>
         <button class="metric metric-link" data-view="sessions" data-target="section-pending"><span>待处理请求</span><strong id="metricPending">—</strong><small>提问与工具审批 <span aria-hidden="true">↗</span></small></button>
       </div>
-<div id="consoleSubnav" class="row" aria-label="当前功能分组"><div class="row" data-family="sessions" hidden><button type="button" data-subpage="sessions">会话与审批</button><button type="button" data-subpage="bff-mood">会话心情</button></div><div class="row" data-family="persona" hidden><button type="button" data-subpage="persona">人格模板</button><button type="button" data-subpage="social-v2">二代仿真</button><button type="button" data-subpage="bff-policy">话题与主动策略</button></div><div class="row" data-family="learning" hidden><button type="button" data-subpage="bff-memory">长期记忆</button><button type="button" data-subpage="bff-global-style">全局风格</button><button type="button" data-subpage="slang">全局黑话</button></div><div class="row" data-family="models" hidden><button type="button" data-subpage="model-pool">模型与 API 池</button><button type="button" data-subpage="usage">令牌与花费</button></div><div class="row" data-family="settings" hidden><button type="button" data-subpage="access">访问与安全</button><button type="button" data-subpage="operations">调试与运维</button><button type="button" data-subpage="reference">工具参考</button></div></div>
+<div id="consoleSubnav" class="row" aria-label="当前功能分组"><div class="row" data-family="sessions" hidden><button type="button" data-subpage="sessions">会话与审批</button><button type="button" data-subpage="bff-mood">会话心情</button></div><div class="row" data-family="persona" hidden><button type="button" data-subpage="persona">人格模板</button><button type="button" data-subpage="social-v2">二代仿真</button><button type="button" data-subpage="bff-policy">话题与主动策略</button></div><div class="row" data-family="learning" hidden><button type="button" data-subpage="bff-memory">长期记忆</button><button type="button" data-subpage="bff-global-style">全局风格</button><button type="button" data-subpage="slang">全局黑话</button><button type="button" data-subpage="bff-community">社区持续自主学习</button></div><div class="row" data-family="models" hidden><button type="button" data-subpage="model-pool">模型与 API 池</button><button type="button" data-subpage="usage">令牌与花费</button></div><div class="row" data-family="settings" hidden><button type="button" data-subpage="access">访问与安全</button><button type="button" data-subpage="operations">调试与运维</button><button type="button" data-subpage="reference">工具参考</button></div></div>
       <div class="grid">
         <section id="section-mode" data-page="overview" class="card span-all">
       <h2>运行模式</h2>
@@ -2191,6 +2191,7 @@ button:active:not(:disabled) {
       <div class="meta" style="margin-top:4px">修改上面任意推荐/默认参数后，必须点这个按钮才会持久化；保存后会自动应用到仍使用默认唤醒配置的会话，重启后仍然保留。</div>
 
       </div></section>
+<section id="section-bff-community" data-page="bff-community" class="card span-all" hidden><h2>社区持续自主学习</h2></section>
 <section id="section-slang" data-page="slang" class="card span-all">
       <h2>群聊黑话 / 网络用语库</h2>
       <div class="meta">DSH 会从群聊中自动提取疑似黑话候选；二代仿真模式下 AI 也可用 <code>qq_slang_submit</code> 主动提交陌生词。候选可批量送 DSH 深度联网研究，研究结果回到控制台由你删改修正后转正；确认后的词条会写入“黑话提示词”，注入一代/二代 AI 的聊天上下文，成为 AI 可查询和使用的记忆。</div>
@@ -4215,7 +4216,7 @@ document.getElementById('consoleTokenSave').addEventListener('click', () => chan
 document.getElementById('consoleTokenRandom').addEventListener('click', () => changeConsoleToken(true));
 
 // Presentation layer: keep every existing control mounted so drafts and API contracts survive navigation.
-const pageFamilies={'social-v2':'persona','bff-policy':'persona','bff-memory':'learning','bff-global-style':'learning','slang':'learning','model-pool':'models','usage':'models','access':'settings','operations':'settings','reference':'settings','bff-mood':'sessions'};
+const pageFamilies={'social-v2':'persona','bff-policy':'persona','bff-memory':'learning','bff-global-style':'learning','slang':'learning','bff-community':'learning','model-pool':'models','usage':'models','access':'settings','operations':'settings','reference':'settings','bff-mood':'sessions'};
 const defaultPages={learning:'bff-memory',models:'model-pool',settings:'access'};
 const consolePages = {
   overview: ['运行总览', '让每一次连接，都自然发生。', '掌握桥接状态，轻松管理你的 QQ 智能伙伴。'],
@@ -4223,6 +4224,7 @@ const consolePages = {
   persona: ['人格与角色', '给你的伙伴，一点独特个性。', '选择已有角色，或用自己的语言写下新的性格与表达方式。'],
   'social-v2': ['二代仿真', '自主参与，恰到好处。', '管理 AI 的工具、唤醒与发言节奏。展开需要调整的分组，修改后保存参数。'],
   slang: ['黑话词库', '读懂群聊里的，言外之意。', '从候选到确认，让 AI 逐渐熟悉大家的表达习惯。'],
+  'bff-community': ['社区持续自主学习', '让社区经验，持续积累。', '独立管理学习平台、启停、费用保护、实时 Token、日志与知识成果。'],
   usage: ['令牌与花费', '每一次思考，都算得清楚。', '实时查看 AI 的 token 消耗与花费，可下钻到每个群、每个好友、每一轮对话。'],
   access: ['访问与安全', '明确边界，安心连接。', '管理允许对话的对象、管理员权限与控制台访问凭证。'],
   operations: ['调试与运维', '让桥接，始终井然有序。', '测试消息、引导 AI，或维护桥接进程与会话工作区。'],
@@ -4263,6 +4265,7 @@ function setConsolePage(page, { updateHash = true, focus = false, target = '' } 
     document.getElementById('mainContent').focus({ preventScroll: true });
     document.getElementById(target || 'mainContent')?.scrollIntoView({ block: 'start', behavior: 'instant' });
   }
+  document.dispatchEvent(new CustomEvent('console-page-change', { detail: { page } }));
 }
 document.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click', () => {
   setConsolePage(button.dataset.view, { focus: true, target: button.dataset.target });

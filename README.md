@@ -65,7 +65,7 @@ QQ Bridge 管理页侧栏“模型与 API 池”可新增、编辑、停用、�
 
 `npm test` 运行回归测试；`npm run bridge:prepare` 准备并应用集成补丁；`node scripts/check-bridge-readiness.mjs --online` 只读检查本机状态，不发送测试消息。配置、凭据、会话和本机组件均由 `.gitignore` 排除。
 
-V4.1 社区持续学习默认关闭，在“记忆与学习→长期记忆”配置五个平台独立开关，点击开始后持续处理持久队列，直到停止或保护暂停；没有每日任务数、材料总数或固定深入2/4条的业务上限。保留授权JSON/Feed，新增可选B站Polylens只读MCP和贴吧aiotieba worker，未配置实际登录、数据许可或驱动时明确不可用，不会自动采集。SQLite/FTS5保存知识与逐材料恢复检查点，学习、历史知识应用和保存许可独立。后台用轻量状态、增量日志和分页展示当前请求、持续会话、今日实际/预留/估算Token及费用上界。模型继续复用API Pool和DSH命名凭据，单次上下文/输出、超时、退避和费用保护保留。详见[V4.1配置与恢复](docs/v4.1-community.md)、[V4.1交付报告](docs/v4.1-report.md)和[平台参考核对](docs/v4-platform-references.md)。
+V4.1 社区持续学习默认关闭，在“记忆与学习→社区持续自主学习”独立子页面配置五个平台开关，点击开始后持续处理持久队列，直到停止或保护暂停；没有每日任务数、材料总数或固定深入2/4条的业务上限。保留授权JSON/Feed，新增可选B站Polylens只读MCP和贴吧aiotieba worker，未配置实际登录、数据许可或驱动时明确不可用，不会自动采集。SQLite/FTS5保存知识与逐材料恢复检查点，学习、历史知识应用和保存许可独立。后台用轻量状态、增量日志和分页展示当前请求、持续会话、今日实际/预留/估算Token及费用上界。模型继续复用API Pool和DSH命名凭据，单次上下文/输出、超时、退避和费用保护保留。常用费用与高级技术设置分区展示，推荐配置仅手动填入草稿，不自动保存或开始。详见[后台页面与费用说明](docs/v4.1-admin-ui.md)、[V4.1配置与恢复](docs/v4.1-community.md)、[V4.1交付报告](docs/v4.1-report.md)和[平台参考核对](docs/v4-platform-references.md)。
 
 `npm run audit:project` 同时运行本地回归、上游完整隔离审计与三个 MCP 服务握手测试，自动使用本项目的 DSH 和 FFmpeg 路径，结果写入 `logs/audit/`。安装 Playwright 后可加 `-- --ui` 检查管理网页；页面测试拦截写入请求，不改真实名单或人格。独立语音工具未安装和真实 QQ 收发未验证会明确列为覆盖限制。
 

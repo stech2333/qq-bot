@@ -409,6 +409,8 @@ export async function startConsoleFixture({ port = 0, original = false, htmlPath
             state.bffSettings.communityLearning.enabled=true;state.communitySession={id:'fixture-session',at:Date.now(),status:'WAITING'};state.communityError='';state.communityLogs.unshift({id:state.communityLogs.length+1,at:Date.now(),level:'info',message:'离线UI示例：学习已开启',data:{}});
           }
           else if(body.action==='stop'){state.bffSettings.communityLearning.enabled=false;state.communityError='';state.communityLogs.unshift({id:state.communityLogs.length+1,at:Date.now(),level:'info',message:'离线UI示例：学习已结束',data:{}});}
+          else if(body.action==='backup')return json({ok:true,backup:'offline-ui-synthetic.sqlite'});
+          else if(body.action==='revoke')state.communityKnowledge=(state.communityKnowledge||[]).map(k=>k.id===body.id?{...k,status:'revoked'}:k);
           else if(body.action==='run'&&!state.bffSettings.communityLearning.enabled)return json({ok:false,error:'社区学习已关闭'},400);
           else if(!['run','cancel','probe','retry'].includes(body.action))return json({ok:false,error:'离线UI样例不执行实际学习或备份'},400);
           return json({...communityView(state),accepted:true});
