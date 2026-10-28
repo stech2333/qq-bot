@@ -15,6 +15,10 @@ const safeNumber = (value, fallback, min, max) => {
 };
 export class MemoryManager {
   constructor(app) { this.app = app; this.imports = new Map(); }
+  forgetSourceFact(state, fact) {
+    state.memoryDeleted=[...new Set([...state.memoryDeleted,memoryDigest(fact.text)])].slice(-1000);
+    state.lastRecall=null;
+  }
   bind(state) {
     state.memoryControl = normalizeMemoryControl(state.memoryControl);
     // Retire old per-conversation styles on migration; facts and interests stay scoped.

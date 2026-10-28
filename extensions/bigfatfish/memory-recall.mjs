@@ -13,6 +13,12 @@ export function memoryFreshness(fact, policy, now = Date.now()) {
   const age = Math.max(0, now - Number(fact.updatedAt || fact.at || now));
   return 2 ** (-age / ((policy.halfLifeDays || 90) * DAY));
 }
+export function memoryRoute(query, now=Date.now()) {
+  const history=/(?:之前|以前|上次|昨天|前天|今天|最近|历史|决定|约定|结果|后来|记得|说过|聊过)/.test(query);
+  const offset=8*3600000, start=Math.floor((now+offset)/86400000)*86400000-offset;
+  const days=/前天/.test(query)?2:/昨天/.test(query)?1:/今天/.test(query)?0:null;
+  return { history, timeRange:days===null?null:[start-days*86400000,start+(1-days)*86400000] };
+}
 // Relevance gates recall; freshness only orders eligible memories. Reading never reinforces a fact.
 export function recallTrace(facts, query, policy, privacy, now = Date.now(), context = {}) {
   const terms = memoryTerms(query), source = Array.isArray(facts) ? facts.filter(f => f && typeof f.text === 'string') : [];
@@ -28,7 +34,9 @@ export function recallTrace(facts, query, policy, privacy, now = Date.now(), con
     const evidence = total ? Math.max(ownPreference?0.5:0, matched.reduce((sum, term) => sum + weight(term), 0) / total) : ownPreference?0.5:0;
     const freshness = memoryFreshness(fact, policy, now);
     const ownerMismatch = firstPerson && (!context.userId || String(fact.source?.userId || '') !== String(context.userId));
-    let reason = ownerMismatch ? '不是当前成员的事实' : context.deleted?.includes(fact.id) ? '来源已删除' : !privacy.reference(fact.text) ? '隐私或不适合引用'
+    const eventAt=Number(fact.source?.at || fact.at || 0);
+    const outsideTime=context.timeRange && (eventAt<context.timeRange[0] || eventAt>=context.timeRange[1]);
+    let reason = outsideTime ? '不在询问的事件时间范围' : ownerMismatch ? '不是当前成员的事实' : context.deleted?.includes(fact.id) ? '来源已删除' : !privacy.reference(fact.text) ? '隐私或不适合引用'
       : fact.expiresAt && fact.expiresAt <= now ? '已过期'
       : Number(fact.confidence ?? 1) < policy.minConfidence ? '置信度不足'
       : !terms.length && !ownPreference ? '问句缺少具体检索词'
@@ -52,5 +60,6 @@ export function recallTrace(facts, query, policy, privacy, now = Date.now(), con
 export function memoryQuote(fact) {
   return { id: fact.id, userId: fact.source?.userId || null, text: fact.text,
     recordedAt: fact.at ? new Date(fact.at).toISOString() : null, kind: fact.kind || 'event',
+    ...(Number.isFinite(fact.source?.at) ? {sourceAt:new Date(fact.source.at).toISOString()} : {}),
     ...(fact.factKey ? { factKey: fact.factKey } : {}) };
 }

@@ -73,7 +73,7 @@ export function participationDecision(state, event, { kind, text, quoteTargetIsS
   const robotQuestion = /^(?:你|您).*(?:机器人|人工智能|deepseek|claude|chatgpt|模型|\bai\b)/i.test(body)
     || /^(?:你|您)(?:是谁|叫什么|能做什么|会什么|有什么功能|在吗)[?？。！!\s]*$/.test(body);
   const nudge = sameSpeaker && recent && /^(?:人呢|在不在|回我|理我|别装死|说话啊|怎么不说话)/.test(body);
-  const direct = kind === 'private' || atSelf || quoteTargetIsSelf || ((!otherTarget || !strict) && named)
+  const direct = kind === 'private' || atSelf || quoteTargetIsSelf || (!otherTarget && named)
     || (!otherTarget && (!strict || sameSpeaker && recent && p.offTopicMessages === 0) && (robotQuestion || nudge));
   const recipientConfirmed = !!(direct || continuation);
   const closing = /^(?:不聊了|晚安|先走了|拜拜|再见|先这样|不用回了)[。！!～~\s]*$/.test(body);

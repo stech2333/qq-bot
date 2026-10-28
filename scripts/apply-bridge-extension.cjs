@@ -717,6 +717,8 @@ change('src/bridge.js', s => v3Patch.replyDiagnostics(s, once), '// BigFatFish c
 change('src/bridge.js', s => v3Patch.replyLatency(s, once), '// BigFatFish direct reply latency v1');
 change('src/bridge.js', s => v3Patch.replyDeliveryRecovery(s, once), '// BigFatFish unsent reply recovery v1');
 const consoleTemplate = fs.readFileSync(path.join(root, 'extensions/bigfatfish/console-v3.html'), 'utf8');
-const consoleScript = ['console-policy.js','console-memory.js','console-api-pool.js','console-v3.js'].map(name=>fs.readFileSync(path.join(root,'extensions/bigfatfish',name),'utf8')).join('\n');
+const v4Patch = require('./v4-bridge-patch.cjs');
+change('src/bridge.js', s => v4Patch.patchBridge(s, once), '// BigFatFish V4 community learning');
+const consoleScript = ['console-policy.js','console-memory.js','console-api-pool.js','console-v3.js','console-community.js'].map(name=>fs.readFileSync(path.join(root,'extensions/bigfatfish',name),'utf8')).join('\n');
 fs.writeFileSync(path.join(repo, 'public/console.html'), consoleTemplate.replace('<!--V3_SCRIPT-->', () => '<script>\n' + consoleScript + '\n</script>'));
 console.log('BigFatFish integration applied (pinned anchors, idempotent).');

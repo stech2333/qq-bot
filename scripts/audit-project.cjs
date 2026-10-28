@@ -17,7 +17,7 @@ async function run(name, args, cwd = root) {
 }
 (async () => {
   const localTests = fs.readdirSync(path.join(root, 'extensions/bigfatfish')).filter(name => name.endsWith('.test.mjs')).map(name => path.join(root, 'extensions/bigfatfish', name));
-  const results = await Promise.all([run('local', ['--test', ...localTests]), run('upstream', ['scripts/test-audit.mjs'], repo), run('mcp-stdio', ['scripts/test-mcp-servers-stdio.mjs'], repo)]);
+  const results = await Promise.all([run('local', ['--test', '--test-timeout=30000', '--test-reporter=tap', ...localTests]), run('upstream', ['scripts/test-audit.mjs'], repo), run('mcp-stdio', ['scripts/test-mcp-servers-stdio.mjs'], repo)]);
   if (process.argv.includes('--ui')) results.push(await run('console-ui', ['scripts/check-console-ui.cjs']));
   fs.writeFileSync(path.join(out, 'summary.json'), JSON.stringify({ at: new Date().toISOString(), results,
     limitations: ['Independent voice-tool is not installed.', 'QQ chat, favorites/GIF delivery and reconnect were not exercised against real peers.'] }, null, 2));

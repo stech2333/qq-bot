@@ -14,7 +14,7 @@ export class LearningWindow {
   hours() { return Math.max(this.app.settings.topicLearning.lookbackHours, this.app.settings.slangPolicy.lookbackHours, this.app.settings.globalStyleLearning.lookbackHours); }
   file(key) { return path.join(this.app.root, 'state', 'learning-window', createHash('sha256').update(key).digest('hex').slice(0, 24) + '.jsonl'); }
   deleted(key) { const file=this.file(key)+'.deleted.json';try{return new Set(fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')):[]);}catch{this.errors.set(key,'来源删除记录损坏，暂停学习');return new Set();} }
-  forget(key,id) { if(!/^(group|private):[1-9]\d{4,15}$/.test(key)||!String(id))throw Error('来源参数无效');const deleted=this.deleted(key);if(this.errors.has(key))throw Error(this.errors.get(key));deleted.add(String(id));atomicJson(this.file(key)+'.deleted.json',[...deleted]);const win=this.load(key,Date.now());win.rows.delete(String(id));this.app.learningSources.cache.clear(); }
+  forget(key,id) { if(!/^(group|private):[1-9]\d{4,15}$/.test(key)||!['string','number'].includes(typeof id)||!String(id).trim()||String(id).length>100)throw Error('来源参数无效');const deleted=this.deleted(key);if(this.errors.has(key))throw Error(this.errors.get(key));deleted.add(String(id));atomicJson(this.file(key)+'.deleted.json',[...deleted]);const win=this.load(key,Date.now());win.rows.delete(String(id));this.app.learningSources.cache.clear(); }
   valid(m, now) {
     return m && !m.isSelf && m.topicLearningAllowed !== false && m.messageId != null && String(m.messageId).trim()
       && /^[1-9]\d{4,15}$/.test(String(m.userId)) && String(m.userId) !== String(this.app.config.bigfatfish?.expectedQQ)
@@ -31,7 +31,7 @@ export class LearningWindow {
     return this.windows.get(key);
   }
   ingest(key, st, messages, now = Date.now()) {
-    if (!key.startsWith('group:') || !this.app.globalStyle?.allowed(key)) return false;
+    if (!this.app.globalStyle?.allowed(key)) return false;
     const win = this.load(key, now); if (this.errors.has(key)) return false;
     const added = [], deleted = this.deleted(key);
     for (const m of st.bigfatfish.memoryControl?.accumulation === false ? [] : (messages || [])) {
@@ -55,7 +55,7 @@ export class LearningWindow {
     return added.length > 0;
   }
   messages(key, st, now = Date.now()) {
-    if (!key.startsWith('group:') || !this.app.globalStyle?.allowed(key)) return [];
+    if (!this.app.globalStyle?.allowed(key)) return [];
     const win = key.startsWith('group:') || this.app.globalStyle?.allowed(key) ? this.load(key, now) : null;
     if (this.errors.has(key)) return [];
     const deleted = this.deleted(key);

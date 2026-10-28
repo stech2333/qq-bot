@@ -193,7 +193,7 @@ function validateLimit(value, name) {
  * 返回 `{ok:true,result}` 或 `{ok:false,error,retryable}`；retryable 只标记网络层失败
  * （连接失败/超时/正文中断），大小与图片签名等策略性拒绝不重试。
  */
-function attemptOnce(url, address, limit, binary, budgetMs) {
+function attemptOnce(url, address, limit, binary, budgetMs, signal) {
   return new Promise((resolve) => {
     let settled = false;
     let req;
@@ -202,9 +202,11 @@ function attemptOnce(url, address, limit, binary, budgetMs) {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      signal?.removeEventListener('abort', abort);
       resolve(outcome);
     };
     const fail = (error, retryable) => settle({ ok: false, error, retryable: retryable === true });
+    const abort = () => { fail(new Error('请求已取消'), false); req?.destroy(); response?.destroy(); };
     const done = (result) => settle({ ok: true, result });
     const timer = setTimeout(() => {
       const error = new Error(`请求超时：${url.hostname}`);
@@ -215,6 +217,8 @@ function attemptOnce(url, address, limit, binary, budgetMs) {
     const mod = url.protocol === 'https:' ? https : http;
     const hostname = url.hostname.replace(/^\[|\]$/g, '');
     try {
+      if (signal?.aborted) { abort(); return; }
+      signal?.addEventListener('abort', abort, { once: true });
       req = mod.request({
         hostname: address,
         port: url.port || (url.protocol === 'https:' ? 443 : 80),
@@ -300,7 +304,7 @@ function attemptOnce(url, address, limit, binary, budgetMs) {
  * 而「第一个地址是坏的 IPv6」不会再白等 20 秒。
  * 所有地址都失败时抛最后一个错误（保留原始错误文案，便于日志排查）。
  */
-async function requestOnce(url, addresses, limit, binary = false) {
+async function requestOnce(url, addresses, limit, binary = false, signal) {
   const list = (Array.isArray(addresses) ? addresses : [addresses]).filter(Boolean);
   if (!list.length) throw new Error(`没有可用地址：${url.hostname}`);
   const deadline = Date.now() + REQUEST_TIMEOUT_MS;
@@ -312,7 +316,8 @@ async function requestOnce(url, addresses, limit, binary = false) {
     const budget = list.length === 1
       ? REQUEST_TIMEOUT_MS
       : Math.min(ATTEMPT_TIMEOUT_MS, remaining);
-    const outcome = await attemptOnce(url, list[i], limit, binary, budget);
+    signal?.throwIfAborted();
+    const outcome = await attemptOnce(url, list[i], limit, binary, budget, signal);
     if (outcome.ok) return outcome.result;
     lastError = outcome.error;
     if (!outcome.retryable) throw outcome.error;
@@ -327,12 +332,14 @@ async function requestOnce(url, addresses, limit, binary = false) {
   throw lastError ?? new Error(`请求失败：${url.hostname}`);
 }
 
-export async function safeFetch(urlString, maxChars = 50000) {
+export async function safeFetch(urlString, maxChars = 50000, { signal } = {}) {
   validateLimit(maxChars, 'maxChars');
+  signal?.throwIfAborted();
   const MAX_REDIRECTS = 5;
   let { url, addresses } = await validateFetchUrl(urlString);
   for (let i = 0; i <= MAX_REDIRECTS; i++) {
-    const result = await requestOnce(url, addresses, maxChars);
+    signal?.throwIfAborted();
+    const result = await requestOnce(url, addresses, maxChars, false, signal);
     if ([301, 302, 303, 307, 308].includes(result.statusCode)) {
       if (!result.redirect) throw new Error(`重定向缺少 Location: ${result.statusCode}`);
       const next = new URL(result.redirect, url).toString();

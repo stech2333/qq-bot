@@ -65,6 +65,8 @@ QQ Bridge 管理页侧栏“模型与 API 池”可新增、编辑、停用、�
 
 `npm test` 运行回归测试；`npm run bridge:prepare` 准备并应用集成补丁；`node scripts/check-bridge-readiness.mjs --online` 只读检查本机状态，不发送测试消息。配置、凭据、会话和本机组件均由 `.gitignore` 排除。
 
+V4 社区学习默认关闭，在“记忆与学习→长期记忆”中配置。仅使用获准读取、保存和AI学习的JSON文件/HTTPS Feed，目标平台没有默认登录或爬虫接入。知识存放于本地SQLite/FTS5；学习开关与知识应用开关独立。提供开始/结束按钮、启动条件检查、学习日志和每秒刷新的实际/预留/估算Token计数。隔离模型入口复用当前模型对应的环境或DSH凭据，并要求明确费率上界；条件缺失时显示原因，普通DSH聊天继续工作。详见[开发与使用说明](docs/v4-development.md)、[参考项目核对](docs/v4-platform-references.md)和[最终报告](docs/v4-report.md)。
+
 `npm run audit:project` 同时运行本地回归、上游完整隔离审计与三个 MCP 服务握手测试，自动使用本项目的 DSH 和 FFmpeg 路径，结果写入 `logs/audit/`。安装 Playwright 后可加 `-- --ui` 检查管理网页；页面测试拦截写入请求，不改真实名单或人格。独立语音工具未安装和真实 QQ 收发未验证会明确列为覆盖限制。
 
 2026-10-23 复审修复了启动管理异常、记忆来源校验、主动回合残留标记、待说想法续期和批处理行尾问题。依赖安全修复使用明确版本和锁文件：保留 DSH `0.2.1-rc.2`，升级兼容的 MCP SDK/客户端与传递依赖。`npm audit` 检查的是当时已知漏洞，不能替代真机功能验收。

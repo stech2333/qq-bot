@@ -1,3 +1,4 @@
+// BigFatFish V4 community learning
 // BigFatFish unsent reply recovery v1
 // BigFatFish direct reply latency v1
 // BigFatFish confirmed recipient wake diagnostics
@@ -19,6 +20,7 @@
 // BigFatFish API access diagnostics v1
 // BigFatFish API pool v1
 import { ApiPool, inspectApiAccess } from '../../../extensions/bigfatfish/api-pool.mjs';
+import { createCommunityModel } from '../../../extensions/bigfatfish/community-model.mjs';
 // BigFatFish scoped mood v1
 // BigFatFish visible manual slang research v1
 // BigFatFish learning workspace creation v1
@@ -2120,6 +2122,7 @@ async function main() {
 
   function tickBffLearning() {
     if (dshReady) void bff.research.tick(bffSlangStore());
+    void bff.community.tick();
   }
   function requestBffLearning(job) {
     return new Promise((resolve, reject) => queueSlangTask(async () => {
@@ -8815,6 +8818,8 @@ async function main() {
 
   loadSocialV2State();
   bff.research.connect(requestBffLearning, saveSocialV2State);
+  bff.community.connect(createCommunityModel({ pool: apiPool, config: cfg }),
+    () => [...socialV2.conversations].some(([key, st]) => pendingWakeKeys.has(key) || isConversationBusyV2(key, st)));
   bff.mood.connect(requestBffLearning, saveSocialV2State);
   bff.slang.manual.recover(bffSlangStore());
   setInterval(tickBffLearning, 60000).unref();

@@ -2,6 +2,7 @@
 /** Offline console preview. No production modules, credentials, state, or network clients are loaded. */
 import http from 'node:http';
 import {validateSettings} from '../../../extensions/bigfatfish/runtime.mjs';
+import { PLATFORMS, normalizeSource, sourceAllowed } from '../../../extensions/bigfatfish/community-adapters.mjs';
 import { readFile } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -285,8 +286,13 @@ function usageRecentFixture() {
   return rows;
 }
 
+function communityView(state) {
+  const p=state.bffSettings.communityLearning,checks=[{id:'sources',ok:state.communitySources.some(s=>sourceAllowed(s)&&p.platforms[s.platform]),message:'所选平台需要有效授权来源'},{id:'rates',ok:!!p.inputPriceCeiling&&!!p.outputPriceCeiling,message:'需要输入和输出费率上界'}];
+  return {ok:true,controlVersion:2,policy:p,status:p.enabled?'IDLE':'OFF',error:state.communityError||'',running:false,currentJob:null,taskUsage:null,sampledAt:Date.now(),readiness:{ready:checks.every(c=>c.ok),checks,blockers:checks.filter(c=>!c.ok)},platforms:Object.entries(PLATFORMS).map(([id,name])=>({id,name,status:state.communitySources.some(s=>s.platform===id)?'authorized-source':'unavailable'})),sources:state.communitySources,jobs:[],knowledge:[],logs:state.communityLogs||[],usage:state.communityUsage||null};
+}
 export function makeFixtureState() {
   return {
+    communitySources:[],communityLogs:[],
     mode: 'reserved2', role: '小鲸鱼', roleMode: 'active', closedAgentPreset: '', paused: false,
     roles: ['小鲸鱼', '温柔助手', '技术伙伴'],
     roleContents: {
@@ -365,6 +371,7 @@ export async function startConsoleFixture({ port = 0, original = false, htmlPath
         return;
       }
       if(path==='/api/bigfatfish/contacts')return json({ok:true,verified:true,groups:[{id:'123456789',name:'测试群聊',enabled:true,available:true},{id:'223456789',name:'可选群聊',enabled:false,available:true}],friends:[{id:'323456789',name:'测试好友',enabled:false,available:true}],errors:[]});
+      if(path==='/api/bigfatfish/community'&&method==='GET')return json(communityView(state));
       if(path==='/api/bigfatfish/status')return json({ok:true,settings:state.bffSettings,expectedQQ:'999999999',gatewayQQ:'999999999',ownerQQ:'111111111',allow:state.whitelist.allow,deny:state.whitelist.deny||{groups:[],private:[]},requests:[],sessions:[],voice:{installed:false},nativeSwitches:{socialV2:true,proactive:true},research:{running:false,todayUsed:0,policy:state.bffSettings.learningResearch},legacy:[]});
       if(path==='/api/bigfatfish/personas')return json({ok:true,revision:0,defaultRole:state.role,roles:[...state.roles],sessions:[]});
       if(path==='/api/bigfatfish/global-style')return json({ok:true,version:0,revision:0,features:{},expressionExamples:[],candidates:[],history:[],published:[],sample:{messages:24,days:3,speakers:2,groups:1},policy:state.bffSettings.globalStyleLearning,choices:{concise:'简短完整'},traits:{},replyDelivery:'natural'});
@@ -386,7 +393,18 @@ export async function startConsoleFixture({ port = 0, original = false, htmlPath
         if (logWrites) console.log(`[mock write] ${method} ${path} ${JSON.stringify(body)}`);
       }
       if(method==='POST'&&path.startsWith('/api/bigfatfish/')){
-        if(path.endsWith('/settings'))state.bffSettings={...state.bffSettings,...body};
+        if(path.endsWith('/settings'))state.bffSettings=validateSettings({...state.bffSettings,...body});
+        if(path.endsWith('/community')){
+          if(body.action==='source'){const source=normalizeSource(body.source),old=state.communitySources.find(s=>s.id===source.id);if((old?.revision??0)!==body.revision)return json({ok:false,error:'来源版本已变化'},400);state.communitySources=state.communitySources.filter(s=>s.id!==source.id);state.communitySources.push({...source,revision:body.revision+1,cursor:0});}
+          else if(body.action==='start'){
+            const ready=communityView(state).readiness;if(!ready.ready){state.communityError='无法开始学习：'+ready.blockers.map(c=>c.message).join('；');state.communityLogs.unshift({id:state.communityLogs.length+1,at:Date.now(),level:'warn',message:state.communityError,data:{}});return json({ok:false,code:'NOT_READY',error:state.communityError},400);}
+            state.bffSettings.communityLearning.enabled=true;state.communityError='';state.communityLogs.unshift({id:state.communityLogs.length+1,at:Date.now(),level:'info',message:'离线UI示例：学习已开启',data:{}});
+          }
+          else if(body.action==='stop'){state.bffSettings.communityLearning.enabled=false;state.communityError='';state.communityLogs.unshift({id:state.communityLogs.length+1,at:Date.now(),level:'info',message:'离线UI示例：学习已结束',data:{}});}
+          else if(body.action==='run'&&!state.bffSettings.communityLearning.enabled)return json({ok:false,error:'社区学习已关闭'},400);
+          else if(!['run','cancel'].includes(body.action))return json({ok:false,error:'离线UI样例不执行实际学习或备份'},400);
+          return json({...communityView(state),accepted:true});
+        }
         if(path.endsWith('/access')){const f=body.kind==='group'?'groups':'private',id=String(body.target);state.whitelist.allow[f]=body.enabled?[...new Set([...state.whitelist.allow[f],id])]:state.whitelist.allow[f].filter(x=>String(x)!==id);}
         if(path.endsWith('/memory')){if(body.action==='create')state.bffMemory.facts.push({id:'fixture-fact',text:body.content,source:{admin:true}});state.bffMemory.revision++;return json({...state.bffMemory,key:body.key});}
         return json({ok:true});

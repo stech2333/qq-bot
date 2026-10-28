@@ -10,6 +10,7 @@ import crypto from 'node:crypto';
 import vm from 'node:vm';
 import { BigFatFish, normalizeState } from '../../../extensions/bigfatfish/runtime.mjs';
 import { ApiPool } from '../../../extensions/bigfatfish/api-pool.mjs';
+import { createCommunityModel } from '../../../extensions/bigfatfish/community-model.mjs';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import * as markdown from '../src/md-to-plain.js';
@@ -190,7 +191,7 @@ export async function bridgeHarness({ config = {}, savedState, files = {}, globa
   bot.onPrivateMessage(async (event) => {`);
   const timers = new Set();
   const context = vm.createContext({
-    BigFatFish, normalizeState, ApiPool,
+    BigFatFish, normalizeState, ApiPool, createCommunityModel,
     fs, os, path, http, crypto, fileURLToPath, URL, Buffer, AbortSignal, console: { log() {}, error() {} },
     fetch: fakeFetch,
     // 锁文件探测用（bridge.js 顶层的 consolePortInUse）；
@@ -246,6 +247,9 @@ export async function bridgeHarness({ config = {}, savedState, files = {}, globa
   return { ...bridge, calls, temp, async close() {
     bridge.setReady(false);
     for (const timer of timers) clearTimeout(timer);
+    bridge.bff.community.controller?.abort();
+    await bridge.bff.community.done.catch(()=>{});
+    bridge.bff.community.store?.close();
     fs.rmSync(temp, { recursive: true, force: true });
   } };
 }

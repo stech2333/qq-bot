@@ -5,6 +5,12 @@ export class LearningSources {
   constructor(app) { this.app=app; this.cache=new Map(); }
   allowed(key) { return /^group:[1-9]\d{4,15}$/.test(key) && this.app.globalStyle.allowed(key); }
   eligible(key) { return this.allowed(key) && !!this.app.states.get(key) && this.app.states.get(key).bigfatfish?.memoryControl?.accumulation !== false; }
+  retained(ref) {
+    // Formal generalizations retain provenance after the bounded sample journal expires.
+    if (!this.allowed(ref.key) || ref.time <= (this.app.globalStyle.state.cutoff || 0)) return false;
+    const deleted = this.app.learningWindow.deleted(ref.key);
+    return !this.app.learningWindow.errors.has(ref.key) && ![...deleted].some(id => digest(ref.key + ':' + id) === ref.id);
+  }
   rows(key, now = Date.now()) {
     if (!this.allowed(key) || !this.app.states.has(key) || this.app.states.get(key).bigfatfish?.memoryControl?.accumulation === false || this.app.learningWindow.errors.has(key)) return [];
     const s = this.app.globalStyle.state, st = this.app.states.get(key), p = this.app.settings.globalStyleLearning, window = this.app.learningWindow.load(key, now);

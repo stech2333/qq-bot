@@ -44,7 +44,12 @@ export class SlangManager {
     const st=this.app.states.get(source.key);if(!st||st.bigfatfish.memoryControl?.accumulation===false)return false;
     return this.app.learningWindow.messages(source.key,st).some(m=>String(m.messageId)===source.id&&m.time===source.time);
   }
-  validSense(s) {return s.status==='confirmed'&&s.verified&&s.generalizable&&safeGeneralText(s.meaning)&&safeGeneralText(s.usage||'')&&(s.manual||s.evidence?.length>=3&&s.evidence.every(e=>this.sourceExists(e)));}
+  sourceRetained(source) {
+    if (!this.app.learningSources.allowed(source.key) || !Number.isFinite(source.time)) return false;
+    const deleted=this.app.learningWindow.deleted(source.key);
+    return !this.app.learningWindow.errors.has(source.key) && !deleted.has(String(source.id));
+  }
+  validSense(s) {return s.status==='confirmed'&&s.verified&&s.generalizable&&safeGeneralText(s.meaning)&&safeGeneralText(s.usage||'')&&(s.manual||s.evidence?.length>=3&&s.evidence.every(e=>this.sourceRetained(e)));}
   visible(entry,key) {return this.app.globalStyle.allowed(key)&&entry.status==='confirmed'&&safeGeneralText(entry.content)&&entry.senses?.some(s=>this.validSense(s));}
   contextEntries(entries,key,scene='',query='') {
     if(!this.app.globalStyle.allowed(key)||!query.trim())return[];
