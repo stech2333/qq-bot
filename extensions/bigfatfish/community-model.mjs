@@ -79,6 +79,7 @@ export function createCommunityModel({ pool, config, env = process.env, readCred
   const profile=()=>communityModelProfile(pool,config,env,readCredential);
   return {
     ready() { profile(); return true; },
+    describe() {const p=profile();return {model:p.model};},
     identity() { const p=profile();return JSON.stringify([p.baseURL,p.model,p.deepseekCompat]); },
     async run({ prompt, signal, maxOutputTokens, stage, onUsage=()=>{} }) {
       const p = profile();

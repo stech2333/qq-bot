@@ -11,4 +11,4 @@ try {
   times.sort((a,b)=>a-b);const after=f.app.instruction('group:123456',st).length;
   const result={workload:'one synthetic document, one published sense, 200 local retrievals; mocked model, no external requests',retrievalMs:{min:times[0],median:times[100],p95:times[190],max:times.at(-1)},syntheticPipelineMs:publishMs,promptChars:{withoutCommunity:before,withCommunity:after,added:after-before},syntheticPublished: f.app.community.store.list().length,actualProviderUsage:null,actualCost:null,qqFirstReplyMs:null,realPublishSuccessRate:null};
   const out=path.resolve('logs/audit/v4-metrics.json');fs.mkdirSync(path.dirname(out),{recursive:true});fs.writeFileSync(out,JSON.stringify(result,null,2));console.log(JSON.stringify(result,null,2));
-}finally{for(const fn of cleanups)fn();}
+}finally{for(const fn of cleanups)await fn();}

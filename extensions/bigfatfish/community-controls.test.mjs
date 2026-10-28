@@ -2,22 +2,22 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fixture } from './community-test-fixture.mjs';
+import { fixture, legacySchema } from './community-test-fixture.mjs';
 import { CommunityStream, createCommunityModel, communityModelProfile, providerUsage } from './community-model.mjs';
 import { poolCredential } from './api-pool.mjs';
 
-test('start reports every missing prerequisite, creates an audit log and never claims it is running',t=>{
-  const f=fixture(t);const result=f.app.community.admin('POST',{action:'start'});
+test('start reports every missing prerequisite, creates an audit log and never claims it is running',async t=>{
+  const f=fixture(t);const result=await f.app.community.admin('POST',{action:'start'});
   assert.equal(result.ok,false);assert.equal(result.code,'NOT_READY');assert.equal(result.running,false);assert.equal(result.policy.enabled,false);
   for(const id of ['platforms','sources','rates'])assert.ok(result.blockers.some(c=>c.id===id));
   assert.equal(f.calls.length,0);assert.equal(result.jobs.length,0);assert.equal(result.logs[0].code,'START_BLOCKED');
   f.app.community.store.close();f.app.community.store=null;assert.equal(f.app.community.open().logs()[0].code,'START_BLOCKED');
 });
 test('start/stop persist scheduling independently of knowledge application and a completed task',async t=>{
-  const f=fixture(t);f.setup();f.configure({enabled:false});const start=f.app.community.admin('POST',{action:'start'});
+  const f=fixture(t);f.setup();f.configure({enabled:false});const start=await f.app.community.admin('POST',{action:'start'});
   assert.equal(start.accepted,true);assert.equal(start.policy.enabled,true);await f.app.community.done;assert.equal(f.app.community.retrieve('摸鱼').length,1);
   assert.equal(JSON.parse(fs.readFileSync(f.app.file)).communityLearning.enabled,true);
-  const stop=f.app.community.admin('POST',{action:'stop'});assert.equal(stop.accepted,true);assert.equal(stop.policy.enabled,false);assert.equal(stop.policy.applyKnowledge,true);
+  const stop=await f.app.community.admin('POST',{action:'stop'});assert.equal(stop.accepted,true);assert.equal(stop.policy.enabled,false);assert.equal(stop.policy.applyKnowledge,true);
   assert.equal(JSON.parse(fs.readFileSync(f.app.file)).communityLearning.enabled,false);const calls=f.calls.length;await f.run();assert.equal(f.calls.length,calls);assert.equal(f.app.community.retrieve('摸鱼').length,1);
   for(const code of ['LEARNING_ENABLED','TASK_STARTED','MODEL_REQUEST','MODEL_USAGE','TASK_COMPLETED','STOP_REQUESTED'])assert.ok(f.app.community.store.logs().some(l=>l.code===code),code);
 });
@@ -30,18 +30,18 @@ test('streaming progress separates actual counters, estimates and unchanged rese
 test('ending an in-flight task disables future scheduling and cannot publish a late answer',async t=>{
   const f=fixture(t);f.setup();const original=f.model.run;let release,started;const ready=new Promise(r=>started=r);
   f.model.run=async req=>{started();await new Promise(r=>release=r);return original(req);};const work=f.run();await ready;
-  const stopped=f.app.community.admin('POST',{action:'stop'});assert.equal(stopped.policy.enabled,false);assert.equal(f.app.community.controller.signal.aborted,true);release();await work;await new Promise(r=>setImmediate(r));
+  const stopped=await f.app.community.admin('POST',{action:'stop'});assert.equal(stopped.policy.enabled,false);assert.equal(f.app.community.controller.signal.aborted,true);release();await work;await new Promise(r=>setImmediate(r));
   assert.equal(f.app.community.store.list().length,0);assert.equal(f.app.community.store.jobs()[0].status,'CANCELLED');assert.ok(f.app.community.snapshot().logs.some(l=>l.code==='TASK_CANCELLED'));assert.equal(f.app.community.snapshot().usage.confirmed.input,80);
   const before=f.calls.length;await f.run();assert.equal(f.calls.length,before);
 });
 test('QQ priority is an explicit logged wait, not a silent or fake successful task',async t=>{
   const f=fixture(t);f.setup();f.configure({enabled:false});f.app.community.busy=()=>true;
-  const result=f.app.community.admin('POST',{action:'start'});assert.equal(result.accepted,true);assert.equal(result.running,false);assert.equal(result.status,'PAUSED');assert.equal(result.jobs.length,0);
+  const result=await f.app.community.admin('POST',{action:'start'});assert.equal(result.accepted,true);assert.equal(result.running,false);assert.equal(result.status,'WAITING');assert.equal(f.app.community.store.jobs().length,0);
   await f.run();assert.equal(f.app.community.store.logs().filter(l=>l.code==='CHAT_PRIORITY').length,1);
   f.app.community.busy=()=>false;await f.run();assert.equal(f.app.community.retrieve('摸鱼').length,1);
 });
-test('missing credentials appear in readiness without exposing raw model or credential errors',t=>{
-  const f=fixture(t);f.setup();f.model.ready=()=>{throw Error('secret fixture-api-credential');};const r=f.app.community.admin('POST',{action:'start'});
+test('missing credentials appear in readiness without exposing raw model or credential errors',async t=>{
+  const f=fixture(t);f.setup();f.model.ready=()=>{throw Error('secret fixture-api-credential');};const r=await f.app.community.admin('POST',{action:'start'});
   assert.equal(r.ok,false);assert.ok(r.blockers.some(c=>c.id==='model'));assert.doesNotMatch(JSON.stringify(r),/fixture-api-credential/);assert.equal(f.calls.length,0);
 });
 test('usage progress never releases reservations or persists unknown provider fields',t=>{
@@ -53,8 +53,8 @@ test('usage progress never releases reservations or persists unknown provider fi
 });
 test('v1 databases are backed up and migrated to log schema without changing knowledge',async t=>{
   const f=fixture(t);f.setup();await f.run();const id=f.app.community.retrieve('摸鱼')[0].id;
-  f.app.community.store.db.exec('DROP TABLE community_logs; PRAGMA user_version=1;');f.app.community.store.close();f.app.community.store=null;
-  const db=f.app.community.open();assert.equal(db.db.prepare('PRAGMA user_version').get().user_version,2);assert.equal(db.search('摸鱼')[0].id,id);assert.ok(fs.readdirSync(path.dirname(db.file)).some(n=>n.startsWith('community.sqlite.backup-')));
+  legacySchema(f.app.community.store.db,1);f.app.community.store.close();f.app.community.store=null;
+  const db=f.app.community.open();assert.equal(db.db.prepare('PRAGMA user_version').get().user_version,3);assert.equal(db.search('摸鱼')[0].id,id);assert.ok(fs.readdirSync(path.dirname(db.file)).some(n=>n.startsWith('community.sqlite.backup-')));
   db.log({code:'MIGRATED',message:'合成迁移日志'});assert.equal(db.logs()[0].code,'MIGRATED');
 });
 test('learning logs are bounded to 2000 persistent entries and snapshots show the newest 100',t=>{

@@ -11,7 +11,7 @@ test('real console handler restricts community APIs to admin; ordinary QQ tools 
   const h=await bridgeHarness({config:{consolePort:3106,allow:{groups:['123456'],private:[]},bigfatfish:{expectedQQ:'123456789'}},globals:{http:{createServer(fn){handler=fn;return server;}}}});
   t.after(()=>h.close());h.setMode('reserved2');h.startConsoleServer();const st=h.getSocialV2State('group:123456');
   const call=async({token='fixture-console-token',agent=false,method='GET',body}={})=>{const req=Readable.from(body?[JSON.stringify(body)]:[]);Object.assign(req,{url:'/api/bigfatfish/community',method,headers:{host:'127.0.0.1:3106','x-console-token':token,...(agent?{'x-agent-call':'1','x-agent-token':st.agentToken}:{}),...(body?{'content-type':'application/json'}:{})}});let status,result;await handler(req,{writeHead(n){status=n;},end(text){result=JSON.parse(text);}});return {status,result};};
-  assert.equal((await call({token:'wrong'})).status,401);assert.equal((await call({agent:true})).status,403);assert.equal((await call()).result.status,'OFF');
+  assert.equal((await call({token:'wrong'})).status,401);assert.equal((await call({agent:true})).status,403);assert.equal((await call()).result.status,'STOPPED');
   const stopped=await call({method:'POST',body:{action:'run'}});assert.equal(stopped.result.ok,false);assert.equal(h.calls.prompts.length,0);assert.equal(h.calls.http.filter(c=>/send_.*_msg/.test(c.url)).length,0);
   assert.equal((await call({agent:true,method:'POST',body:{action:'start'}})).status,403);
   const blocked=await call({method:'POST',body:{action:'start'}});assert.equal(blocked.result.ok,false);assert.equal(blocked.result.code,'NOT_READY');assert.ok(blocked.result.blockers.some(c=>c.id==='sources'));assert.equal(blocked.result.running,false);

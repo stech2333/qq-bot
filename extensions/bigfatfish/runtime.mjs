@@ -512,7 +512,7 @@ export class BigFatFish {
       }
       const body = req.method === 'GET' ? Object.fromEntries(url.searchParams) : await readBody();
       if (adminPath) {
-        if (url.pathname === '/api/bigfatfish/community') { send(this.community.admin(req.method,body)); return true; }
+        if (url.pathname === '/api/bigfatfish/community') { send(await this.community.admin(req.method,body)); return true; }
         if (url.pathname === '/api/bigfatfish/sources') {
           if(req.method!=='POST'||!this.globalStyle.allowed(body.key))throw Error('来源操作无效');
           const st=this.states.get(body.key);if(!st||body.revision!==st.bigfatfish.memoryRevision)throw Error('会话版本已变化');

@@ -12,9 +12,9 @@ import { poolCredential } from './api-pool.mjs';
 test('default OFF never creates a task, database, or model call; application switch is independent',async t=>{
   const f=fixture(t);assert.equal(f.app.settings.communityLearning.enabled,false);assert.equal(f.app.settings.communityLearning.applyKnowledge,true);
   await f.run();assert.equal(f.calls.length,0);assert.equal(fs.existsSync(path.join(f.root,'state/community.sqlite')),false);
-  assert.throws(()=>f.app.community.admin('POST',{action:'run'}),/关闭/);
+  await assert.rejects(f.app.community.admin('POST',{action:'run'}),/关闭/);
   assert.throws(()=>communitySettings({dailyCostLimit:-1}));assert.throws(()=>communitySettings({platforms:{other:true}}));
-  assert.throws(()=>communitySettings({enabled:'yes'}));assert.throws(()=>communitySettings({maxPerDay:9}));
+  assert.throws(()=>communitySettings({enabled:'yes'}));assert.equal(Object.hasOwn(communitySettings({maxPerDay:9}),'maxPerDay'),false);
 });
 test('licensed fixture completes two-stage batching plus slang verification and persists knowledge with FTS',async t=>{
   const f=fixture(t);f.setup();await f.run();const view=f.app.community.snapshot();
@@ -27,7 +27,7 @@ test('licensed fixture completes two-stage batching plus slang verification and 
 });
 test('turning learning OFF keeps published knowledge available, applyKnowledge OFF immediately removes retrieval',async t=>{
   const f=fixture(t);f.setup();await f.run();const n=f.calls.length;
-  f.configure({enabled:false});await f.run();assert.equal(f.calls.length,n);assert.equal(f.app.community.snapshot().status,'OFF');
+  f.configure({enabled:false});await f.run();assert.equal(f.calls.length,n);assert.equal(f.app.community.snapshot().status,'STOPPED');
   assert.equal(f.app.community.retrieve('摸鱼').length,1);f.configure({applyKnowledge:false});assert.deepEqual(f.app.community.retrieve('摸鱼'),[]);
   f.configure({applyKnowledge:true});assert.equal(f.app.community.retrieve('摸鱼').length,1);
 });
@@ -40,7 +40,7 @@ for(const stage of ['select','extract','verify'])test('disable during '+stage+' 
 });
 test('source changes or knowledge revocation invalidate an in-flight generation and revoked IDs never resurrect',async t=>{
   const f=fixture(t);f.setup();await f.run();const id=f.app.community.retrieve('摸鱼')[0].id;
-  f.app.community.admin('POST',{action:'revoke',id});assert.deepEqual(f.app.community.retrieve('摸鱼'),[]);
+  await f.app.community.admin('POST',{action:'revoke',id});assert.deepEqual(f.app.community.retrieve('摸鱼'),[]);
   f.writeItems([item('post1',{summary:'游戏文化的新证据'})]);await f.run();assert.deepEqual(f.app.community.retrieve('摸鱼'),[]);assert.equal(f.app.community.store.list()[0].status,'revoked');
 });
 test('duplicate input is excluded locally without new model calls, new evidence reinforces a version',async t=>{
@@ -60,17 +60,17 @@ test('expired source cannot publish a late model result',async t=>{
   f.model.run=async req=>{const r=await original(req);if(req.stage==='extract'){const s=f.app.community.store.source('synthetic');f.app.community.store.saveSource({...s,license:{...s.license,expiresAt:Date.now()-1}},s.revision);}return r;};
   await f.run();assert.deepEqual(f.app.community.retrieve('摸鱼'),[]);assert.equal(f.app.community.store.jobs()[0].status,'CANCELLED');
 });
-for(const patch of [{dailyTokenBudget:0},{dailyInputTokens:0},{dailyOutputTokens:0},{dailyCostLimit:0},{maxPerDay:0},{inputPriceCeiling:null}])test('budget gate prevents model calls: '+JSON.stringify(patch),async t=>{
-  const f=fixture(t);f.setup();f.configure(patch);await f.run();assert.equal(f.calls.length,0);assert.equal(f.app.community.store.jobs()[0].status,'PAUSED');
+for(const patch of [{dailyTokenBudget:0},{dailyInputTokens:0},{dailyOutputTokens:0},{dailyCostLimit:0},{maxPerDay:0},{inputPriceCeiling:null}])test('cost/token guards remain and obsolete task count is ignored: '+JSON.stringify(patch),async t=>{
+  const f=fixture(t);f.setup();f.configure(patch);await f.run();if(Object.hasOwn(patch,'maxPerDay')){assert.equal(f.calls.length,3);assert.equal(f.app.community.store.jobs()[0].status,'COMPLETED');}else{assert.equal(f.calls.length,0);assert.equal(f.app.community.session.status,'PAUSED');if(patch.inputPriceCeiling===null)assert.equal(f.app.community.store.jobs().length,0);else assert.equal(f.app.community.store.jobs()[0].status,'PAUSED');}
 });
 test('unknown usage and transport failures retain reservations across restart and cannot publish',async t=>{
   const f=fixture(t);f.setup();f.model.run=async()=>({text:'{"ids":["post1"]}'});await f.run();
   const before=f.app.community.store.usage();assert.equal(before.reserved,1);assert.equal(before.measuredCalls,0);
   f.app.community.store.close();f.app.community.store=null;assert.deepEqual(f.app.community.open().usage(),before);assert.equal(f.app.community.store.list().length,0);
 });
-test('daily model task cap counts selection reservations across successful jobs and restart',async t=>{
+test('legacy daily task cap is ignored while new fingerprints remain incremental',async t=>{
   const f=fixture(t);f.setup();f.configure({maxPerDay:1});await f.run();assert.equal(f.calls.length,3);
-  f.writeItems([item('post1',{summary:'游戏文化的新材料'})]);await f.run();assert.equal(f.calls.length,3);assert.equal(f.app.community.store.jobs()[0].status,'PAUSED');
+  f.writeItems([item('post1',{summary:'游戏文化的新材料'})]);await f.run();assert.equal(f.calls.length,6);assert.equal(f.app.community.store.jobs()[0].status,'COMPLETED');
 });
 test('usage exceeding a reservation is durably accounted and prevents later daily calls',async t=>{
   const f=fixture(t);f.setup();f.model.run=async()=>{f.calls.push('overrun');return {text:'{"ids":[]}',usage:{input:80,output:2000,reasoning:0,cacheHit:0}};};
@@ -85,7 +85,7 @@ test('one task at a time, QQ busy deferral and restart recovery retain increment
   f.app.community.busy=()=>false;let release,started;const ready=new Promise(r=>started=r),original=f.model.run;
   f.model.run=async req=>{if(req.stage==='select'){started();await new Promise(r=>release=r);}return original(req);};const work=f.run();await ready;const id=f.app.community.running.id;const other=f.run();assert.equal(f.app.community.running.id,id);release();await Promise.all([work,other]);assert.equal(f.calls.length,3);
   const db=f.app.community.store;const old=db.jobs()[0];db.saveJob({...old,id:'interrupted',status:'FETCHING',ownerPid:2147483647,deadline:0});
-  db.close();f.app.community.store=null;f.app.community.open();assert.equal(f.app.community.store.job('interrupted').status,'PAUSED');
+  db.close();f.app.community.store=null;f.app.community.open();assert.equal(f.app.community.store.job('interrupted').status,'RETRYABLE');
   assert.throws(()=>f.app.community.store.saveJob({...old,id:'a',status:'FETCHING'})||f.app.community.store.saveJob({...old,id:'b',status:'FETCHING'}));
 });
 test('publication is atomic on storage failure and older schemas are backed up before migration',async t=>{
@@ -94,7 +94,7 @@ test('publication is atomic on storage failure and older schemas are backed up b
   const backup=f.app.community.store.backup();assert.ok(fs.existsSync(path.join(f.root,'state',backup)));
   f.app.community.store.close();f.app.community.store=null;
   const {DatabaseSync}=await import('node:sqlite');const legacy=path.join(f.root,'legacy');fs.mkdirSync(path.join(legacy,'state'),{recursive:true});const conn=new DatabaseSync(path.join(legacy,'state/community.sqlite'));conn.exec('CREATE TABLE legacy_marker(id INTEGER)');conn.close();
-  const migrated=new CommunityStore(legacy);assert.equal(migrated.db.prepare('PRAGMA user_version').get().user_version,2);assert.ok(fs.readdirSync(path.join(legacy,'state')).some(n=>n.includes('.backup-')));migrated.close();
+  const migrated=new CommunityStore(legacy);assert.equal(migrated.db.prepare('PRAGMA user_version').get().user_version,3);assert.ok(fs.readdirSync(path.join(legacy,'state')).some(n=>n.includes('.backup-')));migrated.close();
 });
 test('future/corrupt databases fail closed while existing QQ context still assembles',async t=>{
   const f=fixture(t);const st=f.state('group:123456');st.recentMessages=[{messageId:'1',userId:'111111',plain:'你好',time:Date.now()}];

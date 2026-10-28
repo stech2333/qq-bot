@@ -247,7 +247,7 @@ export async function bridgeHarness({ config = {}, savedState, files = {}, globa
   return { ...bridge, calls, temp, async close() {
     bridge.setReady(false);
     for (const timer of timers) clearTimeout(timer);
-    bridge.bff.community.controller?.abort();
+    bridge.bff.community.close();
     await bridge.bff.community.done.catch(()=>{});
     bridge.bff.community.store?.close();
     fs.rmSync(temp, { recursive: true, force: true });

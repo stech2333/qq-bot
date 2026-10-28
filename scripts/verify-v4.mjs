@@ -1,4 +1,5 @@
-// Full offline acceptance runner. Invoke only after implementation, docs and static review.
+// V4.1 offline acceptance: automatically includes continuous/platform tests and the Python worker stub.
+// Invoke only after all implementation, migrations, documentation and static review are complete.
 import fs from 'node:fs';
 import path from 'node:path';
 import {spawn} from 'node:child_process';
