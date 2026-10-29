@@ -19,7 +19,17 @@ test('start/stop persist scheduling independently of knowledge application and a
   assert.equal(JSON.parse(fs.readFileSync(f.app.file)).communityLearning.enabled,true);
   const stop=await f.app.community.admin('POST',{action:'stop'});assert.equal(stop.accepted,true);assert.equal(stop.policy.enabled,false);assert.equal(stop.policy.applyKnowledge,true);
   assert.equal(JSON.parse(fs.readFileSync(f.app.file)).communityLearning.enabled,false);const calls=f.calls.length;await f.run();assert.equal(f.calls.length,calls);assert.equal(f.app.community.retrieve('摸鱼').length,1);
+  const ended=f.app.community.snapshot();assert.equal(ended.status,'STOPPED');assert.equal(ended.currentJob,null);assert.ok(Number.isSafeInteger(ended.session.stoppedAt));
+  const stoppedAt=ended.session.stoppedAt;await new Promise(r=>setTimeout(r,5));assert.equal(f.app.community.snapshot().session.stoppedAt,stoppedAt);
   for(const code of ['LEARNING_ENABLED','TASK_STARTED','MODEL_REQUEST','MODEL_USAGE','TASK_COMPLETED','STOP_REQUESTED'])assert.ok(f.app.community.store.logs().some(l=>l.code===code),code);
+});
+test('legacy stopped sessions get a fixed stoppedAt when reopened',t=>{
+  const f=fixture(t);f.setup();const db=f.app.community.store,at=Date.now()-5000,updatedAt=at+1200;
+  db.db.exec('DELETE FROM learning_sessions');
+  db.saveSession({id:'legacy-stopped',at,status:'STOPPED',ownerPid:0,updatedAt});
+  db.db.prepare('UPDATE learning_sessions SET data=? WHERE id=?').run(JSON.stringify({id:'legacy-stopped',at,status:'STOPPED',ownerPid:0,updatedAt}),'legacy-stopped');
+  db.close();f.app.community.store=null;f.app.community.session=null;
+  f.app.community.open();assert.equal(f.app.community.session.stoppedAt,updatedAt);assert.equal(f.app.community.snapshot().currentJob,null);
 });
 test('streaming progress separates actual counters, estimates and unchanged reserved budget',async t=>{
   const f=fixture(t);f.setup();const original=f.model.run;let release,started;const ready=new Promise(r=>started=r);
@@ -32,6 +42,7 @@ test('ending an in-flight task disables future scheduling and cannot publish a l
   f.model.run=async req=>{started();await new Promise(r=>release=r);return original(req);};const work=f.run();await ready;
   const stopped=await f.app.community.admin('POST',{action:'stop'});assert.equal(stopped.policy.enabled,false);assert.equal(f.app.community.controller.signal.aborted,true);release();await work;await new Promise(r=>setImmediate(r));
   assert.equal(f.app.community.store.list().length,0);assert.equal(f.app.community.store.jobs()[0].status,'CANCELLED');assert.ok(f.app.community.snapshot().logs.some(l=>l.code==='TASK_CANCELLED'));assert.equal(f.app.community.snapshot().usage.confirmed.input,80);
+  assert.equal(f.app.community.snapshot().currentJob,null);assert.equal(f.app.community.snapshot().status,'STOPPED');assert.ok(f.app.community.snapshot().session.stoppedAt);
   const before=f.calls.length;await f.run();assert.equal(f.calls.length,before);
 });
 test('QQ priority is an explicit logged wait, not a silent or fake successful task',async t=>{
@@ -62,6 +73,15 @@ test('learning logs are bounded to 2000 persistent entries and snapshots show th
   db.tx(()=>{const insert=db.db.prepare("INSERT INTO community_logs(at,level,code,message,data) VALUES(1,'info','SYNTHETIC','合成日志','{}')");for(let i=0;i<2005;i++)insert.run();});
   db.log({code:'LATEST',message:'最新合成日志'});assert.equal(db.db.prepare('SELECT count(*) n FROM community_logs').get().n,2000);assert.equal(db.logs().length,100);assert.equal(db.logs()[0].code,'LATEST');
 });
+test('community logs are appended to dated JSONL archives and rotate without affecting SQLite',t=>{
+  const f=fixture(t);f.setup();const db=f.app.community.store;db.archiveMaxBytes=420;
+  db.log({code:'ARCHIVE_ONE',message:'第一条归档日志',data:{title:'合成标题',url:'https://www.bilibili.com/video/BV1fixture',cookie:'must-not-archive'}});
+  for(let i=0;i<8;i++)db.log({code:'ARCHIVE_ROTATE',message:'用于触发分卷的合成日志 '+i,data:{durationMs:i,content:'不得归档正文'}});
+  const dir=path.join(f.root,'logs','bridge','community-learning'),files=fs.readdirSync(dir).filter(n=>n.endsWith('.jsonl'));assert.ok(files.length>1);
+  const lines=files.flatMap(n=>fs.readFileSync(path.join(dir,n),'utf8').trim().split('\n').filter(Boolean).map(JSON.parse));
+  assert.ok(lines.some(r=>r.code==='ARCHIVE_ONE'));assert.equal(new Set(lines.map(r=>r.archiveId)).size,lines.length);
+  assert.doesNotMatch(JSON.stringify(lines),/must-not-archive|不得归档正文/);assert.ok(db.logs().some(r=>r.code==='ARCHIVE_ONE'));
+});
 test('SSE parsing handles split UTF-8, usage-only frames and never retains raw reasoning',()=>{
   const samples=[],stream=new CommunityStream(p=>samples.push(p));const frames=[
     {choices:[{delta:{reasoning_content:'不可持久化的原始推理'}}]},
@@ -80,9 +100,19 @@ test('malformed streams and invalid provider usage cannot become measured knowle
 test('learning reuses only the selected credential reference from DSH and preserves model isolation',async()=>{
   const entry={id:'b'.repeat(32),enabled:true,keyStored:true,protocol:'openai-completions',model:'deepseek-flash',baseURL:'https://model.example.org/v1',deepseekCompat:true},pool={state:{activeId:entry.id,entries:[entry]}},refs=[],updates=[];
   const readCredential=ref=>{refs.push(ref);return 'synthetic-dsh-key';};const model=createCommunityModel({pool,config:{},env:{},readCredential,request:async(p,body,_signal,onUsage)=>{
-    assert.equal(p.key,'synthetic-dsh-key');assert.equal(body.stream,true);assert.equal(body.stream_options.include_usage,true);assert.equal(body.tools,undefined);assert.equal(body.messages.length,2);onUsage({estimatedOutput:3,estimatedReasoning:1});
+    assert.equal(p.key,'synthetic-dsh-key');assert.equal(body.stream,true);assert.equal(body.stream_options.include_usage,true);assert.equal(body.tools,undefined);assert.equal(body.messages.length,2);assert.deepEqual(body.thinking,{type:'disabled'});assert.equal(body.reasoning_effort,undefined);onUsage({estimatedOutput:3,estimatedReasoning:1});
     return {choices:[{finish_reason:'stop',message:{content:'{"ids":[]}',reasoning_content:'不得返回的推理'}}],usage:{prompt_tokens:40,completion_tokens:20}};
   }});model.ready();const result=await model.run({prompt:'{}',stage:'select',signal:new AbortController().signal,maxOutputTokens:256,onUsage:p=>updates.push(p)});
   assert.ok(refs.every(r=>r===poolCredential(entry)));assert.equal(updates[0].estimatedOutput,3);assert.equal(updates.at(-1).usage.input,40);assert.doesNotMatch(JSON.stringify(result),/不得返回|synthetic-dsh-key/);
   const profile=communityModelProfile(pool,{}, {[poolCredential(entry)]:'env-key'},()=>{throw Error('不应读取其他凭据');});assert.equal(profile.key,'env-key');
+});
+test('select, extract and verify disable thinking and reject empty, truncated or invalid JSON',async()=>{
+  const entry={id:'c'.repeat(32),enabled:true,keyStored:true,protocol:'openai-completions',model:'deepseek-flash',baseURL:'https://model.example.org/v1',deepseekCompat:true},pool={state:{activeId:entry.id,entries:[entry]}},env={[poolCredential(entry)]:'fixture-key'},seen=[];
+  const ok=createCommunityModel({pool,config:{},env,request:async(_p,body)=>{seen.push(body);return {choices:[{finish_reason:'stop',message:{content:'{}'}}],usage:{prompt_tokens:4,completion_tokens:2,completion_tokens_details:{reasoning_tokens:0}}};}});
+  for(const stage of ['select','extract','verify'])await ok.run({prompt:'{}',stage,signal:new AbortController().signal,maxOutputTokens:1600});
+  assert.equal(seen.length,3);for(const body of seen){assert.deepEqual(body.thinking,{type:'disabled'});assert.equal(body.reasoning_effort,undefined);assert.equal(body.max_tokens,1600);}
+  const failing=response=>createCommunityModel({pool,config:{},env,request:async()=>response}).run({prompt:'{}',stage:'extract',signal:new AbortController().signal,maxOutputTokens:1600});
+  await assert.rejects(failing({choices:[{finish_reason:'stop',message:{content:''}}],usage:{prompt_tokens:4,completion_tokens:10}}),/空 content/);
+  await assert.rejects(failing({choices:[{finish_reason:'length',message:{content:''}}],usage:{prompt_tokens:4,completion_tokens:1600,completion_tokens_details:{reasoning_tokens:1599}}}),/finish_reason=length.*reasoning_tokens=1599/);
+  await assert.rejects(failing({choices:[{finish_reason:'stop',message:{content:'not-json'}}],usage:{prompt_tokens:4,completion_tokens:2}}),/非法 JSON/);
 });

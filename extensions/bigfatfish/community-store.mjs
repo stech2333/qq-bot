@@ -7,6 +7,18 @@ import { memoryTerms } from './memory-recall.mjs';
 
 const require = createRequire(import.meta.url);
 export const day = now => new Date(now + 8 * 3600000).toISOString().slice(0, 10);
+const ARCHIVE_MAX_BYTES = 10 * 1024 * 1024;
+const OMIT_LOG_KEY = /(?:cookie|authorization|api.?key|access.?token|password|credential|prompt|reasoning_content|raw.?response|system.?message|\btext\b|\bcontent\b)/i;
+function cleanLogValue(value,key='',depth=0) {
+  if(depth>5||OMIT_LOG_KEY.test(key)||typeof value==='function'||typeof value==='symbol'||typeof value==='bigint')return undefined;
+  if(value===null)return undefined;
+  if(typeof value==='boolean')return value;
+  if(typeof value==='number')return Number.isFinite(value)?value:undefined;
+  if(typeof value==='string')return value.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g,'').slice(0,key==='url'?500:key==='title'?200:1000);
+  if(Array.isArray(value))return value.slice(0,50).map((v,i)=>cleanLogValue(v,String(i),depth+1)).filter(v=>v!==undefined);
+  if(typeof value==='object'){const out={};for(const [k,v] of Object.entries(value)){const clean=cleanLogValue(v,k,depth+1);if(clean!==undefined)out[k]=clean;}return out;}
+  return undefined;
+}
 export function searchTerms(text) {
   const q = String(text).normalize('NFKC').toLowerCase();
   return [...new Set([...memoryTerms(q), ...(q.match(/[\u4e00-\u9fff]+/g) || []).flatMap(w => Array.from({ length: Math.max(0, w.length - 1) }, (_, i) => w.slice(i, i + 2)))])].slice(0, 60);
@@ -15,7 +27,10 @@ const decode = row => row ? JSON.parse(row.data) : null;
 export const termKey = value => String(value).normalize('NFKC').trim().toLowerCase();
 export class CommunityStore {
   constructor(root) {
+    this.root = root;
     this.file = path.join(root, 'state', 'community.sqlite');
+    this.archiveDir = path.join(root, 'logs', 'bridge', 'community-learning');
+    this.archiveMaxBytes = ARCHIVE_MAX_BYTES;
     fs.mkdirSync(path.dirname(this.file), { recursive: true });
     const { DatabaseSync } = require('node:sqlite');
     this.db = new DatabaseSync(this.file);
@@ -123,16 +138,48 @@ export class CommunityStore {
   job(id) { return decode(this.db.prepare('SELECT data FROM jobs WHERE id=?').get(id)); }
   latestJob() {return decode(this.db.prepare('SELECT data FROM jobs ORDER BY at DESC,rowid DESC LIMIT 1').get());}
   saveJob(job) { this.db.prepare('INSERT INTO jobs VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,version=excluded.version,data=excluded.data').run(job.id, job.status, job.version, job.at, JSON.stringify(job)); }
+  archiveLog(record) {
+    try {
+      fs.mkdirSync(this.archiveDir,{recursive:true});
+      const line=JSON.stringify(cleanLogValue(record))+'\n',bytes=Buffer.byteLength(line);
+      const date=day(record.at);let part=0,file;
+      do {
+        file=path.join(this.archiveDir,date+(part?'.'+part:'')+'.jsonl');
+        if(!fs.existsSync(file)||fs.statSync(file).size+bytes<=this.archiveMaxBytes)break;
+        part++;
+      } while(part<1000);
+      fs.appendFileSync(file,line,{encoding:'utf8',flag:'a'});
+      this.archiveWarning='';
+      return file;
+    } catch {
+      if(!this.archiveWarning){
+        this.archiveWarning='社区学习JSONL归档失败，SQLite日志仍正常';
+        console.warn('[BigFatFish community] '+this.archiveWarning);
+      }
+      return '';
+    }
+  }
   log({level='info',code,job=null,source=null,message,data={},session=null,platform=null,phase=null}) {
+    const at=Date.now(),cleanData=cleanLogValue(data)||{},cleanMessage=String(message||'').replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,500);
+    let id;
     this.tx(()=>{
-      this.db.prepare('INSERT INTO community_logs(at,level,code,job,source,message,data,session_id,platform,phase) VALUES(?,?,?,?,?,?,?,?,?,?)').run(Date.now(),level,code,job,source,message,JSON.stringify(data),session,platform,phase);
+      const result=this.db.prepare('INSERT INTO community_logs(at,level,code,job,source,message,data,session_id,platform,phase) VALUES(?,?,?,?,?,?,?,?,?,?)').run(at,level,code,job,source,cleanMessage,JSON.stringify(cleanData),session,platform,phase);
+      id=Number(result.lastInsertRowid);
       this.db.exec('DELETE FROM community_logs WHERE id < (SELECT id FROM community_logs ORDER BY id DESC LIMIT 1 OFFSET 1999)');
     });
+    const record={id,archiveId:'community:'+id,at,level,code,job,source,message:cleanMessage,data:cleanData,session_id:session,platform,phase};
+    this.archiveLog(record);
+    return record;
   }
-  logs(job=null) { return (job?this.db.prepare('SELECT * FROM community_logs WHERE job=? ORDER BY id DESC LIMIT 100').all(job):this.db.prepare('SELECT * FROM community_logs ORDER BY id DESC LIMIT 100').all()).map(r=>({...r,data:JSON.parse(r.data)})); }
-  logPage(since=0) { const rows=this.db.prepare('SELECT * FROM community_logs WHERE id>? ORDER BY id LIMIT 100').all(since).map(r=>({...r,data:JSON.parse(r.data)}));const range=this.db.prepare('SELECT min(id) first,max(id) last FROM community_logs').get();return {rows,cursor:rows.at(-1)?.id||since,hasMore:!!rows.length&&rows.at(-1).id<range.last,reset:since>0&&since<(range.first||0)-1}; }
+  logs(job=null) { return (job?this.db.prepare('SELECT * FROM community_logs WHERE job=? ORDER BY id DESC LIMIT 100').all(job):this.db.prepare('SELECT * FROM community_logs ORDER BY id DESC LIMIT 100').all()).map(r=>cleanLogValue({...r,data:JSON.parse(r.data)})); }
+  logPage(since=0) { const rows=this.db.prepare('SELECT * FROM community_logs WHERE id>? ORDER BY id LIMIT 100').all(since).map(r=>cleanLogValue({...r,data:JSON.parse(r.data)}));const range=this.db.prepare('SELECT min(id) first,max(id) last FROM community_logs').get();return {rows,cursor:rows.at(-1)?.id||since,hasMore:!!rows.length&&rows.at(-1).id<range.last,reset:since>0&&since<(range.first||0)-1}; }
   session() { return decode(this.db.prepare('SELECT data FROM learning_sessions ORDER BY at DESC LIMIT 1').get()); }
   saveSession(s) { this.db.prepare('INSERT INTO learning_sessions VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data').run(s.id,s.at,JSON.stringify({...s,updatedAt:Date.now()})); }
+  sessionSummary(id) {
+    if(!id)return {completed:0,failed:0,added:0};
+    const rows=this.db.prepare("SELECT data FROM jobs WHERE json_extract(data,'$.session')=?").all(id).map(decode);
+    return {completed:rows.filter(r=>r.status==='COMPLETED').length,failed:rows.filter(r=>['RETRYABLE','BLOCKED','PAUSED','ERROR'].includes(r.status)).length,added:rows.reduce((n,r)=>n+(Number(r.added)||0),0)};
+  }
   sourceState(id) { return decode(this.db.prepare('SELECT data FROM source_state WHERE id=?').get(id))||{id,status:'NEEDS_AUTH',nextAt:0,failures:0}; }
   saveSourceState(s) { this.db.prepare('INSERT OR REPLACE INTO source_state VALUES(?,?)').run(s.id,JSON.stringify(s)); }
   enqueue(source,items,cursor) { return this.tx(()=>{let added=0;for(const item of items){const r={...item,source:source.id,platform:source.platform,discoveredAt:Date.now(),updatedAt:Date.now(),offset:0,failures:0};added+=Number(this.db.prepare("INSERT OR IGNORE INTO material_queue VALUES(?,?,?,'DISCOVERED',?,0,?)").run(source.id,item.id,item.fingerprint,Date.now(),JSON.stringify(r)).changes);}this.advance(source,cursor);return added;}); }
@@ -159,6 +206,9 @@ export class CommunityStore {
     });
   }
   settle(reservation, usage) {
+    const stored=decode(this.db.prepare('SELECT data FROM usage WHERE id=?').get(reservation.id));
+    if(!stored||stored.status!=='reserved')return;
+    reservation=stored;
     const { input, output, reasoning = 0, cacheHit = 0 } = usage || {};
     if (![input, output, reasoning, cacheHit].every(n => Number.isSafeInteger(n) && n >= 0) || cacheHit > input || reasoning > output) throw Error('模型未提供可信的实际usage，保留预算预留并拒绝发布');
     const overrun=input > reservation.input || output > reservation.output;
@@ -169,12 +219,27 @@ export class CommunityStore {
   progress(reservation, observed) {
     const row=decode(this.db.prepare('SELECT data FROM usage WHERE id=?').get(reservation.id));
     if(!row||row.status!=='reserved')return;
-    const clean={};for(const key of ['estimatedOutput','estimatedReasoning'])if(Number.isSafeInteger(observed[key])&&observed[key]>=0)clean[key]=observed[key];
+    const clean={...row.observed};for(const key of ['estimatedOutput','estimatedReasoning'])if(Number.isSafeInteger(observed[key])&&observed[key]>=0)clean[key]=observed[key];
     if(observed.usage&&['input','output','reasoning','cacheHit'].every(k=>Number.isSafeInteger(observed.usage[k])&&observed.usage[k]>=0)
       &&observed.usage.cacheHit<=observed.usage.input&&observed.usage.reasoning<=observed.usage.output)clean.usage=Object.fromEntries(['input','output','reasoning','cacheHit'].map(k=>[k,observed.usage[k]]));
     this.db.prepare('UPDATE usage SET data=? WHERE id=?').run(JSON.stringify({...row,observed:clean,updatedAt:Date.now()}),row.id);
   }
-  finishRequest(reservation,state) {const row=decode(this.db.prepare('SELECT data FROM usage WHERE id=?').get(reservation.id));if(row)this.db.prepare('UPDATE usage SET data=? WHERE id=?').run(JSON.stringify({...row,requestState:state,terminalAt:Date.now()}),row.id);}
+  finishRequest(reservation,state) {const row=decode(this.db.prepare('SELECT data FROM usage WHERE id=?').get(reservation.id));if(row&&!row.requestState)this.db.prepare('UPDATE usage SET data=? WHERE id=?').run(JSON.stringify({...row,requestState:state,terminalAt:Date.now()}),row.id);}
+  reconcileUsage() {
+    const report={settled:0,unknown:0,recoveredRequests:0};
+    this.tx(()=>{for(const r of this.db.prepare("SELECT data FROM usage WHERE json_extract(data,'$.status')='reserved'").all()) {
+      const row=decode(r),job=this.job(row.job);
+      // Do not touch another live request. Terminal jobs or expired dead owners are recoverable.
+      let ended=!!row.requestState;
+      if(!ended&&job){let alive=true;try{process.kill(job.ownerPid,0);}catch{alive=false;}ended=!alive&&(['COMPLETED','RETRYABLE','CANCELLED','BLOCKED','ERROR','PAUSED'].includes(job.status)||job.deadline<=Date.now());}
+      if(!ended)continue;
+      if(!row.requestState){this.finishRequest(row,'INTERRUPTED');report.recoveredRequests++;}
+      const u=row.observed?.usage;
+      if(u&&['input','output','reasoning','cacheHit'].every(k=>Number.isSafeInteger(u[k])&&u[k]>=0)&&u.reasoning<=u.output&&u.cacheHit<=u.input){
+        try{this.settle(row,u);}catch(e){if(decode(this.db.prepare('SELECT data FROM usage WHERE id=?').get(row.id)).status!=='overrun')throw e;}report.settled++;
+      }else report.unknown++;
+    }});return report;
+  }
   usage(job=null,session=null) {
     const where=job?'job=?':session?'session_id=?':'day=?',arg=job||session||day(Date.now()),get=p=>`json_extract(data,'$.${p}')`,reserved=`${get('status')}='reserved'`;
     const sum=e=>`coalesce(sum(${e}),0)`;
@@ -189,12 +254,13 @@ export class CommunityStore {
     const committed=this.tx(() => {
       const current = this.source(source.id);
       if (!guard() || job.generation !== this.generation() || current?.revision !== source.revision || !sourceAllowed(current)) throw Error('学习代际或来源许可已变化，禁止旧结果发布');
-      let added = 0;
+      let added = 0;const publication={};
       for (const c of candidates) {
         const key = hash(JSON.stringify([c.kind, c.term.normalize('NFKC').toLowerCase(), c.meaning.normalize('NFKC')]));
         const row = this.db.prepare('SELECT * FROM knowledge WHERE id=?').get(key), old = decode(row);
         this.db.prepare('INSERT OR REPLACE INTO candidates(id,job,status,data,term_key) VALUES(?,?,?,?,?)').run(hash(job.id + ':' + key), job.id, row?.status === 'revoked' ? 'revoked' : 'approved', JSON.stringify(c),termKey(c.term));
         if (row?.status === 'revoked') continue;
+        for(const id of new Set(c.evidence.map(e=>e.id)))publication[id]=(publication[id]||0)+1;
         const {evidence:quotedEvidence,...content}=c;
         const next = { ...content, id: key, version: (row?.version || 0) + 1, at: old?.at || Date.now(), updatedAt: Date.now() };
         const duplicate=c.evidence.every(e=>{const item=items.find(i=>i.id===e.id);return !!this.db.prepare('SELECT 1 FROM evidence WHERE knowledge=? AND source=? AND document=? AND fingerprint=?').get(key,source.id,item?.id,item?.fingerprint);});
@@ -215,7 +281,7 @@ export class CommunityStore {
         if(item.complete!==false)this.db.prepare('INSERT OR IGNORE INTO documents VALUES(?,?,?,?)').run(source.id,item.id,item.fingerprint,Date.now());
         const row=this.material(source.id,item.id,item.fingerprint);if(row)this.checkpoint(row,item.complete===false?'QUEUED':'COMPLETED',{offset:item.nextOffset??row.offset,readCursor:item.readCursor??row.readCursor,reading:undefined,extracted:undefined,approved:undefined,finished:item.complete!==false,completedAt:item.complete===false?null:Date.now()});
       }
-      const nextJob={...job,added,status:'COMPLETED',finished:true,progress:100,version:job.version+1,completedAt:Date.now()};
+      const nextJob={...job,added,publication,status:'COMPLETED',finished:true,progress:100,version:job.version+1,completedAt:Date.now()};
       this.saveJob(nextJob);return {added,nextJob};
     });
     Object.assign(job,committed.nextJob);return committed.added;

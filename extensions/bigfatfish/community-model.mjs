@@ -22,57 +22,92 @@ export function providerUsage(u) {
   const usage={input:u.prompt_tokens,output:u.completion_tokens,reasoning:u.completion_tokens_details?.reasoning_tokens??0,cacheHit:u.prompt_cache_hit_tokens??u.prompt_tokens_details?.cached_tokens??0};
   return Object.values(usage).every(n=>Number.isSafeInteger(n)&&n>=0)&&usage.reasoning<=usage.output&&usage.cacheHit<=usage.input?usage:undefined;
 }
+const modelFailure = (stage, reason, choice, usage) => {
+  const parsed = providerUsage(usage);
+  const finishReason = choice?.finish_reason ?? null;
+  const suffix = [
+    finishReason ? `finish_reason=${finishReason}` : '',
+    parsed ? `output_tokens=${parsed.output}` : '',
+    parsed ? `reasoning_tokens=${parsed.reasoning}` : ''
+  ].filter(Boolean).join('，');
+  const error = Error(`DeepSeek ${stage} ${reason}${suffix ? `（${suffix}）` : ''}`);
+  error.modelDiagnostics = { stage, finishReason, usage: parsed || null, validJson: false };
+  return error;
+};
 // Keep only the structured answer and counters; raw reasoning is never retained.
 export class CommunityStream {
-  constructor(onUsage=()=>{}) { this.onUsage=onUsage;this.decoder=new StringDecoder('utf8');this.buffer='';this.data=[];this.content='';this.outputBytes=0;this.reasoningBytes=0;this.finishReason=null;this.usage=undefined;this.toolCalls=false;this.done=false; }
+  constructor(onUsage=()=>{}, {maxOutputTokens=1600,limits={}}={}) {
+    this.onUsage=onUsage;this.decoder=new StringDecoder('utf8');this.buffer='';this.data=[];this.content='';this.outputBytes=0;this.reasoningBytes=0;this.finishReason=null;this.usage=undefined;this.toolCalls=false;this.done=false;
+    // Token deltas repeat the SSE envelope. Bound wire overhead independently of the answer.
+    this.limits={transportBytes:Math.min(16*1024*1024,1024*1024+Math.max(1,Math.min(4096,maxOutputTokens))*2048),frameBytes:65536,bufferBytes:65536,contentChars:20000,...limits};
+    this.rawBytes=0;this.frameBytes=0;this.maxFrameBytes=0;this.frames=0;
+  }
+  diagnostics(limitType) {return {limitType,rawBytes:this.rawBytes,maxFrameBytes:this.maxFrameBytes,bufferBytes:Buffer.byteLength(this.buffer),contentBytes:this.outputBytes,contentChars:this.content.length,frames:this.frames,finishReason:this.finishReason,...(providerUsage(this.usage)?{usage:providerUsage(this.usage)}:{})};}
+  fail(limitType) {const e=Error('社区模型大小保护触发：'+limitType);e.modelDiagnostics=this.diagnostics(limitType);throw e;}
+  release() {this.buffer='';this.data=[];this.content='';this.decoder=new StringDecoder('utf8');}
   frame() {
-    const text=this.data.join('\n');this.data=[];if(!text||this.done)return;
+    const text=this.data.join('\n');this.data=[];this.frameBytes=0;if(!text||this.done)return;
     if(text==='[DONE]'){this.done=true;return;}
     let row;try{row=JSON.parse(text);}catch{throw Error('社区模型流式数据无效');}
     if(row.error)throw Error('社区模型流式请求失败');
-    const choice=row.choices?.[0],delta=choice?.delta||{};
+    this.frames++;const choice=row.choices?.[0],delta=choice?.delta||{};
     if(typeof delta.content==='string'){this.content+=delta.content;this.outputBytes+=Buffer.byteLength(delta.content);}
     if(typeof delta.reasoning_content==='string')this.reasoningBytes+=Buffer.byteLength(delta.reasoning_content);
     if(delta.tool_calls?.length)this.toolCalls=true;
     if(choice?.finish_reason)this.finishReason=choice.finish_reason;
     if(row.usage)this.usage=row.usage;
-    if(this.content.length>20000)throw Error('社区模型响应过大');
     this.onUsage({estimatedOutput:Math.ceil((this.outputBytes+this.reasoningBytes)/4),estimatedReasoning:Math.ceil(this.reasoningBytes/4),...(providerUsage(this.usage)?{usage:providerUsage(this.usage)}:{})});
+    if(this.content.length>this.limits.contentChars)this.fail('contentChars');
   }
   text(value) {
-    this.buffer+=value;if(this.buffer.length>262144)throw Error('社区模型响应过大');
-    let end;while((end=this.buffer.indexOf('\n'))>=0){const line=this.buffer.slice(0,end).replace(/\r$/,'');this.buffer=this.buffer.slice(end+1);if(!line)this.frame();else if(line.startsWith('data:'))this.data.push(line.slice(5).replace(/^ /,''));}
+    let start=0,end;
+    while((end=value.indexOf('\n',start))>=0){
+      this.buffer+=value.slice(start,end);start=end+1;
+      if(Buffer.byteLength(this.buffer)>this.limits.bufferBytes)this.fail('bufferBytes');
+      const line=this.buffer.replace(/\r$/,'');this.buffer='';
+      if(!line)this.frame();else if(line.startsWith('data:')){
+        this.frameBytes+=Buffer.byteLength(line)+1;this.maxFrameBytes=Math.max(this.maxFrameBytes,this.frameBytes);
+        if(this.frameBytes>this.limits.frameBytes)this.fail('frameBytes');
+        this.data.push(line.slice(5).replace(/^ /,''));
+      }
+    }
+    this.buffer+=value.slice(start);if(Buffer.byteLength(this.buffer)>this.limits.bufferBytes)this.fail('bufferBytes');
   }
-  push(chunk) { this.text(this.decoder.write(chunk)); }
-  end() {this.text(this.decoder.end()+'\n\n');return {choices:[{finish_reason:this.finishReason,message:{content:this.content,...(this.toolCalls?{tool_calls:[{}]}:{})}}],usage:this.usage};}
+  push(chunk) {this.rawBytes+=chunk.length;if(this.rawBytes>this.limits.transportBytes)this.fail('transportBytes');this.text(this.decoder.write(chunk));}
+  end() {this.text(this.decoder.end()+'\n\n');return {choices:[{finish_reason:this.finishReason,message:{content:this.content,...(this.toolCalls?{tool_calls:[{}]}:{})}}],usage:this.usage,diagnostics:this.diagnostics()};}
 }
-function completion(profile, body, signal, onUsage) {
+export function completion(profile, body, signal, onUsage, {request=https.request,resolveAddresses=resolveSafeAddresses}={}) {
   return new Promise(async (resolve, reject) => {
-    let req;
-    const abort = () => { req?.destroy(); reject(Error('社区模型请求已取消')); };
+    let req,res,stream,settled=false;const chunks=[];let bytes=0;
+    const finish=(error,value)=>{if(settled)return;settled=true;signal.removeEventListener('abort',abort);if(error){error.modelDiagnostics??=stream?.diagnostics();res?.destroy();req?.destroy();}stream?.release();chunks.length=0;error?reject(error):resolve(value);};
+    const abort = () => finish(Error('社区模型请求已取消'));
     try {
       signal.throwIfAborted();
       const u = new URL(profile.baseURL.replace(/\/+$/, '') + '/chat/completions');
       if (u.protocol !== 'https:' || u.username || u.password || u.search || u.hash) throw Error('模型接口必须为HTTPS');
-      const addresses = await resolveSafeAddresses(u.hostname); signal.throwIfAborted();
+      const addresses = await resolveAddresses(u.hostname); signal.throwIfAborted();
       const data = JSON.stringify(body);
-      req = https.request({ hostname: addresses[0], servername: u.hostname, port: u.port || 443, path: u.pathname,
-        method: 'POST', headers: { host: u.host, authorization: 'Bearer ' + profile.key, 'content-type': 'application/json', 'content-length': Buffer.byteLength(data) } }, res => {
-        const chunks = [],stream=/text\/event-stream/i.test(res.headers['content-type']||'')?new CommunityStream(onUsage):null;let bytes = 0;
-        res.on('data', chunk => {try{bytes += chunk.length;if(bytes>256000)throw Error('社区模型响应过大');if(stream)stream.push(chunk);else chunks.push(chunk);}catch(e){req.destroy();reject(e);}});
-        res.on('error', () => reject(Error('社区模型响应中断')));
-        res.on('aborted', () => reject(Error('社区模型响应中断')));
-        res.on('end', () => {
-          if (res.statusCode !== 200) { reject(Error('社区模型接口拒绝请求（HTTP ' + res.statusCode + '）')); return; }
-          try { resolve(stream?stream.end():JSON.parse(Buffer.concat(chunks).toString('utf8'))); } catch { reject(Error('社区模型未返回有效JSON或流式结果')); }
+      req = request({ hostname: addresses[0], servername: u.hostname, port: u.port || 443, path: u.pathname,
+        method: 'POST', headers: { host: u.host, authorization: 'Bearer ' + profile.key, 'content-type': 'application/json', 'content-length': Buffer.byteLength(data) } }, response => {
+        // Only successful SSE responses use the token-scaled wire budget.
+        res=response;
+        stream=response.statusCode===200&&/text\/event-stream/i.test(response.headers['content-type']||'')?new CommunityStream(onUsage,{maxOutputTokens:body.max_tokens}):null;
+        response.on('data', chunk => {if(settled)return;try{bytes+=chunk.length;if(stream)stream.push(chunk);else {if(bytes>256000){const e=Error('社区模型大小保护触发：httpBodyBytes');e.modelDiagnostics={limitType:'httpBodyBytes',rawBytes:bytes};throw e;}chunks.push(chunk);}}catch(e){finish(e);}});
+        response.on('error', () => finish(Error('社区模型响应中断')));
+        response.on('aborted', () => finish(Error('社区模型响应中断')));
+        response.on('end', () => {
+          if(settled)return;
+          if (response.statusCode !== 200) { finish(Error('社区模型接口拒绝请求（HTTP ' + response.statusCode + '）')); return; }
+          try { finish(null,stream?stream.end():JSON.parse(Buffer.concat(chunks).toString('utf8'))); } catch(e) { finish(e.modelDiagnostics?e:Error('社区模型未返回有效JSON或流式结果')); }
         });
       });
-      req.on('error', () => reject(Error('社区模型连接未完成')));
+      req.on('response', response=>{res=response;});
+      req.on('error', () => finish(Error('社区模型连接未完成')));
       signal.addEventListener('abort', abort, { once: true });
       req.on('close', () => signal.removeEventListener('abort', abort));
       if (signal.aborted) { abort(); return; }
       req.end(data);
-    } catch (e) { reject(e); }
+    } catch (e) { finish(e); }
   });
 }
 export function createCommunityModel({ pool, config, env = process.env, readCredential = readDshCredential, request = completion }) {
@@ -85,12 +120,16 @@ export function createCommunityModel({ pool, config, env = process.env, readCred
       const p = profile();
       const body = { model: p.model, messages: [{ role: 'system', content: COMMUNITY_SYSTEM }, { role: 'user', content: prompt }],
         max_tokens: maxOutputTokens, stream: true, stream_options:{include_usage:true}, response_format: { type: 'json_object' },
-        ...(p.deepseekCompat ? { thinking: { type: 'enabled' }, reasoning_effort: stage === 'verify' ? 'high' : 'low' } : {}) };
-      const response = await request(p, body, signal, onUsage);
+        ...(p.deepseekCompat ? { thinking: { type: 'disabled' } } : {}) };
+      let response;try{response=await request(p, body, signal, onUsage);}catch(e){e.modelDiagnostics={...e.modelDiagnostics,stage};throw e;}
       const choice = response.choices?.[0], u = response.usage;
       const usage=providerUsage(u);if(usage)onUsage({usage});
-      if (!choice || choice.finish_reason !== 'stop' || choice.message?.tool_calls?.length || typeof choice.message?.content !== 'string') throw Error('社区模型结果截断、含工具请求或格式无效');
-      return { text: choice.message.content, model: p.model, usage };
+      if (!choice) throw modelFailure(stage,'未返回结果',choice,u);
+      if (choice.finish_reason !== 'stop') throw modelFailure(stage,'响应未正常结束',choice,u);
+      if (choice.message?.tool_calls?.length) throw modelFailure(stage,'返回了禁止的工具请求',choice,u);
+      if (typeof choice.message?.content !== 'string' || !choice.message.content.trim()) throw modelFailure(stage,'返回空 content',choice,u);
+      try { JSON.parse(choice.message.content); } catch { throw modelFailure(stage,'返回非法 JSON',choice,u); }
+      return { text: choice.message.content, model: p.model, usage, finishReason: choice.finish_reason, validJson: true,diagnostics:response.diagnostics };
     }
   };
 }
