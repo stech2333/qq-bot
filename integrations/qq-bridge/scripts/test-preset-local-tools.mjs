@@ -238,10 +238,11 @@ test('守卫仍放行 QQ MCP 命名空间与无害模型侧工具', async () => 
     mod.apply({ tools: fakeTools });
 
     for (const prefix of EXPECTED_SAFE_PREFIXES) {
-      assert.equal(
-        fakeTools._guard({ name: `${prefix}some_tool` }), undefined,
-        `${id}: MCP 前缀 ${prefix} 应放行`,
-      );
+      assert.equal(typeof fakeTools._guard({ name: `${prefix}some_tool` }), 'string',
+        `${id}: 未知工具不能仅凭 MCP 前缀放行`);
+    }
+    for (const name of ['mcp__snowluma__qq_send_message', 'mcp__snowluma-host__snowluma_status', 'mcp__web-search-safe__web_fetch']) {
+      assert.equal(fakeTools._guard({ name }), undefined, `${id}: 已审核工具应放行`);
     }
     for (const name of ['ask_user_question', 'todo_write']) {
       assert.equal(fakeTools._guard({ name }), undefined, `${id}: ${name} 应放行`);

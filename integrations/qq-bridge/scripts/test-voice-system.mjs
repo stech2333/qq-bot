@@ -174,8 +174,11 @@ console.log('## qq-bridge 语音系统：控制台与 preset');
   ok(/语音默认关闭/.test(preset), '人设说明默认关闭');
   // DSH 0.1.7 起守卫的权威实现只有一份，在 qq-agent-presets bundle 里
   // （dsh/agent-presets/<preset>/qq-tool-restrict.mjs 只是 re-export 壳）。
-  ok(read(path.join('plugins', 'qq-agent-presets', 'qq-tool-restrict.mjs')).includes("'mcp__snowluma__'"),
-    'preset 白名单前缀放行语音工具');
+  const { apply } = await import('../plugins/qq-agent-presets/qq-tool-restrict.mjs');
+  let guard;
+  apply({ tools: { restrict() {}, guard(fn) { guard = fn; } } });
+  ok(guard({ name: 'mcp__snowluma__qq_send_voice' }) === undefined && typeof guard({ name: 'mcp__snowluma__exec' }) === 'string',
+    'preset 放行语音工具且拒绝可信前缀下的未知工具');
 }
 
 console.log('## 文档');

@@ -17,6 +17,7 @@ import { DiscussionTopics, topicSettings } from './discussion-topics.mjs';
 import { normalizeMemoryControl } from './memory-control.mjs';
 import { LearningWindow, windowSettings } from './learning-window.mjs';
 import { LearningResearch, researchSettings } from './learning-research.mjs';
+import { LearningJournal } from './learning-journal.mjs';
 import { GlobalStyle, globalStyleSettings } from './global-style.mjs';
 import { LearningSources } from './learning-sources.mjs';
 import { DeliveryLedger } from './delivery-ledger.mjs';
@@ -90,6 +91,7 @@ export class BigFatFish {
     const savedSettings = fs.existsSync(this.file) ? JSON.parse(fs.readFileSync(this.file, 'utf8')) : {};
     this.settings = validateSettings(savedSettings);
     if (Object.hasOwn(savedSettings, 'styleLearning') || Object.hasOwn(savedSettings,'groupStyleLearning')) { backupOnce(this.file); write(this.file, this.settings); }
+    this.learningLog = new LearningJournal(root);
     this.memory = new MemoryManager(this);
     this.mood = new MoodManager(this);
     this.interestMemory = new InterestMemory(this);
@@ -106,6 +108,7 @@ export class BigFatFish {
     this.slang = new SlangManager(this);
     this.personas = new PersonaManager(this);
     this.community = new CommunityLearning(this);
+    this.learningLog.write('system','STARTED',{status:'READY'});
     this.ledgerFile = path.join(root, 'state', 'bigfatfish-proactive.json');
     this.ledger = fs.existsSync(this.ledgerFile) ? JSON.parse(fs.readFileSync(this.ledgerFile, 'utf8')) : { events: [], leases: {} };
     this.ledger.events ??= []; this.ledger.leases ??= {};
@@ -128,7 +131,7 @@ export class BigFatFish {
   }
   observeTopics(key, st) {
     this.learningWindow.ingest(key, st, st.recentMessages || []);
-    if (this.discussions.scan(st.bigfatfish, this.learningWindow.messages(key, st))) { st.bigfatfish.memoryRevision++; return true; }
+    if (this.discussions.scan(st.bigfatfish, this.learningWindow.messages(key, st))) { st.bigfatfish.memoryRevision++;this.learningLog.write('topic','CANDIDATES_UPDATED',{key,status:'OBSERVED',counts:{topics:st.bigfatfish.learnedInterests.length,active:st.bigfatfish.learnedInterests.filter(t=>t.status==='active').length}});return true; }
     return false;
   }
   text(value) { const s = String(value ?? '').trim(); if (!s || !this.privacy.reference(s)) throw new Error('内容不适合保存或发送'); return s; }
@@ -506,7 +509,7 @@ export class BigFatFish {
           allow: this.config.allow, deny: this.config.deny, gatewayQQ: hooks.gatewayQQ(), requests: this.requestList(),
           capabilities: { joinGroup: false, addFriend: false, processFriendRequest: true, processGroupRequest: true }, voice: hooks.voice(),
           nativeSwitches: { socialV2: this.config.socialV2?.enabled !== false, proactive: this.config.socialV2?.proactive?.enabled !== false },
-          research: this.research.snapshot(), legacy: this.legacyList(), sessions: [...this.states].map(([key, st]) => ({ key, mode: st.bigfatfish?.mode, facts: st.bigfatfish?.facts.length ?? 0,
+          research: this.research.snapshot(), learningLog:this.learningLog.snapshot(), legacy: this.legacyList(), sessions: [...this.states].map(([key, st]) => ({ key, mode: st.bigfatfish?.mode, facts: st.bigfatfish?.facts.length ?? 0,
             learningWindow: this.learningWindow.snapshot(key, st), queues: this.contextInitiative.queues(st),
             interest: this.score(key, st), topics: this.discussions.snapshot(st.bigfatfish), nextCheckAt: st.bigfatfish?.nextCheckAt, unanswered: st.bigfatfish?.unanswered || 0, decisions: st.bigfatfish?.decisions ?? [] })) }); return true;
       }

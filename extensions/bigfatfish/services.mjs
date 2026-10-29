@@ -3,6 +3,7 @@ import path from 'node:path';
 import net from 'node:net';
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { pathToFileURL } from 'node:url';
 import { readOneBotTokens } from '../../integrations/qq-bridge/src/snowluma-conn.js';
 
 const exec = promisify(execFile);
@@ -44,6 +45,8 @@ export class ServiceManager {
       const m = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/.exec(line);
       if (m) env[m[1]] = m[2].replace(/^(['"])(.*)\1$/, '$2');
     }
+    const preload = '--import=' + pathToFileURL(path.join(this.root, 'extensions/bigfatfish/model-network-preload.mjs')).href;
+    if (!String(env.NODE_OPTIONS || '').split(/\s+/).includes(preload)) env.NODE_OPTIONS = [env.NODE_OPTIONS, preload].filter(Boolean).join(' ');
     return env;
   }
   async gateway() {

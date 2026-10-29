@@ -51,7 +51,8 @@ export class LearningWindow {
         fs.writeFileSync(tmp, rows.map(m => JSON.stringify(m) + '\n').join(''), { mode: 0o600 }); fs.renameSync(tmp, file); win.compactAt = now;
       } else if (added.length) fs.appendFileSync(file, added.map(m => JSON.stringify(m) + '\n').join(''), { mode: 0o600 });
       win.rows = new Map(rows.map(m => [m.messageId, m]));
-    } catch { this.errors.set(key, '学习记录保存失败，本轮学习已暂停'); return false; }
+    } catch { this.errors.set(key, '学习记录保存失败，本轮学习已暂停');this.app.learningLog?.write('window','SAVE_FAILED',{key,status:'FAILED',reasonCode:'JOURNAL_WRITE'});return false; }
+    if(added.length)this.app.learningLog?.write('window','SAMPLES_SAVED',{key,status:'PERSISTED',counts:{added:added.length,retained:rows.length}});
     return added.length > 0;
   }
   messages(key, st, now = Date.now()) {

@@ -151,7 +151,8 @@ export class MoodManager {
       m.history = [...m.history, { at, kind: turn.kind, ...result, applied: result.confidence >= p.minConfidence, value: +m.value.toFixed(1) }].slice(-40);
       try { if (this.save?.({ strict: true }) === false) throw Error(); }
       catch { st.bigfatfish.mood = before; throw Error(); }
-    } catch { if (m.revision === revision && JSON.stringify(m.config) === fingerprint) { m.status = '判断失败，未改变心情；本次调用计入额度'; this.persist(st); } }
+      this.app.learningLog?.write('mood','EVALUATION_SAVED',{key,status:'PERSISTED',counts:{applied:result.confidence>=p.minConfidence?1:0,history:m.history.length}});
+    } catch { if (m.revision === revision && JSON.stringify(m.config) === fingerprint) { m.status = '判断失败，未改变心情；本次调用计入额度'; this.persist(st);this.app.learningLog?.write('mood','EVALUATION_FAILED',{key,status:'FAILED',reasonCode:'MODEL_OR_VALIDATION_OR_SAVE'}); } }
   }
   async admin(req, body, hooks) {
     const key = String(body.key || ''); if (!/^(group|private):[1-9]\d{4,15}$/.test(key)) throw Error('会话 key 无效');

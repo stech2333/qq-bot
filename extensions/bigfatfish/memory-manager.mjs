@@ -70,7 +70,8 @@ export class MemoryManager {
       tx.st.bigfatfish.lastRecall = null;
       tx.st.bigfatfish.memoryRevision++;
       if (tx.hooks.save({ strict: true }) === false) throw Error('记忆未能保存');
-    } catch { this.rollback(tx); throw Error('记忆保存失败，修改未生效'); }
+    } catch { this.rollback(tx);this.app.learningLog?.write('memory','SAVE_FAILED',{key:tx.key,status:'FAILED',reasonCode:'STATE_WRITE'});throw Error('记忆保存失败，修改未生效'); }
+    this.app.learningLog?.write('memory','SAVED',{key:tx.key,status:'PERSISTED',counts:{facts:tx.st.bigfatfish.facts.length,archived:tx.st.bigfatfish.memoryArchive.length,summaryChars:tx.st.bigfatfish.summary.length,interests:tx.st.bigfatfish.learnedInterests.length,revision:tx.st.bigfatfish.memoryRevision}});
   }
   view(key, st, query = '') {
     this.app.cleanMemory(st);

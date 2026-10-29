@@ -148,6 +148,7 @@ export class ApiPool {
       if (!previous && this.state.entries.length >= 50) throw fail('API 池最多保存50个条目');
       const entry = normalize(input, previous);
       if (entry.id === this.state.activeId && !entry.enabled) throw fail('请先切换到其他条目，再停用当前条目');
+      if (entry.id === this.options.communityRoute?.() && (!entry.enabled || !entry.baseURL || !entry.model || entry.protocol !== 'openai-completions' || !/deepseek/i.test(entry.model))) throw fail('该接口供社区学习使用，请先切换社区模型路由');
       const key = input.apiKey;
       if (key !== undefined && typeof key !== 'string') throw fail('API Key 格式无效');
       if (previous && (key?.trim() || ['baseURL', 'model', 'protocol', 'effort', 'vision', 'deepseekCompat', 'contextWindow', 'maxTokens'].some(field => entry[field] !== previous[field]))) entry.lastTest = null;
@@ -187,6 +188,7 @@ export class ApiPool {
     return this.lock(async () => {
       this.check(); this.revision(input.revision); const entry = this.entry(input.id);
       if (this.state.activeId === entry.id) throw fail('不能删除正在使用的条目，请先切换');
+      if (this.options.communityRoute?.() === entry.id) throw fail('不能删除社区学习使用的条目，请先切换社区模型路由');
       if (this.testing.has(entry.id)) throw fail('该条目正在测试，请稍后删除', 409);
       await this.mutate(entry, true);
       await this.rpc('credentials.unset', { ref: poolCredential(entry) });

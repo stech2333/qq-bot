@@ -60,6 +60,6 @@ export class GlobalStyle {
     else if(body.action==='publish'){next.published=enumList(STRATEGIES,body.strategies,6);this.record(next,'admin');}
     else if(body.action==='configure'){if(typeof body.locked==='boolean')next.locked=body.locked;}
     else throw Error('全局风格操作无效');
-    next.revision++;next.updatedAt=Date.now();next.research={};this.save(next);return this.view();
+    next.revision++;next.updatedAt=Date.now();next.research={};this.save(next);this.app.learningLog?.write('style','ADMIN_SAVED',{status:'PERSISTED',reasonCode:body.action.toUpperCase(),counts:{version:next.version,features:Object.keys(next.features).length,expressions:next.expressionExamples.length}});return this.view();
   }
 }

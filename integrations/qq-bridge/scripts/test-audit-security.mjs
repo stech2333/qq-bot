@@ -113,6 +113,15 @@ test('HTTP transport pins the validated IP and preserves Host and TLS SNI', asyn
   assert.equal(requests[0].options.headers.host, 'public.test');
   assert.equal(requests[0].options.servername, 'public.test');
   assert.equal(requests[0].options.path, '/page?q=1');
+  assert.equal(requests[0].options.agent, false, '工具抓取不复用可能已失效的连接池 socket');
+});
+
+test('QQ web fetch refuses nonstandard ports including redirect targets', async (t) => {
+  const { requests } = mockTransport(t, [{ status: 302, headers: { location: 'https://public.test:8443/admin' } }]);
+  await assert.rejects(safeFetch('https://public.test:8443/', 100, { publicWebOnly: true }), /标准/);
+  assert.equal(requests.length, 0);
+  await assert.rejects(safeFetch('https://public.test/', 100, { publicWebOnly: true }), /标准/);
+  assert.equal(requests.length, 1);
 });
 
 test('dual-stack hosts try IPv4 first and fail over to the next validated address', async (t) => {

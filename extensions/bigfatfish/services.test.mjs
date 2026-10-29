@@ -60,6 +60,15 @@ test('local service addresses cannot redirect startup or credentials to a remote
   assert.equal(localPort('http://127.0.0.1:3086'), 3086);
   for (const address of ['http://example.com:3086', 'http://user:secret@localhost:3086', 'file:///etc/passwd']) assert.throws(() => localPort(address));
 });
+
+test('model services install public-only campus transport while preserving other Node options', t => {
+  const { manager, root } = fixture(t);
+  fs.writeFileSync(path.join(root, '.env'), 'NODE_OPTIONS=--max-old-space-size=1024\n');
+  for (const name of ['dsh', 'bridge']) {
+    const value = manager.environment(name).NODE_OPTIONS;
+    assert.match(value, /--max-old-space-size=1024/); assert.match(value, /--import=file:.*model-network-preload\.mjs/);
+  }
+});
 test('gateway startup uses bundled Node and enables discovery without changing saved runtime preferences', async t => {
   const { manager, root } = fixture(t); const home = path.join(root, 'snowluma'); fs.mkdirSync(home);
   for (const file of ['node.exe', 'index.mjs', 'check-node-version.cjs']) fs.writeFileSync(path.join(home, file), '');

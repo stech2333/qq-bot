@@ -87,7 +87,7 @@ console.log('## 4. bundle 声明与安全边界');
 
   const canonical = path.join(BUNDLE_DIR, 'qq-tool-restrict.mjs');
   const canonicalText = read(canonical);
-  for (const needle of ["const SAFE_PREFIXES", "'mcp__snowluma__'", "'mcp__web-search-safe__'", 'SAFE_EXACT', 'return `工具 "']) {
+  for (const needle of ["const SAFE_MCP_TOOLS", "'qq_send_message'", "'mcp__web-search-safe__web_fetch'", 'SAFE_EXACT', 'return `工具 "']) {
     ok(canonicalText.includes(needle), `权威守卫包含 ${needle}`);
   }
   // 一份实现：两个 preset 目录下的同名文件必须是 re-export 壳，且导出同名成员。
@@ -99,7 +99,7 @@ console.log('## 4. bundle 声明与安全边界');
     const shimMod = await import(pathToFileURL(shim).href);
     assert.equal(shimMod.apply, canonicalMod.apply, `${name}: 壳与实现在同一模块实例上`);
     assert.equal(shimMod.name, 'qq-tool-restrict');
-    assert.deepEqual(shimMod.inject, ['tools']);
+    assert.deepEqual(shimMod.inject, ['tools', 'systemPrompt']);
   }
   ok(true, 're-export 壳与权威实现导出同一份 apply/inject');
 

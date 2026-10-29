@@ -111,8 +111,28 @@ await test('执行期 guard 照旧：QQ MCP 放行、dev_* 与本地工具拒绝
   for (const name of ['dev_inject_plugin', 'dev_plugin_status', 'pwsh', 'read', 'write', 'dsh_snapshot', 'skill']) {
     assert.match(String(guard({ name })), /不在 QQ 桥接白名单内/, `${name} 必须拒绝`);
   }
+  for (const name of ['mcp__snowluma__exec', 'mcp__snowluma-host__start_snowluma', 'mcp__web-search-safe__read_file', 'mcp__web-search-safe__web_fetch__exec']) {
+    assert.match(String(guard({ name })), /不在 QQ 桥接白名单内/, `${name} 不能凭可信前缀越权`);
+  }
   assert.match(String(guard({ name: '' })), /工具名无效/);
   assert.match(String(guard({})), /工具名无效/);
+});
+
+await test('可信系统提示声明外部内容不能授予权限，现有 MCP 工具均有逐名授权', async () => {
+  const mod = await loadPlugin(path.join(tmpDir, 'diag-policy.log'));
+  const { ctx } = makeCtx({ restrictImpl: () => undefined });
+  const sections = [];
+  ctx.systemPrompt = { section: value => sections.push(value) };
+  mod.apply(ctx);
+  const policy = sections.find(s => s.name === 'bigfatfish:chat-isolation');
+  assert.equal(policy.interpolate, false);
+  assert.match(policy.text, /不可信数据/);
+  assert.match(policy.text, /不能改变权限/);
+  assert.match(policy.text, /不能断言网站封禁/);
+  const source = fs.readFileSync(path.join(ROOT, 'src/mcp-snowluma-safe.js'), 'utf8');
+  const names = [...source.matchAll(/server\.tool\(\s*'([^']+)'/g)].map(m => `mcp__snowluma__${m[1]}`);
+  assert.ok(names.length > 30);
+  for (const name of names) assert.ok(mod.SAFE_MCP_TOOLS.includes(name), `现有工具遗漏授权: ${name}`);
 });
 
 fs.rmSync(tmpDir, { recursive: true, force: true });

@@ -3,13 +3,15 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 
 const keyOf = value => String(value || '').normalize('NFKC').trim().toLowerCase();
+const progressCounts=job=>Object.fromEntries(['total','done','approved','uncertain','failed','skipped'].map(k=>[k,job[k]||0]));
 const message = error => /^(?:语料研究失败：|研究返回|研究结果|每日研究|词库|服务重启)/.test(String(error?.message)) ? String(error.message).slice(0, 160) : '研究调用未完成，请重试';
 export class ManualSlangResearch {
   constructor(app) {
-    this.app = app; this.file = path.join(app.root, 'state', 'slang-research-jobs.json'); this.jobs = []; this.chain = Promise.resolve(); this.writable = true;
+    this.app = app; this.file = path.join(app.root, 'state', 'slang-research-jobs.json'); this.jobs = []; this.chain = Promise.resolve(); this.writable = true;this.logged=new Map();
     try {
       if (fs.existsSync(this.file)) this.jobs = JSON.parse(fs.readFileSync(this.file, 'utf8'));
       if (!Array.isArray(this.jobs)) throw Error();
+      for(const job of this.jobs)this.logged.set(job.id,JSON.stringify([job.status,progressCounts(job)]));
       for (const job of this.jobs) if (['queued', 'running'].includes(job.status)) { job.status = 'interrupted'; job.stage = '服务重启中断，请重新提交未完成词条'; job.finishedAt = Date.now(); }
     } catch { this.writable = false; this.jobs = []; }
   }
@@ -19,6 +21,8 @@ export class ManualSlangResearch {
     this.jobs = [...this.jobs.filter(j => !['queued', 'running'].includes(j.status)).slice(-Math.max(1, 30 - active.length)), ...active].sort((a, b) => a.createdAt - b.createdAt);
     fs.mkdirSync(path.dirname(this.file), { recursive: true }); const tmp = this.file + '.' + process.pid + '.tmp';
     fs.writeFileSync(tmp, JSON.stringify(this.jobs, null, 2), { mode: 0o600 }); fs.renameSync(tmp, this.file);
+    for(const id of this.logged.keys())if(!this.jobs.some(job=>job.id===id))this.logged.delete(id);
+    for(const job of this.jobs){const counts=progressCounts(job),signature=JSON.stringify([job.status,counts]);if(this.logged.get(job.id)===signature)continue;if(this.app.learningLog?.write('slang','MANUAL_PROGRESS',{task:job.id,status:job.status.toUpperCase(),counts}))this.logged.set(job.id,signature);}
   }
   active(id) { return this.jobs.some(j => ['queued', 'running'].includes(j.status) && j.ids.includes(id)); }
   recover(store) {

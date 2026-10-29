@@ -64,6 +64,18 @@ test('active and testing entries cannot be deleted or disabled', async t => {
   await assert.rejects(f.pool.remove({ revision: f.pool.state.revision, id: a.id }), /先切换/);
   await assert.rejects(f.pool.save({ revision: f.pool.state.revision, id: a.id, enabled: false }), /先切换/);
 });
+
+test('dedicated community routes protect their credential even when not selected for chat', async t => {
+  const f = fixture(t), saved = await f.add({ model: 'deepseek-flash', deepseekCompat: true });
+  f.options.communityRoute = () => saved.id;
+  await assert.rejects(f.pool.remove({ revision: f.pool.state.revision, id: saved.id }), /社区/);
+  for (const patch of [{ enabled: false }, { baseURL: '' }, { protocol: 'openai-responses' }, { model: 'other-model' }]) {
+    await assert.rejects(f.pool.save({ revision: f.pool.state.revision, id: saved.id, ...patch }), /社区/);
+  }
+  assert.equal(f.credentials.size, 1); assert.equal(f.pool.state.activeId, null);
+  f.options.communityRoute = () => 'builtin';
+  await f.pool.remove({ revision: f.pool.state.revision, id: saved.id }); assert.equal(f.credentials.size, 0);
+});
 test('failed activation never changes the active selection or other provider routes', async t => {
   const f = fixture(t); const a = await f.add(); f.credentials.clear();
   f.providers['unrelated-provider'] = { untouched: true };

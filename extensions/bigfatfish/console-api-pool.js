@@ -3,7 +3,7 @@
   const grid = document.querySelector('#mainContent .grid');
   const section = document.createElement('section'); section.className = 'card span-all'; section.dataset.page = 'model-pool'; section.id = 'section-api-pool'; section.hidden = true;
   section.innerHTML = `<h2>模型与 API 池</h2>
-    <p>为每个接口或密钥保存一个条目，手动实时切换；下一次请求生效，进行中的回复继续完成。聊天、话题、风格和黑话研究共用当前选项。</p>
+    <p>为每个接口或密钥保存一个条目，手动实时切换；下一次请求生效，进行中的回复继续完成。聊天、话题、风格和黑话研究共用当前选项。社区学习可在社区页面独立选择接口。</p>
     <p>联网搜索单独配置：聊天中转可用不代表它支持原 DeepSeek 搜索接口。这里的测试不发送 QQ 消息。原用量页面的费用仍为内置价格估算，中转费用请以平台账单为准。</p>
     <p id="poolCurrent" role="status">读取中…</p><p id="poolNotice" role="status"></p>
     <div class="row"><button type="button" id="poolRefresh">刷新</button><button type="button" id="poolBuiltin">切回原接口</button><button type="button" id="poolNew">＋ 新增 API</button></div>

@@ -18,6 +18,7 @@ export function researchMeta(value = {}) {
     reason: String(value?.reason || '').slice(0, 160), fingerprint: String(value?.fingerprint || '').slice(0, 500) };
 }
 const today = now => new Date(now).toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
+const jobCode=job=>({globalStyle:'GLOBAL_STYLE',topic:'TOPIC',slang:'SLANG','slang-manual':'SLANG_MANUAL'}[job.kind]||'RESEARCH');
 function parseResult(text) {
   if (text && typeof text === 'object') return text;
   const raw = String(text).replace(/^\s*```(?:json)?\s*|\s*```\s*$/g, '').trim();
@@ -93,11 +94,12 @@ export class LearningResearch {
   reserve(job, now) {
     const p = this.app.settings.learningResearch;
     const ledger = this.ledger.filter(row => now - row.at < 8 * 86400000);
-    if (job.kind === 'globalStyle' && ledger.filter(row => row.kind === job.kind && today(row.at) === today(now)).length >= this.app.settings.globalStyleLearning.dailyCap) return false;
-    if (ledger.filter(row => today(row.at) === today(now)).length >= p.maxPerDay) return false;
+    if (job.kind === 'globalStyle' && ledger.filter(row => row.kind === job.kind && today(row.at) === today(now)).length >= this.app.settings.globalStyleLearning.dailyCap) {this.app.learningLog?.write('research','GLOBAL_STYLE_BUDGET_BLOCKED',{status:'PAUSED',reasonCode:'DAILY_STYLE_QUOTA'});return false;}
+    if (ledger.filter(row => today(row.at) === today(now)).length >= p.maxPerDay) {this.app.learningLog?.write('research',jobCode(job)+'_BUDGET_BLOCKED',{key:job.key,status:'PAUSED',reasonCode:'DAILY_RESEARCH_QUOTA'});return false;}
     ledger.push({ kind: job.kind, key: job.key ?? null, at: now });
     fs.mkdirSync(path.dirname(this.file), { recursive: true }); const tmp = this.file + '.' + process.pid + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(ledger), { mode: 0o600 }); fs.renameSync(tmp, this.file); this.ledger = ledger; return true;
+    fs.writeFileSync(tmp, JSON.stringify(ledger), { mode: 0o600 }); fs.renameSync(tmp, this.file); this.ledger = ledger;
+    job.auditTask=this.app.learningLog?.write('research',jobCode(job)+'_RESERVED',{key:job.key,status:'RESERVED',counts:{todayUsed:ledger.filter(row=>today(row.at)===today(now)).length}});return true;
   }
   current(job, now) {
     const app = this.app;
@@ -161,10 +163,10 @@ export class LearningResearch {
         const known = new Set(selected.map(m => m.messageId)), ids = [...new Set(Array.isArray(output.sourceMessageIds) ? output.sourceMessageIds.map(String) : [])];
         if (ids.length < 3 || ids.some(id => !known.has(String(id)))) throw Error('研究未引用足够的真实语料');
         if (!Number.isFinite(output.confidence) || output.confidence < 0 || output.confidence > 1) throw Error('研究置信度无效');
-        if (!this.current(job, Date.now())) continue;
+        if (!this.current(job, Date.now())) {this.app.learningLog?.write('research',jobCode(job)+'_CANCELLED',{key:job.key,task:job.auditTask,status:'CANCELLED',reasonCode:'SOURCE_OR_POLICY_CHANGED'});continue;}
         const approved = output.approved === true && output.confidence >= app.settings.learningResearch.minConfidence;
         const senses = approved && job.kind === 'slang' ? await app.slang.applyResearch(job.entry, output, selected) : [];
-        if (!this.current(job, Date.now())) continue;
+        if (!this.current(job, Date.now())) {this.app.learningLog?.write('research',jobCode(job)+'_CANCELLED',{key:job.key,task:job.auditTask,status:'CANCELLED',reasonCode:'SOURCE_OR_POLICY_CHANGED'});continue;}
         const before = structuredClone(job.kind === 'slang' ? job.entry : job.st.bigfatfish);
         try {
           job.entry[field] = { status: approved ? 'approved' : 'rejected', at: Date.now(), nextAt: Date.now() + p.retryMinutes * 60000,
@@ -180,16 +182,18 @@ export class LearningResearch {
           else { app.cleanMemory(job.st); job.st.bigfatfish.memoryRevision++; if (this.save({ strict: true }) === false) throw Error('研究结果保存失败'); }
         } catch (error) { if (job.kind === 'slang') Object.assign(job.entry, before); else { job.st.bigfatfish = before; job.state=before; } throw error; }
         this.lastError = '';
+        this.app.learningLog?.write('research',jobCode(job)+'_COMPLETED',{key:job.key,task:job.auditTask,status:job.entry.research.status.toUpperCase(),counts:{samples:selected.length,verifiedSenses:senses.length,active:job.entry.status==='active'||job.entry.status==='confirmed'?1:0}});
       } catch (error) {
         // Keep candidates inactive on malformed output or transport/storage failure.
-        if(!this.current(job,Date.now()))continue;
+        if(!this.current(job,Date.now())){this.app.learningLog?.write('research',jobCode(job)+'_CANCELLED',{key:job.key,task:job.auditTask,status:'CANCELLED',reasonCode:'SOURCE_OR_POLICY_CHANGED'});continue;}
         const entry = job.kind === 'slang' ? job.store.entries().find(e => e.id === job.entry.id) : job.st.bigfatfish.learnedInterests.find(e => e.id === job.entry.id);
         const detail = /^(?:语料研究失败：|研究未引用|研究置信度|研究返回|黑话研究|风格研究|研究结果保存|研究状态保存)/.test(String(error?.message)) ? String(error.message).slice(0, 120) : '研究返回无效或服务未完成';
         if (entry) entry[field] = { status: 'failed', at: Date.now(), nextAt: Date.now() + p.retryMinutes * 60000, fingerprint: job.fingerprint, reason: detail };
         this.lastError = '部分候选研究未完成，已保留候选并安排重试';
         try { job.kind === 'slang' ? job.store.save() : this.save({ strict: true }); } catch {}
+        this.app.learningLog?.write('research',jobCode(job)+'_FAILED',{key:job.key,task:job.auditTask,status:'FAILED',reasonCode:error instanceof SyntaxError?'JSON_PARSE':'RESEARCH_VALIDATION_OR_SAVE'});
       }
     }
   }
-  snapshot(now = Date.now()) { return { running: this.running, todayUsed: this.ledger.filter(row => today(row.at) === today(now)).length, policy: this.app.settings.learningResearch, error: this.lastError }; }
+  snapshot(now = Date.now()) {const todayUsed=this.ledger.filter(row=>today(row.at)===today(now)).length;return {running:this.running,todayUsed,budgetExhausted:todayUsed>=this.app.settings.learningResearch.maxPerDay,policy:this.app.settings.learningResearch,error:this.lastError};}
 }

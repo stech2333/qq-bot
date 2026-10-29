@@ -7,6 +7,7 @@ const root=path.resolve(__dirname,'..');
  const fixture=await startConsoleFixture(),browser=await playwright.chromium.launch({channel:'chrome',headless:true});
  try{
   const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[],passed=[];page.on('pageerror',e=>errors.push(e.message));page.setDefaultTimeout(10000);
+  const modelId='d'.repeat(32);await page.route('**/api/model-pool',route=>route.fulfill({json:{ok:true,activeId:null,entries:[{id:modelId,name:'校园独立接口',model:'deepseek-flash',enabled:true,keyStored:true,protocol:'openai-completions'}]}}));
   const communityRequests=()=>fixture.requests.filter(r=>r.path==='/api/bigfatfish/community');
   const settingsWrites=()=>fixture.requests.filter(r=>r.path==='/api/bigfatfish/settings'&&r.body?.communityLearning);
   const actions=action=>communityRequests().filter(r=>r.body?.action===action);
@@ -20,6 +21,7 @@ const root=path.resolve(__dirname,'..');
   assert.deepEqual(await page.locator('#consoleSubnav [data-family=learning] [data-subpage]').evaluateAll(n=>n.map(x=>x.dataset.subpage)),['bff-memory','bff-global-style','slang','bff-community']);
   await enter();await status('STOPPED');assert.equal(new URL(page.url()).hash,'#bff-community');assert.equal(await page.locator('#section-bff-community').isVisible(),true);assert.equal(await page.locator('#section-bff-memory').isVisible(),false);assert.equal(await page.locator('[data-subpage=bff-community]').getAttribute('aria-pressed'),'true');
   const policy=page.locator('#bfCommunityPolicy'),field=name=>policy.locator('[name='+name+']'),source=page.locator('#bfCommunitySource');
+  await field('modelRoute').selectOption(modelId);await save();assert.equal(settingsWrites().at(-1).body.communityLearning.modelRoute,modelId);assert.equal(fixture.requests.filter(r=>r.path==='/api/model-pool/activate').length,0);passed.push('independent community model route saves without switching chat');
   assert.equal(await page.locator('#bfCommunityBudget input').count(),5);assert.equal(await page.locator('#bfCommunityAdvancedBudget input').count(),11);assert.equal(await page.locator('#bfCommunityAdvanced').evaluate(d=>d.open),false);
   assert.match(await page.locator('#bfCommunityBudget').textContent(),/推理Token已包含在输出/);assert.match(await page.locator('#bfCommunityAdvanced').textContent(),/UTF-8字节，不是Token/);assert.match(await page.locator('#bfCommunityCostExample').textContent(),/0\.036 元/);passed.push('four sibling pages, initial memory isolation, six main entries, fee layout/help');
   // Native hash refresh and browser history use the shared navigation state, not click-only handlers.

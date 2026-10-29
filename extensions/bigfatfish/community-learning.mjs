@@ -8,7 +8,7 @@ import { COMMUNITY_SYSTEM } from './community-model.mjs';
 import { STRATEGIES } from './expression-memory.mjs';
 import { atomicJson } from './state-store.mjs';
 
-const DEFAULTS = { enabled:false,applyKnowledge:true,platforms:{},topics:['互联网文化','游戏文化'],intensity:'low',batchSize:8,
+const DEFAULTS = { enabled:false,applyKnowledge:true,modelRoute:'follow-chat',platforms:{},topics:['互联网文化','游戏文化'],intensity:'low',batchSize:8,
   dailyTokenBudget:null,dailyInputTokens:null,dailyOutputTokens:null,dailyCostLimit:2,sessionCostLimit:null,
   inputPriceCeiling:null,outputPriceCeiling:null,maxOutputTokens:1600,maxRuntimeSeconds:180,requestTimeoutSeconds:60,
   requestContextBytes:48000,discoverySeconds:60,minRequestMs:2500,maxRetries:3,circuitFailures:3,retryBaseSeconds:15 };
@@ -17,6 +17,7 @@ export function communitySettings(value = {}) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw Error('社区学习配置须为对象');
   const p = Object.fromEntries(Object.entries(DEFAULTS).map(([k,v])=>[k,value[k]===undefined?v:value[k]]));
   for (const k of ['enabled', 'applyKnowledge']) if (typeof p[k] !== 'boolean') throw Error('社区学习开关无效');
+  if (typeof p.modelRoute !== 'string' || !/^(?:follow-chat|builtin|[a-f0-9]{32})$/.test(p.modelRoute)) throw Error('社区学习模型路由无效');
   if (!['low','normal'].includes(p.intensity) || !Array.isArray(p.topics) || p.topics.length > 8 || p.topics.some(t=>typeof t!=='string'||t.length<2||t.length>30||!safeGeneralText(t))) throw Error('学习强度或主题无效');
   p.topics = [...new Set(p.topics)];
   if (!p.platforms || typeof p.platforms !== 'object' || Array.isArray(p.platforms) || Object.keys(p.platforms).some(k=>!Object.hasOwn(PLATFORMS,k))) throw Error('平台配置无效');

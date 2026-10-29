@@ -26,7 +26,8 @@ export class StyleLearning {
     return out;
   }
   async run(job,runner){if(!this.current(job))return;const app=this.app,p=app.settings.globalStyleLearning,work=structuredClone(app.globalStyle.state);work.research={status:'researching',nextAt:Date.now()+p.refreshHours*3600000};app.globalStyle.save(work);
-    try{const raw=await runner({kind:'globalStyle',key:'global',prompt:this.prompt(job)});if(!this.current(job))return;const parsed=this.parse(job,raw),next=structuredClone(app.globalStyle.state),now=Date.now();let changes=0;
+    app.learningLog?.write('style','RESEARCH_STARTED',{task:job.auditTask,status:'RUNNING',counts:{samples:job.rows.length}});
+    try{const raw=await runner({kind:'globalStyle',key:'global',prompt:this.prompt(job)});if(!this.current(job)){app.learningLog?.write('style','CANCELLED',{task:job.auditTask,status:'CANCELLED',reasonCode:'SOURCE_OR_POLICY_CHANGED'});return;}const parsed=this.parse(job,raw),next=structuredClone(app.globalStyle.state),now=Date.now();let changes=0;
       for(const item of parsed){if(next.blocked[item.id])continue;const old=next.candidates.find(e=>e.id===item.id);const observed=old?.observedSourceIds||[];const newEvidence=item.evidence.sources.filter(r=>!observed.includes(r.id));const observations=(old?.observations||0)+(newEvidence.length>=3||!old?1:0);
         const candidate={...item,observations,observedSourceIds:[...new Set([...observed,...item.evidence.sources.map(r=>r.id)])].slice(-500),status:'candidate',updatedAt:now,confidence:Math.min(item.modelScore??1,item.evidence.sources.length/10,item.evidence.speakerCount/4,item.evidence.dayCount/5,1),confidenceKind:'uncalibrated-support'};
         next.candidates=next.candidates.filter(e=>e.id!==item.id);next.candidates.push(candidate);
@@ -40,6 +41,7 @@ export class StyleLearning {
         candidate.status='approved';changes++;
       }
       next.candidates=next.candidates.filter(e=>now-e.updatedAt<p.lookbackHours*3600000||e.status==='approved').slice(-200);if(changes)app.globalStyle.record(next,'auto-publish');next.revision++;next.lastSources=job.allIds;next.lastLearnedAt=now;next.updatedAt=now;next.research={status:changes?'published':'accumulating',changed:changes,nextAt:now+p.refreshHours*3600000};app.globalStyle.save(next);
-    }catch{if(this.current(job)){const next=structuredClone(app.globalStyle.state);next.research={status:'failed',nextAt:Date.now()+app.settings.learningResearch.retryMinutes*60000};app.globalStyle.save(next);}}
+      app.learningLog?.write('style',changes?'PUBLISHED':'ACCUMULATING',{task:job.auditTask,status:'PERSISTED',counts:{extracted:parsed.length,changes,candidates:next.candidates.length,features:Object.keys(next.features).length,expressions:next.expressionExamples.length}});
+    }catch{if(this.current(job)){const next=structuredClone(app.globalStyle.state);next.research={status:'failed',nextAt:Date.now()+app.settings.learningResearch.retryMinutes*60000};app.globalStyle.save(next);app.learningLog?.write('style','FAILED',{task:job.auditTask,status:'FAILED',reasonCode:'MODEL_OR_VALIDATION_OR_SAVE'});}}
   }
 }

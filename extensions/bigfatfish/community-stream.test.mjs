@@ -4,11 +4,28 @@ import {EventEmitter} from 'node:events';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import {CommunityStream,completion,createCommunityModel} from './community-model.mjs';
+import {poolCredential} from './api-pool.mjs';
 import {fixture} from './community-test-fixture.mjs';
 const frame=row=>'data: '+JSON.stringify(row)+'\n\n';
 const content=text=>frame({choices:[{delta:{content:text}}]});
 const usage={prompt_tokens:30,completion_tokens:20,completion_tokens_details:{reasoning_tokens:0}};
 const ending=frame({choices:[{delta:{},finish_reason:'stop'}]})+frame({choices:[],usage})+'data: [DONE]\n\n';
+test('campus community stages explicitly disable normalized effort; other providers keep native toggle',async()=>{
+  for(const host of ['token.nuaa.edu.cn','api.deepseek.com','model.example.org']){
+    const entry={id:'a'.repeat(32),enabled:true,keyStored:true,protocol:'openai-completions',model:'deepseek-flash',baseURL:'https://'+host+'/v1',deepseekCompat:true},pool={state:{activeId:entry.id,entries:[entry]}},before=JSON.stringify(pool);
+    const model=createCommunityModel({pool,config:{},env:{[poolCredential(entry)]:'fixture'},request:async(_p,b)=>{
+      assert.deepEqual(b.thinking,{type:'disabled'});assert.equal(b.reasoning_effort,host==='token.nuaa.edu.cn'?'none':undefined);assert.equal(b.max_tokens,1600);
+      return {choices:[{finish_reason:'stop',message:{content:'{"candidates":[]}'}}],usage};
+    }});
+    for(const stage of ['select','extract','verify']){const result=await model.run({stage,prompt:'{}',maxOutputTokens:1600,signal:new AbortController().signal});assert.equal(result.diagnostics.providerHost,host);assert.equal(result.usage.reasoning,0);}
+    assert.equal(JSON.stringify(pool),before);
+  }
+});
+test('failed campus response retains usage, requested mode and safe route diagnostics',async()=>{
+  const entry={id:'b'.repeat(32),enabled:true,keyStored:true,protocol:'openai-completions',model:'deepseek-flash',baseURL:'https://token.nuaa.edu.cn/v1',deepseekCompat:true};
+  const model=createCommunityModel({pool:{state:{activeId:entry.id,entries:[entry]}},config:{},env:{[poolCredential(entry)]:'fixture-sensitive-key'},request:async()=>({choices:[{finish_reason:'length',message:{content:''}}],usage:{prompt_tokens:9,completion_tokens:1600,completion_tokens_details:{reasoning_tokens:1600}},diagnostics:{rawBytes:450000,contentBytes:0}})});
+  await assert.rejects(model.run({stage:'extract',prompt:'private fixture prompt',maxOutputTokens:1600,signal:new AbortController().signal}),e=>{assert.equal(e.modelDiagnostics.requestedThinking,'disabled');assert.equal(e.modelDiagnostics.requestedReasoningEffort,'none');assert.equal(e.modelDiagnostics.usage.reasoning,1600);assert.equal(e.modelDiagnostics.rawBytes,450000);assert.doesNotMatch(JSON.stringify(e.modelDiagnostics),/fixture-sensitive-key|private fixture prompt/);return true;});
+});
 test('wire overhead above old 256KB limit does not count as content; UTF8 splits and usage survive',()=>{
   const updates=[],s=new CommunityStream(v=>updates.push(v));
   const text=content('{"candidates":[')+Array.from({length:1800},()=>frame({padding:'x'.repeat(150),choices:[{delta:{content:''}}]})).join('')+content('],"label":"中文"}')+ending;

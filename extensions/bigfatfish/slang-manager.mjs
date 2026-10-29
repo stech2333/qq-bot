@@ -159,7 +159,9 @@ export class SlangManager {
         record.status = 'failed'; this.lastError = '原词库保存失败，本次入库已撤回';
       }
       try { persist(this.file, this.audit); } catch { this.lastError = '入库记录写入失败，预留额度仍有效，请检查磁盘'; }
+      this.app.learningLog?.write('slang',record.status==='confirmed'?'CONFIRMED':'CONFIRM_FAILED',{status:record.status==='confirmed'?'PERSISTED':'FAILED',counts:{confirmed:record.status==='confirmed'?1:0}});
     }
+    this.app.learningLog?.write('slang','SCAN_COMPLETED',{status:'COMPLETED',counts:{total:store.entries().length,candidates:store.entries().filter(e=>e.status==='candidate').length,confirmed:store.entries().filter(e=>e.status==='confirmed').length}});
   }
   snapshot(store, now = Date.now()) {
     if (!store) throw new Error('原黑话词库未连接');

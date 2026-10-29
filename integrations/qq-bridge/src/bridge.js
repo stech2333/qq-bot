@@ -2104,6 +2104,7 @@ async function main() {
         slangEntries = result.entries;
         log(`黑话库超过 ${SLANG_MAX_ENTRIES} 条上限，已按「已确认优先」丢弃 ${result.dropped} 条最不活跃的词条`);
       }
+      bff.learningLog.write('slang','STORE_SAVED',{status:'PERSISTED',counts:{total:slangEntries.length,candidates:slangEntries.filter(e=>e.status==='candidate').length,confirmed:slangEntries.filter(e=>e.status==='confirmed').length}});
       return true;
     } catch (error) {
       log('保存黑话库失败:', error?.message ?? error);
@@ -2592,7 +2593,8 @@ async function main() {
     fallback: () => ({ provider: cfg.dsh.provider, model: cfg.dsh.model, reasoningEffort: cfg.dsh.reasoningEffort }),
     changed: () => { modelSelectionEpoch += 1; }, secret: value => bff.privacy.addSecret(value),
     inspectAccess: entry => inspectApiAccess(entry),
-    probe: job => requestBffLearning(job)
+    probe: job => requestBffLearning(job),
+    communityRoute: () => bff.settings.communityLearning.modelRoute
   });
   let dshCheckStarted = false;
   let snowlumaWatchStarted = false; // SnowLuma 上游健康探测只启动一次（见 startSnowlumaWatch）
@@ -8818,7 +8820,7 @@ async function main() {
 
   loadSocialV2State();
   bff.research.connect(requestBffLearning, saveSocialV2State);
-  bff.community.connect(createCommunityModel({ pool: apiPool, config: cfg }),
+  bff.community.connect(createCommunityModel({ pool: apiPool, config: cfg, route: () => bff.settings.communityLearning.modelRoute }),
     () => [...socialV2.conversations].some(([key, st]) => pendingWakeKeys.has(key) || isConversationBusyV2(key, st)));
   bff.mood.connect(requestBffLearning, saveSocialV2State);
   bff.slang.manual.recover(bffSlangStore());

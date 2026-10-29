@@ -224,6 +224,8 @@ function attemptOnce(url, address, limit, binary, budgetMs, signal) {
         port: url.port || (url.protocol === 'https:' ? 443 : 80),
         path: url.pathname + url.search,
         method: 'GET',
+        // Each tool request gets a fresh socket; do not inherit a stale pooled connection.
+        agent: false,
         headers: {
           host: url.host,
           'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36',
@@ -332,13 +334,15 @@ async function requestOnce(url, addresses, limit, binary = false, signal) {
   throw lastError ?? new Error(`请求失败：${url.hostname}`);
 }
 
-export async function safeFetch(urlString, maxChars = 50000, { signal } = {}) {
+export async function safeFetch(urlString, maxChars = 50000, { signal, publicWebOnly = false } = {}) {
   validateLimit(maxChars, 'maxChars');
   signal?.throwIfAborted();
   const MAX_REDIRECTS = 5;
   let { url, addresses } = await validateFetchUrl(urlString);
   for (let i = 0; i <= MAX_REDIRECTS; i++) {
     signal?.throwIfAborted();
+    // QQ-facing web fetch is not a public-port scanner. Apply at every redirect too.
+    if (publicWebOnly && url.port) throw new Error('网页工具仅允许标准 HTTP/HTTPS 端口');
     const result = await requestOnce(url, addresses, maxChars, false, signal);
     if ([301, 302, 303, 307, 308].includes(result.statusCode)) {
       if (!result.redirect) throw new Error(`重定向缺少 Location: ${result.statusCode}`);

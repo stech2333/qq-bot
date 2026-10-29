@@ -719,6 +719,12 @@ change('src/bridge.js', s => v3Patch.replyDeliveryRecovery(s, once), '// BigFatF
 const consoleTemplate = fs.readFileSync(path.join(root, 'extensions/bigfatfish/console-v3.html'), 'utf8');
 const v4Patch = require('./v4-bridge-patch.cjs');
 change('src/bridge.js', s => v4Patch.patchBridge(s, once), '// BigFatFish V4 community learning');
+change('src/bridge.js', s => {
+  const start=s.indexOf('  function saveSlangStore('),end=s.indexOf('  function bffSlangStore()',start);
+  if(start<0||end<0)throw Error('Learning journal slang persistence boundary missing');
+  const block=s.slice(start,end),needle='      return true;';
+  return s.slice(0,start)+once(block,needle,"      bff.learningLog.write('slang','STORE_SAVED',{status:'PERSISTED',counts:{total:slangEntries.length,candidates:slangEntries.filter(e=>e.status==='candidate').length,confirmed:slangEntries.filter(e=>e.status==='confirmed').length}});\n"+needle)+s.slice(end);
+}, "bff.learningLog.write('slang','STORE_SAVED'");
 const consoleScript = ['console-policy.js','console-memory.js','console-api-pool.js','console-v3.js','console-community.js'].map(name=>fs.readFileSync(path.join(root,'extensions/bigfatfish',name),'utf8')).join('\n');
 fs.writeFileSync(path.join(repo, 'public/console.html'), consoleTemplate.replace('<!--V3_SCRIPT-->', () => '<script>\n' + consoleScript + '\n</script>'));
 console.log('BigFatFish integration applied (pinned anchors, idempotent).');

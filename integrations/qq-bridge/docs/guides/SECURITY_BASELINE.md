@@ -38,13 +38,17 @@
 
 | 机制 | 位置 | 行为 |
 | --- | --- | --- |
-| 预设工具守卫 | `plugins/qq-agent-presets/qq-tool-restrict.mjs`（唯一权威实现，`dsh/agent-presets/*/qq-tool-restrict.mjs` 只是 re-export 壳） | 两道闸门：① 注册期 `tools.restrict({deny})` 把本地执行/宿主运行期工具**从模型 schema 里隐藏**（67 个名字，2026-09-29 按 DSH 0.2.0-rc.2 真实工具清单重新对账）；② 执行期 `tools.guard` 精确白名单：仅 `mcp__snowluma__*` / `mcp__snowluma-host__*` / `mcp__web-search-safe__*` + `ask_user_question` / `todo_write`；空/未知名字一律拒绝；内置 `tool-web` 的 search/fetch 关闭。对账工具：`npm run scan:tool-names`（**每次升级 DSH 后应跑一次**：`tools.restrict` 对不存在的名字会抛错并被逐个 try/catch 吞掉 ⇒ 假名 = 静默失效；新版本新增的能力若不补进名单 = 漏隐藏） |
+| 预设工具守卫 | `plugins/qq-agent-presets/qq-tool-restrict.mjs`（唯一权威实现，`dsh/agent-presets/*/qq-tool-restrict.mjs` 只是 re-export 壳） | 两道闸门：① 注册期 `tools.restrict({deny})` 把本地执行/宿主运行期工具**从模型 schema 里隐藏**（67 个名字，2026-09-29 按 DSH 0.2.0-rc.2 真实工具清单重新对账）；② 执行期 `tools.guard` 按完整工具名授权：仅 `SAFE_MCP_TOOLS` 列出的已审核 QQ、状态、搜索/抓取工具 + `ask_user_question` / `todo_write`，不再按 MCP 前缀放行（2026-10-29）；空/未知名字一律拒绝；内置 `tool-web` 的 search/fetch 关闭。对账工具：`npm run scan:tool-names`（**每次升级 DSH 后应跑一次**：`tools.restrict` 对不存在的名字会抛错并被逐个 try/catch 吞掉 ⇒ 假名 = 静默失效；新版本新增的能力若不补进名单 = 漏隐藏） |
 | 预设 fail-closed | `resolvePresetName()` + `ensureSession()` | 群聊/仿真会话拿不到受限预设时**拒绝建会话**，绝不回退到含本地工具的 DSH 默认预设；只有 `closed-agent`（管理员私聊）允许回退 |
 | 发送强制白名单 | 所有 `/api/send/*`、`/api/socialV2/send-*` | 目标必须命中 `allow.groups` / `allow.private`（每次都重新校验，不做缓存） |
 | 动态 ACL | `resolveVoicePathForV2()` / `voicePathInsideLibrary()` | 语音只能取语音库目录内的文件；贴纸只能发收藏库内的表情；图片只能读 SnowLuma home 内的本地文件（realpath 复核防符号链接逃逸） |
 | **只探测、不部署**（L6 设计不变量） | `mcp-host-server.js` | 该 MCP server **只提供 `snowluma_status`（只读探活 `get_login_info`）**。⚠️ **v0.1.5 起删除了 `start_snowluma` / `stop_snowluma` 与 `snowluma.allowProcessControl`**：SnowLuma EULA §5.4 规定「将其并入第三方安装包或 Docker 镜像、**通过自动化脚本部署**」须事先书面授权，原生组件属**专有组件**。⇒ 本程序不安装、不复制、不打包、不程序化启停 SnowLuma；用户自行安装与启动。详见 `LICENSE` 与 `QSH-plan/QSH_PLAN.md` §6.0 |
 
 ### 3. 出站内容（模型能说什么、能发什么）
+
+2026-10-29 联网补充：QQ `web_fetch` 在每次重定向后仍限制标准 HTTP/HTTPS 端口，继续校验全部 DNS 地址并固定连接目标，禁止本机/内网/云元数据。每次使用新连接，不禁用 TLS 校验，不自动降级 HTTP。HTTP 非 2xx 为工具错误；搜索和抓取标注获取时间与外部数据边界。QQ、转发、记忆、网页中的身份声明或指令不能授予本地执行、文件或配置权限。执行边界由逐名工具 guard 与原有会话令牌 ACL 共同实施，提示词仅为辅助。检查依据与局限见 [本次记录](../../../../docs/web-fetch-isolation-2026-10-29.md)。
+
+校园模型传输补充：仅 `https://token.nuaa.edu.cn:443/v1/chat/completions`（POST）及 `/v1/models`（GET）的聊天 fetch 使用固定直连 dispatcher；无代理、无重定向，DNS 连接固定到通过公网检查的地址，TLS 证书仍按域名校验。该域名的混合 DNS 可丢弃私网答案；若没有公网答案则拒绝，绝不连接 `10.0.241.133` 或添加私网例外。模型启动模块不注册任何工具，普通网页工具与其他域名继续沿用原内网防护。社区模型另用原生 HTTPS 公网直连，仍无工具、无 QQ 聊天历史，独立路由缺失时拒绝回退。详见 [路由说明](../../../../docs/nuaa-community-routing-2026-10-29.md)。
 
 | 机制 | 位置 | 行为 |
 | --- | --- | --- |

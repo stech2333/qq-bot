@@ -85,6 +85,7 @@ export class InterestMemory {
       entry.firstSeen = Math.min(entry.firstSeen, at); entry.status = entry.admin || eligible(entry, now) ? 'active' : 'candidate'; changed = true;
     }
     state.learnedInterests = state.learnedInterests.sort((a, b) => Number(a.status === 'blocked') - Number(b.status === 'blocked') || a.lastSeen - b.lastSeen).slice(-INTEREST_LEARNING.maxRecords);
+    if(changed)this.app.learningLog?.write('interest','EVIDENCE_UPDATED',{status:'OBSERVED',counts:{topics:state.learnedInterests.length,active:state.learnedInterests.filter(t=>t.status==='active').length}});
     return changed;
   }
   view(state, now = Date.now()) {
