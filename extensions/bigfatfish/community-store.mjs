@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { randomUUID } from 'node:crypto';
 import { hash, sourceAllowed, knowledgeAllowed } from './community-adapters.mjs';
 import { memoryTerms } from './memory-recall.mjs';
+import {conceptKey,senseKey,termAliases,retrievalWords,relevance,normalized,expressionScene} from './community-retrieval.mjs';
 
 const require = createRequire(import.meta.url);
 export const day = now => new Date(now + 8 * 3600000).toISOString().slice(0, 10);
@@ -182,13 +183,80 @@ export class CommunityStore {
   }
   sourceState(id) { return decode(this.db.prepare('SELECT data FROM source_state WHERE id=?').get(id))||{id,status:'NEEDS_AUTH',nextAt:0,failures:0}; }
   saveSourceState(s) { this.db.prepare('INSERT OR REPLACE INTO source_state VALUES(?,?)').run(s.id,JSON.stringify(s)); }
-  enqueue(source,items,cursor) { return this.tx(()=>{let added=0;for(const item of items){const r={...item,source:source.id,platform:source.platform,discoveredAt:Date.now(),updatedAt:Date.now(),offset:0,failures:0};added+=Number(this.db.prepare("INSERT OR IGNORE INTO material_queue VALUES(?,?,?,'DISCOVERED',?,0,?)").run(source.id,item.id,item.fingerprint,Date.now(),JSON.stringify(r)).changes);}this.advance(source,cursor);return added;}); }
-  pending(source,limit=32,now=Date.now()) { return this.db.prepare("SELECT data,status FROM material_queue WHERE source=? AND status IN ('DISCOVERED','QUEUED','READING','EXTRACTING','VALIDATING','RETRYABLE') AND retry_at<=? ORDER BY updated,id LIMIT ?").all(source,now,limit).map(r=>({...decode(r),status:r.status})); }
-  material(source,id,fingerprint) {const r=this.db.prepare('SELECT data,status FROM material_queue WHERE source=? AND id=? AND fingerprint=?').get(source,id,fingerprint);return r?{...decode(r),status:r.status}:null;}
-  checkpoint(row,status,patch={},retryAt=0) {const data={...row,...patch,updatedAt:Date.now()};this.db.prepare('UPDATE material_queue SET status=?,updated=?,retry_at=?,data=? WHERE source=? AND id=? AND fingerprint=?').run(status,data.updatedAt,retryAt,JSON.stringify(data),row.source,row.id,row.fingerprint);return {...data,status};}
+  latestMaterial(source,id) {const row=this.db.prepare('SELECT data,status,retry_at FROM material_queue WHERE source=? AND id=? ORDER BY updated DESC LIMIT 1').get(source,id);return row?{...decode(row),status:row.status,retryAt:row.retry_at}:null;}
+  enqueue(source,items,cursor) { return this.tx(()=>{let added=0;for(const item of items){
+    const old=item.stableVideo?this.latestMaterial(source.id,item.id):null;
+    if(old){
+      const changed=old.status!=='SKIPPED'&&item.subtitleVersion&&old.subtitleVersion&&item.subtitleVersion!==old.subtitleVersion;
+      const metadata=Object.fromEntries(Object.entries(item).filter(([,v])=>v!==undefined));
+      // Comment counts and metadata are observations, not a request to learn this video again.
+      this.checkpoint(old,changed?'QUEUED':old.status,{...metadata,fingerprint:old.fingerprint,...(changed?{offset:0,readCursor:{stage:'subtitles',offset:0},reading:undefined,extracted:undefined,approved:undefined,prepared:undefined,validation:undefined,finished:false,ranked:true}:{})},changed?0:old.retryAt||0);continue;
+    }
+    const r={...item,source:source.id,platform:source.platform,discoveredAt:Date.now(),updatedAt:Date.now(),offset:0,failures:0};added+=Number(this.db.prepare("INSERT OR IGNORE INTO material_queue VALUES(?,?,?,'DISCOVERED',?,0,?)").run(source.id,item.id,item.fingerprint,Date.now(),JSON.stringify(r)).changes);
+  }this.advance(source,cursor);return added;}); }
+  pending(source,limit=32,now=Date.now()) { return this.db.prepare("SELECT data,status,retry_at FROM material_queue WHERE source=? AND status IN ('DISCOVERED','QUEUED','READING','EXTRACTING','VALIDATING','RETRYABLE') AND retry_at<=? ORDER BY updated,id LIMIT ?").all(source,now,limit).map(r=>({...decode(r),status:r.status,retryAt:r.retry_at})); }
+  material(source,id,fingerprint) {const r=this.db.prepare('SELECT data,status,retry_at FROM material_queue WHERE source=? AND id=? AND fingerprint=?').get(source,id,fingerprint);return r?{...decode(r),status:r.status,retryAt:r.retry_at}:null;}
+  checkpoint(row,status,patch={},retryAt=0) {const data={...row,...patch,updatedAt:Date.now(),retryAt};this.db.prepare('UPDATE material_queue SET status=?,updated=?,retry_at=?,data=? WHERE source=? AND id=? AND fingerprint=?').run(status,data.updatedAt,retryAt,JSON.stringify(data),row.source,row.id,row.fingerprint);return {...data,status};}
   requeue(source=null) { const where=source?' AND source=?':'';this.db.prepare("UPDATE material_queue SET status='QUEUED' WHERE status IN ('READING','EXTRACTING','VALIDATING')"+where).run(...(source?[source]:[])); }
-  conflicts(term) {const key=termKey(term);return {published:this.db.prepare("SELECT data FROM knowledge WHERE term_key=? AND status='published'").all(key).map(decode),pending:this.db.prepare("SELECT data FROM candidates WHERE term_key=? AND status='pending'").all(key).map(decode)};}
-  hold(job,candidates) {for(const c of candidates)this.db.prepare("INSERT OR REPLACE INTO candidates(id,job,status,data,term_key) VALUES(?,?,'pending',?,?)").run(hash(job.id+':pending:'+JSON.stringify(c)),job.id,JSON.stringify(c),termKey(c.term));}
+  conflicts(term) {const keys=termAliases(term),slots=keys.map(()=>'?').join(',');return {published:this.db.prepare(`SELECT data FROM knowledge WHERE term_key IN (${slots}) AND status='published' LIMIT 12`).all(...keys).map(decode),pending:this.db.prepare(`SELECT data FROM candidates WHERE term_key IN (${slots}) AND status='pending' LIMIT 12`).all(...keys).map(decode)};}
+  candidateKey(c) {return hash(JSON.stringify([c.kind,conceptKey(c.term),senseKey(c.meaning)]));}
+  evidenceRefs(c,source,items) {
+    if(c.refs)return c.refs.filter(r=>{const s=this.source(r.source);return s&&sourceAllowed(s)&&s.revision===r.revision&&typeof r.context==='string'&&r.context.includes(r.quote);});
+    return (c.evidence||[]).flatMap(e=>{const item=items.find(i=>i.id===e.id);if(!item||!item.text?.includes(e.quote))return[];const at=item.text.indexOf(e.quote);return [{id:hash(source.id+':'+item.id+':'+hash(e.quote)),source:source.id,revision:source.revision,platform:source.platform,document:item.id,fingerprint:item.fingerprint,url:item.url,title:item.title,quote:e.quote,context:item.text.slice(Math.max(0,at-100),at+e.quote.length+100)}];});
+  }
+  legacyCandidate(row) {
+    const c=decode(row);if(c.refs)return {...c,pendingIds:[...new Set([...(c.pendingIds||[]),row.id])]};
+    const job=this.job(row.job),source=job&&this.source(job.source);if(!sourceAllowed(source))return null;
+    const refs=(c.evidence||[]).map(e=>{const item=this.latestMaterial(source.id,e.id);return {id:hash(source.id+':'+e.id+':'+hash(e.quote)),source:source.id,revision:source.revision,platform:source.platform,document:e.id,fingerprint:item?.fingerprint||'legacy',url:item?.url,title:item?.title,quote:e.quote,context:e.quote,legacy:true};});
+    return {...c,refs,pendingIds:[row.id],firstSeenAt:job.at,lastVerifiedAt:job.completedAt||job.at,lastReviewedEvidence:hash(refs.map(r=>r.id).sort().join('|')),reviewAttempts:1};
+  }
+  prepareCandidates(job,source,item,extracted,now=Date.now()) {
+    const counters={duplicates:0,enriched:0,reviews:0},map=new Map(),add=c=>{
+      if(!c)return;const key=this.candidateKey(c),refs=this.evidenceRefs(c,source,[item]);if(!refs.length)return;
+      const old=map.get(key);if(old){counters.duplicates++;old.refs=[...new Map([...old.refs,...refs].map(r=>[r.id,r])).values()].slice(-4);old.pendingIds=[...new Set([...old.pendingIds,...c.pendingIds||[]])];return;}
+      map.set(key,{...c,finalStatus:['rejected','expired'].includes(c.finalStatus)?c.finalStatus:undefined,refs,pendingIds:c.pendingIds||[],firstSeenAt:c.firstSeenAt||now,reviewAttempts:c.reviewAttempts||0,key});
+    };
+    // Retire only a few obsolete rows per real read; do not bulk re-review historical candidates.
+    const stale=this.db.prepare("SELECT c.id,c.data FROM candidates c JOIN jobs j ON j.id=c.job WHERE c.status='pending' AND coalesce(json_extract(c.data,'$.firstSeenAt'),j.at)<? LIMIT 3").all(now-90*86400000);
+    for(const r of stale){const c=decode(r);this.db.prepare("UPDATE candidates SET status='expired',data=? WHERE id=? AND status='pending'").run(JSON.stringify({...c,finalStatus:'expired',failureRules:['CANDIDATE_EXPIRED']}),r.id);}
+    // Indexed exact-term matches first; a bounded learning-time scan also finds old contextual candidates.
+    const words=[...new Set(extracted.flatMap(c=>termAliases(c.term)))],slots=words.map(()=>'?').join(',');
+    const rows=this.db.prepare(`SELECT id,job,data FROM candidates WHERE status='pending' AND (${slots?'term_key IN ('+slots+') OR ':''}instr(?,term_key)>0) ORDER BY json_extract(data,'$.lastVerifiedAt') LIMIT 24`).all(...words,normalized(item.text));
+    for(const row of rows){const c=this.legacyCandidate(row);if(!c)continue;
+      const fresh=extracted.find(x=>this.candidateKey(x)===this.candidateKey(c));
+      if(fresh){const refs=this.evidenceRefs(fresh,source,[item]);if(refs.some(r=>!c.refs.some(e=>e.id===r.id)))counters.enriched++;add(c);continue;}
+      // Copy a real sentence, never a generated quote. Same video cannot inflate independent support.
+      if((c.refs||[]).some(r=>r.platform===source.platform&&r.document===item.id))continue;
+      const sentence=item.text.split(/(?<=[。！？.!?\n])/u).find(s=>s.length>=4&&s.length<=240&&termAliases(c.term).some(t=>normalized(s).includes(t)));
+      if(sentence){const refs=this.evidenceRefs({...c,evidence:[{id:item.id,quote:sentence}],refs:undefined},source,[item]);add({...c,refs:[...c.refs,...refs].slice(-4)});counters.enriched++;}
+      if(counters.enriched>=3)break;
+    }
+    for(const c of extracted)add({...c,refs:this.evidenceRefs(c,source,[item])});
+    const candidates=[];
+    for(const c of map.values()){
+      c.independentSources=new Set(c.refs.map(r=>r.platform+':'+r.document)).size;
+      c.evidenceVersion=hash(c.refs.map(r=>r.id).sort().join('|'));
+      const key=c.key,known=this.db.prepare('SELECT status,data FROM candidates WHERE id=?').get(key);
+      if(known&&['rejected','expired','published'].includes(known.status)&&decode(known).evidenceVersion===c.evidenceVersion){counters.duplicates++;continue;}
+      const published=this.conflicts(c.term).published.find(k=>senseKey(k.meaning)===senseKey(c.meaning)&&k.kind===c.kind);
+      if(published&&c.refs.every(r=>this.db.prepare('SELECT 1 FROM evidence WHERE knowledge=? AND source=? AND document=? AND quote=?').get(published.id,r.source,r.document,r.quote))){counters.duplicates++;continue;}
+      const oldData=known?decode(known):null;
+      c.newEvidenceCount=c.refs.filter(r=>!oldData?.refs?.some(e=>e.id===r.id)).length;
+      if(oldData&&known.status!=='published'){c.lastReviewedEvidence=oldData.lastReviewedEvidence||c.lastReviewedEvidence;c.nextReviewAt=oldData.nextReviewAt||c.nextReviewAt;c.reviewAttempts=Math.max(c.reviewAttempts,oldData.reviewAttempts||0);c.firstSeenAt=Math.min(c.firstSeenAt,oldData.firstSeenAt||now);}
+      if(now-c.firstSeenAt>90*86400000){c.finalStatus='expired';c.failureRules=['CANDIDATE_EXPIRED'];}
+      if(c.reviewAttempts>=4){c.finalStatus='rejected';c.failureRules=['REVIEW_LIMIT'];}
+      c.reviewEligible=!c.finalStatus&&c.evidenceVersion!==c.lastReviewedEvidence&&(c.nextReviewAt||0)<=now&&(c.confidence>=.85||c.independentSources>=2);
+      candidates.push(c);
+    }
+    return {candidates,counters};
+  }
+  reviewPayload(c) {return {...Object.fromEntries(['kind','term','meaning','usage','contextTerms','confidence','conflict','strategy','timeSensitive','validUntil'].filter(k=>c[k]!==undefined).map(k=>[k,c[k]])),evidence:c.refs?c.refs.map(r=>({id:r.id,quote:r.quote})):c.evidence};}
+  hold(job,candidates) {for(const c of candidates){
+    const id=c.key||this.candidateKey(c),old=decode(this.db.prepare('SELECT data FROM candidates WHERE id=?').get(id));
+    const next={...old,...c,firstSeenAt:old?.firstSeenAt||c.firstSeenAt||Date.now(),finalStatus:c.finalStatus||'pending'};
+    this.db.prepare('INSERT INTO candidates(id,job,status,data,term_key) VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET job=excluded.job,status=excluded.status,data=excluded.data,term_key=excluded.term_key').run(id,job.id,next.finalStatus,JSON.stringify(next),conceptKey(c.term));
+    for(const previous of c.pendingIds||[])if(previous!==id)this.db.prepare("UPDATE candidates SET status='merged',data=json_set(data,'$.mergedInto',?) WHERE id=? AND status='pending'").run(id,previous);
+  }}
   goals() {return this.db.prepare('SELECT data FROM learning_goals ORDER BY updated DESC LIMIT 16').all().map(decode);}
   goal(term,source,reason) {const id=hash(termKey(term)+':'+source);this.db.prepare('INSERT OR REPLACE INTO learning_goals VALUES(?,?,?)').run(id,Date.now(),JSON.stringify({id,term,source,reason}));this.db.exec('DELETE FROM learning_goals WHERE id IN (SELECT id FROM learning_goals ORDER BY updated DESC LIMIT -1 OFFSET 100)');}
   stats(source=null) {const params=source?[source]:[],where=source?' WHERE source=?':'';const rows=this.db.prepare('SELECT status,count(*) n FROM material_queue'+where+' GROUP BY status').all(...params),counts=Object.fromEntries(rows.map(r=>[r.status,r.n]));const k=this.db.prepare("SELECT kind,count(*) n FROM knowledge WHERE status='published' GROUP BY kind").all();return {discovered:rows.reduce((n,r)=>n+r.n,0),completed:counts.COMPLETED||0,skipped:counts.SKIPPED||0,blocked:counts.BLOCKED||0,pending:rows.filter(r=>!['COMPLETED','SKIPPED','BLOCKED'].includes(r.status)).reduce((n,r)=>n+r.n,0),published:k.reduce((n,r)=>n+r.n,0),slang:k.find(r=>r.kind==='slang')?.n||0,strategies:k.find(r=>r.kind==='strategy')?.n||0,unverified:this.db.prepare("SELECT count(*) n FROM candidates WHERE status='pending'").get().n,multipleSenses:this.db.prepare("SELECT count(*) n FROM (SELECT term_key FROM knowledge WHERE status='published' GROUP BY term_key HAVING count(*)>1)").get().n};}
@@ -250,38 +318,48 @@ export class CommunityStore {
     const confirmed=Object.fromEntries(['input','output','reasoning','cacheHit'].map(k=>[k,r['c_'+k]])),pending={input:r.p_input,output:r.p_output};for(const k of Object.keys(r))if(/^[cp]_/.test(k))delete r[k];return {...r,reasoning:confirmed.reasoning,cacheHit:confirmed.cacheHit,confirmed,pending};
   }
   request() {const r=decode(this.db.prepare('SELECT data FROM usage ORDER BY rowid DESC LIMIT 1').get());return r?{...r,elapsedMs:Math.max(0,(r.terminalAt||r.updatedAt&&r.status!=='reserved'&&r.updatedAt||Date.now())-r.at),complete:r.status!=='reserved'||!!r.requestState,actual:r.status==='reserved'?r.observed?.usage||null:{input:r.input,output:r.output,reasoning:r.reasoning,cacheHit:r.cacheHit}}:null;}
-  publish(job, source, items, candidates, guard) {
+  publish(job, source, items, candidates, guard, {finalize=true,append=false,filteredDuplicates=job.candidateStats?.duplicates||0}={}) {
     const committed=this.tx(() => {
       const current = this.source(source.id);
       if (!guard() || job.generation !== this.generation() || current?.revision !== source.revision || !sourceAllowed(current)) throw Error('学习代际或来源许可已变化，禁止旧结果发布');
-      let added = 0;const publication={};
+      let added=0,updated=0,evidenceAdded=0,duplicates=filteredDuplicates;const publication={},publicationDetails={};
       for (const c of candidates) {
-        const key = hash(JSON.stringify([c.kind, c.term.normalize('NFKC').toLowerCase(), c.meaning.normalize('NFKC')]));
-        const row = this.db.prepare('SELECT * FROM knowledge WHERE id=?').get(key), old = decode(row);
-        this.db.prepare('INSERT OR REPLACE INTO candidates(id,job,status,data,term_key) VALUES(?,?,?,?,?)').run(hash(job.id + ':' + key), job.id, row?.status === 'revoked' ? 'revoked' : 'approved', JSON.stringify(c),termKey(c.term));
+        if(c.reviewEligible!==undefined&&!c.verifiedAt)throw Error('社区候选尚未完成证据复核，禁止发布');
+        const originalKey=hash(JSON.stringify([c.kind,c.term.normalize('NFKC').toLowerCase(),c.meaning.normalize('NFKC')]));
+        const equivalent=this.conflicts(c.term).published.find(k=>k.kind===c.kind&&senseKey(k.meaning)===senseKey(c.meaning));
+        const key=c.mergeInto||equivalent?.id||originalKey;
+        const row=this.db.prepare('SELECT * FROM knowledge WHERE id=?').get(key),old=decode(row);
+        if(c.mergeInto&&(!old||old.kind!==c.kind||conceptKey(old.term)!==conceptKey(c.term)))throw Error('社区同义知识合并目标无效');
         if (row?.status === 'revoked') continue;
-        for(const id of new Set(c.evidence.map(e=>e.id)))publication[id]=(publication[id]||0)+1;
-        const {evidence:quotedEvidence,...content}=c;
-        const next = { ...content, id: key, version: (row?.version || 0) + 1, at: old?.at || Date.now(), updatedAt: Date.now() };
-        const duplicate=c.evidence.every(e=>{const item=items.find(i=>i.id===e.id);return !!this.db.prepare('SELECT 1 FROM evidence WHERE knowledge=? AND source=? AND document=? AND fingerprint=?').get(key,source.id,item?.id,item?.fingerprint);});
-        if(old&&duplicate)continue;
+        const refs=this.evidenceRefs(c,source,items);if(!refs.length)throw Error('社区候选证据来源失效');
+        const fresh=refs.filter(r=>!this.db.prepare('SELECT 1 FROM evidence WHERE knowledge=? AND source=? AND document=? AND quote=?').get(key,r.source,r.document,r.quote));
+        const {evidence:quotedEvidence,...content}=this.reviewPayload(c);
+        const next={...content,...(old?{term:old.term,meaning:old.meaning}:{}),contextTerms:[...new Set([...(old?.contextTerms||[]),...c.contextTerms])].slice(0,10),id:key,version:(row?.version||0)+1,at:old?.at||Date.now(),updatedAt:Date.now()};
+        const metadataChanged=old&&['usage','contextTerms','confidence','validUntil','timeSensitive'].some(k=>JSON.stringify(old[k])!==JSON.stringify(next[k]));
+        const duplicate=old&&!fresh.length&&!metadataChanged;
+        this.db.prepare('INSERT OR REPLACE INTO candidates(id,job,status,data,term_key) VALUES(?,?,?,?,?)').run(c.key||this.candidateKey(c),job.id,'published',JSON.stringify({...c,finalStatus:'published',knowledgeId:key}),conceptKey(c.term));
+        for(const id of c.pendingIds||[])this.db.prepare("UPDATE candidates SET status='published',data=json_set(data,'$.knowledgeId',?,'$.finalStatus','published') WHERE id=? AND status IN ('pending','merged')").run(key,id);
+        const ids=[...new Set(refs.map(r=>r.document))];
+        for(const id of ids){publicationDetails[id]??={added:0,updated:0,evidenceAdded:0,duplicates:0};publicationDetails[id][duplicate?'duplicates':old?'updated':'added']++;publicationDetails[id].evidenceAdded+=fresh.filter(r=>r.document===id).length;}
+        if(duplicate){duplicates++;continue;}
         this.db.prepare('INSERT INTO knowledge(id,kind,term,status,version,at,data,term_key) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET version=excluded.version,data=excluded.data')
-          .run(key, c.kind, c.term, 'published', next.version, next.at, JSON.stringify(next),termKey(c.term));
-        for (const e of c.evidence) {
-          const item = items.find(i => i.id === e.id);
-          this.db.prepare('INSERT OR REPLACE INTO evidence VALUES(?,?,?,?,?,?,?)').run(key, source.id, item.id, item.fingerprint, e.quote, item.url, Date.now());
+          .run(key,c.kind,next.term,'published',next.version,next.at,JSON.stringify(next),conceptKey(next.term));
+        for (const r of fresh) {
+          this.db.prepare('INSERT OR REPLACE INTO evidence VALUES(?,?,?,?,?,?,?)').run(key,r.source,r.document,hash(r.fingerprint+':'+r.quote),r.quote,r.url,Date.now());
         }
         this.db.prepare('INSERT INTO revisions(knowledge,at,action,data) VALUES(?,?,?,?)').run(key, Date.now(), old ? 'reinforce' : 'publish', JSON.stringify(old || next));
         this.db.prepare('DELETE FROM knowledge_fts WHERE id=?').run(key);
-        this.db.prepare('INSERT INTO knowledge_fts VALUES(?,?)').run(key, searchTerms([c.term, c.meaning, c.usage, ...c.contextTerms].join(' ')).join(' '));
-        if (!old) added++;
+        this.db.prepare('INSERT INTO knowledge_fts VALUES(?,?)').run(key, searchTerms([next.term,...termAliases(next.term),next.meaning,next.usage,...next.contextTerms].join(' ')).join(' '));
+        if(!old)added++;else updated++;evidenceAdded+=fresh.length;for(const id of ids)publication[id]=(publication[id]||0)+1;
       }
-      this.hold(job,job.pending||[]);for(const c of job.pending||[])this.goal(c.term,source.id,'候选缺少充分证据');for(const c of candidates.filter(c=>c.kind==='slang'||c.conflict))this.goal(c.term,source.id,'寻找其他语境与跨材料证据');
+      this.hold(job,job.pending||[]);for(const c of (job.pending||[]).filter(c=>!c.finalStatus))this.goal(c.term,source.id,'候选缺少充分证据');for(const c of candidates.filter(c=>c.kind==='slang'||c.conflict))this.goal(c.term,source.id,'寻找其他语境与跨材料证据');
       for (const item of items) {
         if(item.complete!==false)this.db.prepare('INSERT OR IGNORE INTO documents VALUES(?,?,?,?)').run(source.id,item.id,item.fingerprint,Date.now());
-        const row=this.material(source.id,item.id,item.fingerprint);if(row)this.checkpoint(row,item.complete===false?'QUEUED':'COMPLETED',{offset:item.nextOffset??row.offset,readCursor:item.readCursor??row.readCursor,reading:undefined,extracted:undefined,approved:undefined,finished:item.complete!==false,completedAt:item.complete===false?null:Date.now()});
+        const row=this.material(source.id,item.id,item.fingerprint);if(row)this.checkpoint(row,item.complete===false?'QUEUED':'COMPLETED',{offset:item.nextOffset??row.offset,readCursor:Object.hasOwn(item,'readCursor')?item.readCursor:row.readCursor,segments:[...new Set([...(row.segments||[]),hash((item.contentType||'body')+':'+item.text)])].slice(-500),reading:undefined,extracted:undefined,approved:undefined,prepared:undefined,validation:undefined,failures:0,error:undefined,finished:item.complete!==false,completedAt:item.complete===false?null:Date.now()});
       }
-      const nextJob={...job,added,publication,status:'COMPLETED',finished:true,progress:100,version:job.version+1,completedAt:Date.now()};
+      const totals={added,updated,evidenceAdded,duplicates};
+      if(append){for(const k of Object.keys(totals))totals[k]+=job[k]||0;for(const [id,n] of Object.entries(job.publication||{}))publication[id]=(publication[id]||0)+n;for(const [id,counts] of Object.entries(job.publicationDetails||{})){publicationDetails[id]??={added:0,updated:0,evidenceAdded:0,duplicates:0};for(const [k,n] of Object.entries(counts))publicationDetails[id][k]+=n;}}
+      const nextJob={...job,...totals,publication,publicationDetails,status:finalize?'COMPLETED':'PUBLISHING',finished:finalize,progress:finalize?100:90,version:job.version+1,completedAt:finalize?Date.now():undefined};
       this.saveJob(nextJob);return {added,nextJob};
     });
     Object.assign(job,committed.nextJob);return committed.added;
@@ -297,22 +375,21 @@ export class CommunityStore {
   }
   list({offset=0,limit=100}={}) { return this.db.prepare('SELECT * FROM knowledge ORDER BY at DESC,id LIMIT ? OFFSET ?').all(limit,offset).map(r => ({ ...decode(r), status: r.status, version: r.version,sources:this.db.prepare('SELECT DISTINCT url FROM evidence WHERE knowledge=? LIMIT 4').all(r.id).map(e=>e.url) })); }
   communityStrategies(cutoff=0) {const out=[];for(const r of this.db.prepare("SELECT * FROM knowledge WHERE kind='strategy' AND status='published'").all()){const k=decode(r),e=this.db.prepare('SELECT DISTINCT source,document,at FROM evidence WHERE knowledge=?').all(r.id).filter(e=>e.at>cutoff&&knowledgeAllowed(this.source(e.source)));if(new Set(e.map(x=>x.source+':'+x.document)).size>=3&&new Set(e.map(x=>day(x.at))).size>=2)out.push(k.strategy);}return [...new Set(out)];}
-  search(query, { limit = 4, maxChars = 1200, kinds } = {}) {
+  search(query, { limit = 3, maxChars = 1800, kinds, mode='explain', recent='', scene='' } = {}) {
     this.expireSources();
-    const terms = searchTerms(query); if (!terms.length) return [];
+    if(mode==='expression'&&!expressionScene(query,scene).allowed)return [];
+    const terms = [...new Set([...searchTerms(query),...retrievalWords(query).flatMap(searchTerms)])].slice(0,100); if (!terms.length) return [];
     const matches = this.db.prepare('SELECT id,bm25(knowledge_fts) AS rank FROM knowledge_fts WHERE knowledge_fts MATCH ? ORDER BY rank LIMIT 40').all(terms.map(t => '"' + t.replaceAll('"','""') + '"').join(' OR '));
     const sources = new Map(this.sources().filter(s=>knowledgeAllowed(s)).map(s=>[s.id,s])), out=[]; let chars=0;
     for (const m of matches) {
       const row = this.db.prepare("SELECT * FROM knowledge WHERE id=? AND status='published'").get(m.id); if (!row || kinds && !kinds.includes(row.kind)) continue;
       const k = decode(row), evidence = this.db.prepare('SELECT source,url,at FROM evidence WHERE knowledge=?').all(row.id).filter(e=>sources.has(e.source));
       if (!evidence.length) continue;
-      const exact = String(query).normalize('NFKC').toLowerCase().includes(k.term.toLowerCase());
       if(k.validUntil&&k.validUntil<=Date.now())continue;
-      if (!exact && !k.contextTerms.some(t=>terms.includes(t))) continue;
-      const contextScore=k.contextTerms.filter(t=>terms.includes(t)||String(query).includes(t)).length;
-      out.push({ id: k.id, kind: k.kind, term: k.term, meaning: k.meaning, usage: k.usage, contextTerms: k.contextTerms, version: row.version, sources: [...new Set(evidence.map(e=>e.url))].slice(0,2), rank: m.rank, exact, contextScore });
+      const match=relevance({...k,evidenceCount:evidence.length},query,{mode,recent});if(!match)continue;
+      out.push({id:k.id,kind:k.kind,term:k.term,meaning:k.meaning,usage:k.usage,contextTerms:k.contextTerms,confidence:k.confidence,conflict:k.conflict,version:row.version,sources:[...new Set(evidence.map(e=>e.url))].slice(0,2),rank:m.rank,...match,origin:'community'});
     }
-    const best=new Map();for(const r of out)best.set(r.term,Math.max(best.get(r.term)||0,r.contextScore));
-    return out.filter(r=>!best.get(r.term)||r.contextScore===best.get(r.term)).sort((a,b)=>Number(b.exact)-Number(a.exact)||b.contextScore-a.contextScore||a.rank-b.rank).filter(r=>{const size=JSON.stringify(r).length;if(chars+size>maxChars)return false;chars+=size;return true;}).slice(0,limit);
+    const best=new Map();for(const r of out)best.set(conceptKey(r.term),Math.max(best.get(conceptKey(r.term))||0,r.contextScore));
+    const seen=new Set();return out.filter(r=>!best.get(conceptKey(r.term))||r.contextScore===best.get(conceptKey(r.term))).sort((a,b)=>b.score-a.score||a.rank-b.rank).filter(r=>{const key=conceptKey(r.term);if(seen.has(key))return false;const size=JSON.stringify(r).length;if(chars+size>maxChars)return false;seen.add(key);chars+=size;return true;}).slice(0,Math.min(limit,mode==='expression'?2:3));
   }
 }

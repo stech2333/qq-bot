@@ -50,6 +50,12 @@ export function processExchange(config,request,{signal,timeoutMs=30000,mcp=false
 const jsonField=(row,key)=>{let value=row?.[key];if(typeof value==='string'){try{value=JSON.parse(value);}catch{throw fail('来源字段裁剪结果应为JSON数组');}}if(!Array.isArray(value))throw fail('来源字段裁剪结果无效');return value;};
 const jq=expr=>'tojson | fromjson | '+expr+' | tojson';
 const accessAt=new Map();
+export function explorationQueries(source,topics,goals) {
+  const anchor=String(source.target||'').trim(),valid=t=>typeof t==='string'&&t.length>=2&&t.length<=100&&!/[\r\n<>]/.test(t);
+  // Keep the operator's authorized anchor on every expanded search. Bounded rotation, not a crawler.
+  const directions=[...new Set([...(anchor?[anchor]:[]),...topics.filter(valid),...goals.slice(0,8).map(g=>g.term).filter(valid)])].slice(0,16);
+  return directions.map(t=>anchor&&t!==anchor?anchor+' '+t:t);
+}
 const waitAccess=(ms,signal)=>new Promise((resolve,reject)=>{if(signal?.aborted){reject(fail('来源读取已取消','CANCELLED'));return;}const end=()=>{signal?.removeEventListener('abort',abort);resolve();},timer=setTimeout(end,Math.max(0,ms)),abort=()=>{clearTimeout(timer);reject(fail('来源读取已取消','CANCELLED'));};signal?.addEventListener('abort',abort,{once:true});});
 export class PlatformReader {
   constructor(root,source,{exchange=processExchange}={}) {this.root=root;this.source=source;this.exchange=exchange;}
@@ -59,24 +65,36 @@ export class PlatformReader {
   async discover({signal,cursor=0,topics=[],goals=[]}) {
     const c=this.config();if(c.driver!=='polylens'){const row=await this.call('discover',{cursor,topics,goals:goals.map(g=>g.term)}, {signal});return this.normalizeDiscovery(row);}
     let state;try{state=typeof cursor==='string'?JSON.parse(cursor):null;}catch{}state??={topic:0,cursor:null};
-    const queries=[...new Set([...topics,...goals.map(g=>g.term)])];const keyword=this.source.target||queries[state.topic%Math.max(queries.length,1)]||'互联网文化';
-    const row=await this.call('search_videos',{keyword,cursor:state.cursor,jq:jq('map({title,url,summary,published_at,tags,comment_count})')},{signal});
-    const items=jsonField(row,'results').map(r=>({id:r.url?.match(/\/(BV[\w]+|av\d+)/)?.[1],title:r.title,summary:(r.summary||'').slice(0,400),url:r.url,publishedAt:Date.parse(r.published_at)||Date.now()-1,tags:r.tags,revision:String(r.comment_count||0)}));
-    return this.normalizeDiscovery({items,cursor:JSON.stringify(row.has_more?{...state,cursor:row.next_cursor}:{topic:state.topic+1,cursor:null}),hasMore:row.has_more});
+    const queries=explorationQueries(this.source,topics,goals);if(!queries.length)throw fail('来源没有已授权探索范围','AUTH');
+    const searches=state.searches||{},now=Date.now();let index=state.topic||0,keyword;
+    for(let i=0;i<queries.length;i++){index=((Number.isSafeInteger(state.topic)?state.topic:0)+i)%queries.length;const q=queries[index];if(!searches[q]?.doneAt||now-searches[q].doneAt>=3600000){keyword=q;break;}}
+    if(!keyword)return {items:[],cursor:JSON.stringify(state),hasMore:false};
+    const page=searches[keyword]?.cursor??(state.searches?null:state.cursor),signature=hash(JSON.stringify([keyword,page]));
+    const row=await this.call('search_videos',{keyword,cursor:page,jq:jq('map({title,url,summary,published_at,tags,comment_count})')},{signal});
+    const more=row.has_more===true&&row.next_cursor!=null&&JSON.stringify(row.next_cursor)!==JSON.stringify(page);
+    searches[keyword]={cursor:more?row.next_cursor:null,...(!more?{doneAt:now}:{}),last:signature};
+    const items=jsonField(row,'results').map(r=>({id:r.url?.match(/\/(BV[\w]+|av\d+)/)?.[1],title:r.title,summary:(r.summary||'').slice(0,400),url:r.url,publishedAt:Date.parse(r.published_at)||0,tags:r.tags,stableVideo:true,commentVersion:String(r.comment_count||0)}));
+    return this.normalizeDiscovery({items,cursor:JSON.stringify({topic:(index+1)%queries.length,searches:Object.fromEntries(queries.filter(q=>searches[q]).map(q=>[q,searches[q]])),cursor:more?row.next_cursor:null}),hasMore:more||queries.some(q=>!searches[q]?.doneAt)});
   }
-  normalizeDiscovery(row) {if(!Array.isArray(row?.items)||row.items.length>100)throw fail('来源发现数据无效');return {...row,items:row.items.map(r=>{if(!/^[\w-]{1,100}$/.test(r.id)||typeof r.title!=='string'||r.title.length>200||!sourceURL(r.url,this.source.platform))throw fail('来源材料标识或链接无效');return {id:r.id,title:r.title,summary:String(r.summary||'').slice(0,400),url:r.url,publishedAt:r.publishedAt,tags:String(r.tags||'').slice(0,200),fingerprint:hash(JSON.stringify([r.id,r.title,r.summary,r.updatedAt||r.revision||r.publishedAt]))};})};}
-  async fetch(item,{signal,readCursor=null}={}) {
+  normalizeDiscovery(row) {if(!Array.isArray(row?.items)||row.items.length>100)throw fail('来源发现数据无效');return {...row,items:row.items.map(r=>{if(!/^[\w-]{1,100}$/.test(r.id)||typeof r.title!=='string'||r.title.length>200||!sourceURL(r.url,this.source.platform))throw fail('来源材料标识或链接无效');return {id:r.id,title:r.title,summary:String(r.summary||'').slice(0,400),url:r.url,publishedAt:r.publishedAt,tags:String(r.tags||'').slice(0,200),...(r.stableVideo?{stableVideo:true,commentVersion:r.commentVersion,subtitleVersion:r.subtitleVersion}:{}),metadataVersion:hash(JSON.stringify([r.title,r.summary,r.tags])),fingerprint:hash(JSON.stringify(r.stableVideo?['video',this.source.platform,r.id]:[r.id,r.title,r.summary,r.updatedAt||r.revision||r.publishedAt]))};})};}
+  async contentVersion(item,{signal}={}) {
+    if(this.config().driver!=='polylens')return null;
+    const r=await this.call('get_subtitles',{video:item.id,jq:jq('map(.content) | join("\\n")')},{signal});let text=r.subtitles;
+    if(typeof text!=='string')throw fail('来源字幕版本无效');try{text=JSON.parse(text);}catch{}
+    if(typeof text!=='string'||text.length>120000)throw fail('来源字幕超过版本检查保护');return hash(text);
+  }
+  async fetch(item,{signal,readCursor=null,offset=item.offset||0}={}) {
     const c=this.config();if(c.driver!=='polylens'){const r=await this.call('read',{id:item.id,cursor:readCursor},{signal});return this.normalizeRead(item,r);}
-    const s=readCursor||{stage:'subtitles',offset:0};let text,next;
+    const s=readCursor||{stage:'subtitles',offset};let text,next,paginationStopped;
     if(s.stage==='subtitles'){
       const r=await this.call('get_subtitles',{video:item.id,jq:jq(`map(.content) | join("\\n") | .[${s.offset}:${s.offset+2400}]`)},{signal});text=typeof r.subtitles==='string'?r.subtitles:'';try{text=JSON.parse(text);}catch{}
       next=text.length>=2400?{stage:'subtitles',offset:s.offset+2400}:{stage:'comments',cursor:null};
     }else if(s.stage==='replies'){
-      const r=await this.call('get_comment_replies',{video:item.id,comment_ids:[s.parents[0]],pages:1,start_page:s.page,jq:jq('map({id,parent_id,content})')},{signal});const thread=r.results?.[0];text='主评论 '+s.parents[0]+' 的回复：\n'+jsonField(thread,'replies').map(r=>'回复 '+r.id+' → '+(r.parent_id||s.parents[0])+': '+r.content).join('\n');next=thread.has_more?{...s,page:s.page+1}:s.parents.length>1?{...s,parents:s.parents.slice(1),page:1}:s.next;
+      const r=await this.call('get_comment_replies',{video:item.id,comment_ids:[s.parents[0]],pages:1,start_page:s.page,jq:jq('map({id,parent_id,content})')},{signal});const thread=r.results?.[0],rows=jsonField(thread,'replies');text=rows.length?'主评论 '+s.parents[0]+' 的回复：\n'+rows.map(r=>'回复 '+r.id+' → '+(r.parent_id||s.parents[0])+': '+r.content).join('\n'):'';next=thread?.has_more&&rows.length?{...s,page:s.page+1}:s.parents.length>1?{...s,parents:s.parents.slice(1),page:1}:s.next??null;if(thread?.has_more&&!rows.length)paginationStopped='EMPTY_REPLY_PAGE';
     }else{
-      const r=await this.call('get_comments',{video:item.id,count:20,cursor:s.cursor,mode:'newest',jq:jq('map({id,content,reply_count})')},{signal});if(r.message)throw fail('来源访问频率受限','RATE_LIMITED');const rows=jsonField(r,'comments');text=rows.map(r=>'主评论 '+r.id+': '+r.content).join('\n');const parents=rows.filter(r=>r.reply_count>0).map(r=>r.id);const after=r.has_more?{stage:'comments',cursor:r.next_cursor}:null;next=parents.length?{stage:'replies',parents,page:1,next:after}:after;
+      const r=await this.call('get_comments',{video:item.id,count:20,cursor:s.cursor,mode:'newest',jq:jq('map({id,content,reply_count})')},{signal});if(r.message)throw fail('来源访问频率受限','RATE_LIMITED');const rows=jsonField(r,'comments');text=rows.map(r=>'主评论 '+r.id+': '+r.content).join('\n');const parents=rows.filter(r=>r.reply_count>0).map(r=>r.id);const advances=rows.length&&r.next_cursor!=null&&JSON.stringify(r.next_cursor)!==JSON.stringify(s.cursor);const after=r.has_more&&advances?{stage:'comments',cursor:r.next_cursor}:null;next=parents.length?{stage:'replies',parents,page:1,next:after}:after;if(r.has_more&&!advances)paginationStopped=rows.length?'COMMENT_CURSOR_NOT_ADVANCING':'EMPTY_COMMENT_PAGE';
     }
-    return this.normalizeRead(item,{text,readCursor:next,complete:next===null});
+    return {...this.normalizeRead(item,{text,readCursor:next,complete:next===null,contentType:s.stage}),...(paginationStopped?{paginationStopped}:{})};
   }
-  normalizeRead(item,r) {if(typeof r?.text!=='string'||r.text.length>16000||typeof r.complete!=='boolean')throw fail('来源正文过大或缺少分页完成标记');return {...item,text:r.text,readCursor:r.readCursor??null,complete:r.complete,nextOffset:(item.offset||0)+r.text.length};}
+  normalizeRead(item,r) {if(typeof r?.text!=='string'||r.text.length>16000||typeof r.complete!=='boolean')throw fail('来源正文过大或缺少分页完成标记');return {...item,text:r.text,readCursor:r.readCursor??null,complete:r.complete,nextOffset:(item.offset||0)+r.text.length,contentType:r.contentType||'body',segmentHash:hash(r.text)};}
 }

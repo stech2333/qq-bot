@@ -11,3 +11,13 @@ exports.patchBridge = (source, once) => {
     '  bff.research.connect(requestBffLearning, saveSocialV2State);\n  bff.community.connect(createCommunityModel({ pool: apiPool, config: cfg, route: () => bff.settings.communityLearning.modelRoute }),\n    () => [...socialV2.conversations].some(([key, st]) => pendingWakeKeys.has(key) || isConversationBusyV2(key, st)));');
   return source;
 };
+
+exports.knowledgeApplication = (source, once) => {
+  source = '// BigFatFish V4.1 knowledge application\n' + source;
+  source = once(source, '  function bffSlangStore() {', '  function bffSlangStore() {\n    bff.slang.entries = () => cfg.slang?.enabled === false ? [] : slangEntries;');
+  const start=source.indexOf('  function withSlangContext('),end=source.indexOf('\n  if (!cfg.allow.private',start);
+  if(start<0||end<0)throw Error('Knowledge fusion prompt boundary missing');
+  const block=once(source.slice(start,end),'    if (cfg.slang?.enabled !== false) {',"    if (cfg.slang?.enabled !== false && !promptText.includes('【本轮表达参考】')) {");
+  source=source.slice(0,start)+block+source.slice(end);
+  return once(source, '    if (wakeSnapshot && isCurrentSession(key, sessionId)', '    if (generationId) { bff.styleResolver.injected(generationId); saveSocialV2State(); }\n    if (wakeSnapshot && isCurrentSession(key, sessionId)');
+};

@@ -5,6 +5,7 @@ import { normalizedTerm, safeGeneralText, publicSource, senseId, termId } from '
 import { safeFetch } from '../../integrations/qq-bridge/src/safe-fetch.js';
 import { memoryTerms } from './memory-recall.mjs';
 import { ManualSlangResearch } from './manual-slang-research.mjs';
+import { relevance, expressionScene } from './community-retrieval.mjs';
 
 export const SLANG_POLICY = Object.freeze({ enabled: true, autoConfirm: true, threshold: 80, minMessages: 4,
   candidateMinMessages: 3, autoResearch: true, researchMinMessages: 4, minSpeakers: 2, minSpanMinutes: 30, lookbackHours: 168, scanIntervalMinutes: 5, maxAutoPerDay: 20 });
@@ -51,12 +52,14 @@ export class SlangManager {
   }
   validSense(s) {return s.status==='confirmed'&&s.verified&&s.generalizable&&safeGeneralText(s.meaning)&&safeGeneralText(s.usage||'')&&(s.manual||s.evidence?.length>=3&&s.evidence.every(e=>this.sourceRetained(e)));}
   visible(entry,key) {return this.app.globalStyle.allowed(key)&&entry.status==='confirmed'&&safeGeneralText(entry.content)&&entry.senses?.some(s=>this.validSense(s));}
-  contextEntries(entries,key,scene='',query='') {
+  contextEntries(entries,key,scene='',query='',{mode='explain'}={}) {
     if(!this.app.globalStyle.allowed(key)||!query.trim())return[];
+    if(mode==='expression'&&!expressionScene(query,scene).allowed)return[];
     const q=normalizedTerm(query),terms=memoryTerms(query),out=[];
-    for(const e of entries){if(![e.normalized||normalizedTerm(e.content),...(e.aliases||[])].some(t=>q.includes(t))||!this.visible(e,key))continue;
+    for(const e of entries){if((mode!=='expression'&&![e.normalized||normalizedTerm(e.content),...(e.aliases||[])].some(t=>q.includes(t)))||!this.visible(e,key))continue;
+      if(mode==='expression'){for(const s of e.senses.filter(s=>this.validSense(s))){const k={id:e.id+':'+s.id,kind:'slang',term:e.content,meaning:s.meaning,usage:s.usage,contextTerms:s.contextTerms||[],confidence:.95,origin:'native',sources:s.publicSources||[]},match=relevance(k,query,{mode});if(match)out.push({...k,...match,content:e.content,senseId:s.id});}continue;}
       const senses=e.senses.filter(s=>this.validSense(s)).map(s=>({s,score:(s.contextTerms||[]).filter(t=>terms.includes(t)||q.includes(normalizedTerm(t))).length})).sort((a,b)=>b.score-a.score);
-      for(const {s,score}of senses.slice(0,senses[0]?.score?1:2))out.push({id:e.id,content:e.content,status:'confirmed',count:e.count,meaning:s.meaning,usage:s.usage,senseId:s.id,contextScore:score});
+      for(const {s,score}of senses.slice(0,senses[0]?.score?1:2))out.push({id:e.id,content:e.content,status:'confirmed',count:e.count,meaning:s.meaning,usage:s.usage,senseId:s.id,contextTerms:s.contextTerms||[],contextScore:score,score:8+score,kind:'slang',term:e.content,confidence:.95,origin:'native',sources:s.publicSources||[]});
     }
     return out.slice(0,8);
   }

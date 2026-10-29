@@ -88,4 +88,5 @@ export class CommunityAdapter {
     if (!row) throw Error('来源在发现后已变化，等待下一轮重新读取');
     const end=Math.min(row.text.length,offset+2400);return { ...row, text: row.text.slice(offset,end),nextOffset:end,complete:end>=row.text.length };
   }
+  async contentVersion(item,opts) {return this.source.adapter==='platform-reader'?new PlatformReader(this.root,this.source).contentVersion(item,opts):null;}
 }

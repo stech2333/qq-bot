@@ -1,3 +1,4 @@
+// BigFatFish V4.1 knowledge application
 // BigFatFish V4 community learning
 // BigFatFish unsent reply recovery v1
 // BigFatFish direct reply latency v1
@@ -21,6 +22,8 @@
 // BigFatFish API pool v1
 import { ApiPool, inspectApiAccess } from '../../../extensions/bigfatfish/api-pool.mjs';
 import { createCommunityModel } from '../../../extensions/bigfatfish/community-model.mjs';
+// BigFatFish chat context renewal v1
+import { contextHead, contextPolicy, needsContextRenewal } from '../../../extensions/bigfatfish/chat-context-budget.mjs';
 // BigFatFish scoped mood v1
 // BigFatFish visible manual slang research v1
 // BigFatFish learning workspace creation v1
@@ -2114,6 +2117,7 @@ async function main() {
   }
 
   function bffSlangStore() {
+    bff.slang.entries = () => cfg.slang?.enabled === false ? [] : slangEntries;
     return { entries: () => slangEntries, writable: () => slangStoreWritable, save: () => saveSlangStore({ strict: true }) };
   }
   function scanBffSlang(force = false) {
@@ -2366,7 +2370,7 @@ async function main() {
     const now = new Date();
     const timeLine = `【当前时间】${now.toLocaleString('zh-CN', { hour12: false })}（${Intl.DateTimeFormat().resolvedOptions().timeZone}）`;
     const parts = [timeLine];
-    if (cfg.slang?.enabled !== false) {
+    if (cfg.slang?.enabled !== false && !promptText.includes('【本轮表达参考】')) {
       const block = buildSlangContext(bff.slang.contextEntries(slangEntries, key, bff.styleResolver.diagnostics.get(key)?.scene || '', bff.styleResolver.resolve(key, getSocialV2State(key), { preview: true }).query), cfg.slang?.injectMax ?? 8);
       if (block) parts.push(block);
     }
@@ -2471,6 +2475,18 @@ async function main() {
   /** sessionId -> 最近一次已知的实际模型。切换模型会让单价差好几倍，所以按会话记。 */
   const sessionModels = new Map();
   const nominalModel = () => cfg.dsh?.model || 'deepseek-flash';
+  function chatContextState(sessionId) {
+    const entry=apiPool.state.entries.find(e=>e.id===apiPool.state.activeId),policy=contextPolicy(entry||cfg.dsh);
+    const head=state.contextHeads?.[sessionId];return {...policy,tokens:head?.tokens??null,needsRenewal:needsContextRenewal(head,policy)};
+  }
+  function recordChatContext(sessionId,event,persist=true) {
+    if(!reverse.has(sessionId))return false;
+    if(!state.contextHeads||typeof state.contextHeads!=='object'||Array.isArray(state.contextHeads))state.contextHeads={};
+    const previous=state.contextHeads[sessionId],head=contextHead(event,previous);if(head===previous)return false;
+    state.contextHeads[sessionId]=head;
+    for(const id of Object.keys(state.contextHeads))if(!Object.values(state.sessions).includes(id))delete state.contextHeads[id];
+    if(persist)saveState();return true;
+  }
 
   function rememberModel(sessionId, selection) {
     const model = selection?.model;
@@ -2482,6 +2498,7 @@ async function main() {
   /** 摄入一条会话事件到 token 账本；任何异常都不能影响 QQ 主链路。 */
   function recordSessionUsage(sessionId, event) {
     try {
+      recordChatContext(sessionId,event);
       if (event?.type === 'model/selection') rememberModel(sessionId, event.data);
       const known = sessionModels.get(sessionId);
       tokenLedger.ingestEvent({
@@ -2504,6 +2521,7 @@ async function main() {
   function recordSessionSnapshot(sessionId, snapshot) {
     try {
       if (!snapshot) return;
+      let contextChanged=false;for(const entry of snapshot.records||[]){const event=entry?.type==='event'?entry.event:entry;contextChanged=recordChatContext(sessionId,event,false)||contextChanged;}if(contextChanged)saveState();
       const selection = snapshot.projections?.values?.modelSelection;
       rememberModel(sessionId, selection?.lastUsed ?? selection?.pending ?? null);
       const known = sessionModels.get(sessionId);
@@ -2809,6 +2827,7 @@ async function main() {
     // 但从未成功建过会话的 key 同样会留下限流时间戳与失败标记。
     forgetConversationCaches(key);
     if (!sessionId) return;
+    if(state.contextHeads)delete state.contextHeads[sessionId];
     reverse.delete(sessionId);
     collectors.delete(sessionId);
     sessionModels.delete(sessionId);
@@ -4076,7 +4095,7 @@ async function main() {
         if (req.method === 'GET' && url.pathname === '/api/sessions') {
           const list = [];
           for (const [key, sessionId] of Object.entries(state.sessions)) {
-            list.push({ key, sessionId, owner: key === `private:${String(cfg.ownerQQ ?? '')}` });
+            list.push({ key, sessionId, owner: key === `private:${String(cfg.ownerQQ ?? '')}`, context:chatContextState(sessionId) });
           }
           sendJson({ sessions: list });
           return;
@@ -7028,6 +7047,13 @@ async function main() {
           const body = await readBody();
           const key = String(body.key ?? '');
           if (!key || !state.sessions[key]) { sendJson({ ok: false, error: '会话不存在' }, 404); return; }
+          if(body.preserveConversation===true) {
+            if(!dshReady||!isSessionAllowedInCurrentMode(key)||!modePreset(key,currentMode,cfg)){sendJson({ok:false,error:'桥接模式或模型入口尚未就绪，请稍后重试'},409);return;}
+            if(body.expectedSessionId&&body.expectedSessionId!==state.sessions[key]){sendJson({ok:false,error:'会话已变化，请刷新后重试'},409);return;}
+            if(isConversationBusyV2(key,getSocialV2State(key))){sendJson({ok:false,error:'当前会话仍在处理消息，请稍后重试'},409);return;}
+            const archived=state.sessions[key];retireSession(key);const sessionId=await ensureSession(key);
+            sendJson({ok:true,key,archived,sessionId,preservedConversation:true});return;
+          }
           sessionEpoch++;
           const oldSessionId = state.sessions[key];
           delete state.sessions[key];
@@ -8013,6 +8039,11 @@ async function main() {
     const epoch = sessionEpoch;
     const policy = sessionPolicy(key);
     if (!isSessionAllowedInCurrentMode(key)) throw new Error(`当前模式不允许会话 ${key}`);
+    const current=state.sessions[key];
+    if(current&&chatContextState(current).needsRenewal&&!v2TurnStartAt.has(current)) {
+      const context=chatContextState(current);retireSession(key);
+      appendActivity(key+' 上下文已接近窗口，轮换模型会话并保留群消息、长期记忆和知识（'+context.tokens+'/'+context.window+' Token）');
+    }
     const existing = state.sessions[key];
     if (existing) {
       // reset/清空工作区期间旧映射可能尚未清理；发现代际不匹配必须丢弃旧会话，防止复活。
@@ -8927,6 +8958,7 @@ async function main() {
       if (!opts.silent) await sendToQQ(key, `⚠️ 消息未被接受：${safeErrText}`);
       return { ok: false, error: safeErrText };
     }
+    if (generationId) { bff.styleResolver.injected(generationId); saveSocialV2State(); }
     if (wakeSnapshot && isCurrentSession(key, sessionId)
         && socialV2.conversations.get(canonicalV2Key(key)) === wakeState
         && wakeState.agentToken === wakeToken) {
@@ -11128,6 +11160,11 @@ async function main() {
               const deliveryRecoveryHandled = queueReplyDeliveryRecoveryV2(key, {
                 live: replyTurnLive, attempted: sendToolAttempted || sendToolSucceeded, ended
               });
+              if(ended.reason.kind!=='completed') {
+                pendingWakeKeys.delete(key);disarmPendingWakeLease(key);
+                wakeConfigUpdatedKeys.delete(key);markReadCalledKeys.delete(key);wakeConfigMissCount.delete(key);
+                appendActivity(key+' 回合未完成（'+ended.reason.kind+'），保留待答消息，不向失败会话追加收尾提醒');
+              }
               if (!deliveryRecoveryHandled && pendingWakeKeys.has(key)) {
                 pendingWakeKeys.delete(key);
                 disarmPendingWakeLease(key);

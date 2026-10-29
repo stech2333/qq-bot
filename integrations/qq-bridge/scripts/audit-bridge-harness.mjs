@@ -11,6 +11,7 @@ import vm from 'node:vm';
 import { BigFatFish, normalizeState } from '../../../extensions/bigfatfish/runtime.mjs';
 import { ApiPool } from '../../../extensions/bigfatfish/api-pool.mjs';
 import { createCommunityModel } from '../../../extensions/bigfatfish/community-model.mjs';
+import { contextHead, contextPolicy, needsContextRenewal } from '../../../extensions/bigfatfish/chat-context-budget.mjs';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import * as markdown from '../src/md-to-plain.js';
@@ -180,7 +181,7 @@ export async function bridgeHarness({ config = {}, savedState, files = {}, globa
       selfUserId = String(id ?? '');
       selfNickname = selfDisplayName.toLowerCase() || 'deepseek';
     },
-    flushQueue, retireSession,
+    flushQueue, retireSession, recordSessionUsage, recordSessionSnapshot, chatContextState,
     voiceCfg, voiceLibrary, resolveVoicePathForV2, resolveVoicePathForOperator,
     voiceBudgetCheck, sendVoiceV2, sendVoiceForV2, assertOutboundAuditOk,
     setMode(value) { currentMode = value; },
@@ -191,7 +192,7 @@ export async function bridgeHarness({ config = {}, savedState, files = {}, globa
   bot.onPrivateMessage(async (event) => {`);
   const timers = new Set();
   const context = vm.createContext({
-    BigFatFish, normalizeState, ApiPool, createCommunityModel,
+    BigFatFish, normalizeState, ApiPool, createCommunityModel, contextHead, contextPolicy, needsContextRenewal,
     fs, os, path, http, crypto, fileURLToPath, URL, Buffer, AbortSignal, console: { log() {}, error() {} },
     fetch: fakeFetch,
     // 锁文件探测用（bridge.js 顶层的 consolePortInUse）；

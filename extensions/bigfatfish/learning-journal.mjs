@@ -4,7 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 
 const MODULES=new Set(['system','memory','window','topic','interest','research','style','slang','mood']);
 const CODE=/^[A-Z][A-Z0-9_]{0,63}$/;
-const COUNTS=new Set(['facts','archived','summaryChars','interests','revision','topics','active','added','retained','todayUsed','samples','verifiedSenses','extracted','changes','candidates','features','expressions','version','confirmed','total','done','approved','uncertain','failed','skipped','history','applied']);
+const COUNTS=new Set(['facts','archived','summaryChars','interests','revision','topics','active','added','retained','todayUsed','samples','verifiedSenses','extracted','changes','candidates','features','expressions','version','confirmed','total','done','approved','uncertain','failed','skipped','history','applied','hits','selected','injected','sentTurns','literalUses']);
 // An explicit metadata schema: never accept prompts, messages, facts, quotes or provider output.
 export class LearningJournal {
   constructor(root) {this.directory=path.join(root,'logs','bridge','learning');this.maxBytes=10*1024*1024;this.written=0;this.lastAt=0;this.error='';}

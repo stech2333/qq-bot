@@ -43,9 +43,9 @@ test('source changes or knowledge revocation invalidate an in-flight generation 
   await f.app.community.admin('POST',{action:'revoke',id});assert.deepEqual(f.app.community.retrieve('摸鱼'),[]);
   f.writeItems([item('post1',{summary:'游戏文化的新证据'})]);await f.run();assert.deepEqual(f.app.community.retrieve('摸鱼'),[]);assert.equal(f.app.community.store.list()[0].status,'revoked');
 });
-test('duplicate input is excluded locally without new model calls, new evidence reinforces a version',async t=>{
+test('duplicate input is excluded locally; metadata without new evidence does not reinforce a version',async t=>{
   const f=fixture(t);f.setup();await f.run();await f.run();assert.equal(f.calls.length,3);assert.equal(f.app.community.store.list().length,1);
-  f.writeItems([item('post1',{summary:'游戏文化新增证据'})]);await f.run();assert.equal(f.app.community.store.list().length,1);assert.equal(f.app.community.retrieve('摸鱼')[0].version,2);
+  f.writeItems([item('post1',{summary:'游戏文化新增证据'})]);await f.run();assert.equal(f.app.community.store.list().length,1);assert.equal(f.app.community.retrieve('摸鱼')[0].version,1);
 });
 test('read/store/learning permission is required and expired or revoked storage erases dependent data',async t=>{
   const f=fixture(t);f.setup();await f.run();const s=f.app.community.store.source('synthetic');
@@ -70,7 +70,7 @@ test('unknown usage and transport failures retain reservations across restart an
 });
 test('legacy daily task cap is ignored while new fingerprints remain incremental',async t=>{
   const f=fixture(t);f.setup();f.configure({maxPerDay:1});await f.run();assert.equal(f.calls.length,3);
-  f.writeItems([item('post1',{summary:'游戏文化的新材料'})]);await f.run();assert.equal(f.calls.length,6);assert.equal(f.app.community.store.jobs()[0].status,'COMPLETED');
+  f.writeItems([item('post1',{summary:'游戏文化的新材料'})]);await f.run();assert.equal(f.calls.length,5);assert.equal(f.app.community.store.jobs()[0].status,'COMPLETED');
 });
 test('usage exceeding a reservation is durably accounted and prevents later daily calls',async t=>{
   const f=fixture(t);f.setup();f.model.run=async()=>{f.calls.push('overrun');return {text:'{"ids":[]}',usage:{input:80,output:2000,reasoning:0,cacheHit:0}};};

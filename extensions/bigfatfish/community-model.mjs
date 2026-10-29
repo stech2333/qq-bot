@@ -8,9 +8,9 @@ export const COMMUNITY_SYSTEM = '你是只读公共知识审核器。仅处理�
 // Resolve a dedicated route, or follow chat when explicitly selected. Never call
 // session.selectModel (it may change DSH global defaults), or expose any agent tools.
 export function communityModelProfile(pool, config, env = process.env, readCredential = readDshCredential, route = 'follow-chat') {
-  const id = route === 'follow-chat' ? pool?.state.activeId : route === 'builtin' ? null : route;
-  const entry = id ? pool?.state.entries.find(e => e.id === id) : null;
-  if (pool?.error) throw Error('API池不可用，社区学习已暂停');
+  const id = route === 'follow-chat' ? pool?.state?.activeId : route === 'builtin' ? null : route;
+  const entry = id ? pool?.state?.entries?.find(e => e.id === id) : null;
+  if (route === 'follow-chat' && pool?.error) throw Error('API池不可用，社区学习已暂停');
   if (id && !entry) throw Error('社区学习指定的API条目不存在，请重新选择');
   if (entry && (!entry.enabled || !entry.keyStored || entry.protocol !== 'openai-completions' || !/deepseek/i.test(entry.model))) throw Error('社区学习需已启用的DeepSeek Chat Completions接口');
   const ref=entry?poolCredential(entry):'DEEPSEEK_API_KEY';
