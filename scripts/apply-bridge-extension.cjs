@@ -720,8 +720,10 @@ const consoleTemplate = fs.readFileSync(path.join(root, 'extensions/bigfatfish/c
 const v4Patch = require('./v4-bridge-patch.cjs');
 change('src/bridge.js', s => v4Patch.patchBridge(s, once), '// BigFatFish V4 community learning');
 change('src/bridge.js', s => v4Patch.knowledgeApplication(s, once), '// BigFatFish V4.1 knowledge application');
+change('src/bridge.js', s => v4Patch.knowledgeDiagnostics(s, once), 'bff.styleResolver.auditPrompt(generationId, promptTextForMetrics)');
 const contextPatch = require('./chat-context-bridge-patch.cjs');
 change('src/bridge.js', s => contextPatch.patchBridge(s, once), '// BigFatFish chat context renewal v1');
+change('src/bridge.js', s => v4Patch.expressionSettlement(s,once), '// BigFatFish expression settlement v2');
 change('src/bridge.js', s => {
   const start=s.indexOf('  function saveSlangStore('),end=s.indexOf('  function bffSlangStore()',start);
   if(start<0||end<0)throw Error('Learning journal slang persistence boundary missing');

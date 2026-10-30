@@ -12,7 +12,14 @@ exports.patchBridge = (source, once) => {
   return source;
 };
 
+exports.knowledgeDiagnostics = (source, once) => {
+  if (!source.includes('bff.styleResolver.auditPrompt(generationId, promptTextForMetrics)')) source=once(source,
+    '    const diagnostic = bff.styleResolver.diagnostics.get(key);',
+    '    const diagnostic = bff.styleResolver.diagnostics.get(key);\n    if (generationId) bff.styleResolver.auditPrompt(generationId, promptTextForMetrics);');
+  return source;
+};
 exports.knowledgeApplication = (source, once) => {
+  source=exports.knowledgeDiagnostics(source,once);
   source = '// BigFatFish V4.1 knowledge application\n' + source;
   source = once(source, '  function bffSlangStore() {', '  function bffSlangStore() {\n    bff.slang.entries = () => cfg.slang?.enabled === false ? [] : slangEntries;');
   const start=source.indexOf('  function withSlangContext('),end=source.indexOf('\n  if (!cfg.allow.private',start);
@@ -21,3 +28,5 @@ exports.knowledgeApplication = (source, once) => {
   source=source.slice(0,start)+block+source.slice(end);
   return once(source, '    if (wakeSnapshot && isCurrentSession(key, sessionId)', '    if (generationId) { bff.styleResolver.injected(generationId); saveSocialV2State(); }\n    if (wakeSnapshot && isCurrentSession(key, sessionId)');
 };
+
+exports.expressionSettlement = (source,once) => once(source,'  function retireSession(key) {','  function retireSession(key) {\n    bff.delivery.cancel(key); // BigFatFish expression settlement v2');

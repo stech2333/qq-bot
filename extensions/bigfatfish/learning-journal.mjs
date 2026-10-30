@@ -8,7 +8,7 @@ const COUNTS=new Set(['facts','archived','summaryChars','interests','revision','
 // An explicit metadata schema: never accept prompts, messages, facts, quotes or provider output.
 export class LearningJournal {
   constructor(root) {this.directory=path.join(root,'logs','bridge','learning');this.maxBytes=10*1024*1024;this.written=0;this.lastAt=0;this.error='';}
-  write(module,event,{key,task,status,reasonCode,counts={}}={}) {
+  write(module,event,{key,task,status,reasonCode,counts={},retrieval}={}) {
     try {
       if(!MODULES.has(module)||!CODE.test(event))throw Error();
       const at=Date.now(),record={id:randomUUID(),at,module,event};
@@ -16,6 +16,8 @@ export class LearningJournal {
       if(/^[a-f0-9-]{36}$/.test(task||''))record.task=task;
       if(CODE.test(status||''))record.status=status;
       if(CODE.test(reasonCode||''))record.reasonCode=reasonCode;
+      if(retrieval&&['explain','expression'].includes(retrieval.mode))record.retrieval={mode:retrieval.mode,databaseError:retrieval.databaseError===true,
+        ...Object.fromEntries(['candidateCount','validResultCount','sourceFilteredCount'].filter(k=>Number.isSafeInteger(retrieval[k])&&retrieval[k]>=0).map(k=>[k,retrieval[k]]))};
       const safe={};for(const [k,v] of Object.entries(counts).slice(0,32))if(COUNTS.has(k)&&Number.isSafeInteger(v)&&v>=0)safe[k]=v;
       if(Object.keys(safe).length)record.counts=safe;
       const date=new Date(at+8*3600000).toISOString().slice(0,10),line=JSON.stringify(record)+'\n';

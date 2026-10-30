@@ -2820,6 +2820,7 @@ async function main() {
   }
 
   function retireSession(key) {
+    bff.delivery.cancel(key); // BigFatFish expression settlement v2
     const sessionId = state.sessions[key];
     delete state.sessions[key];
     delete state.sessionPolicies[key];
@@ -8934,6 +8935,7 @@ async function main() {
     if (opts.farewell) social.exitingSessions.add(sessionId);
     const promptTextForMetrics = typeof content === 'string' ? content : (Array.isArray(content) ? content.filter(p=>p.type==='text').map(p=>p.text).join('\n') : '');
     const diagnostic = bff.styleResolver.diagnostics.get(key);
+    if (generationId) bff.styleResolver.auditPrompt(generationId, promptTextForMetrics);
     if (diagnostic && generationId) Object.assign(diagnostic, { turnId:generationId, totalPromptChars:promptTextForMetrics.length, totalPromptBytes:Buffer.byteLength(promptTextForMetrics), glossaryChars:(promptTextForMetrics.match(/【黑话释义资料】[^]*?(?=\n\n|$)/)?.[0]||'').length, mediaParts:Array.isArray(content)?content.filter(p=>p.type!=='text').length:0 });
     if (opts.replyDeliveryRecovery) {
       const current = pendingReplyDeliveryV2(key), expected = opts.replyDeliveryRecovery;

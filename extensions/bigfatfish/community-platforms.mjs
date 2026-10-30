@@ -29,10 +29,10 @@ export function processExchange(config,request,{signal,timeoutMs=30000,mcp=false
     const abort=()=>{if(mcp&&child?.stdin?.writable)child.stdin.write(JSON.stringify({jsonrpc:'2.0',method:'notifications/cancelled',params:{requestId:id,reason:'管理员取消'}})+'\n');finish(fail('来源读取已取消','CANCELLED'));};
     const send=(method,params)=>new Promise((res,rej)=>{const n=++id;pending.set(n,{res,rej});child.stdin.write(JSON.stringify({jsonrpc:'2.0',id:n,method,params})+'\n');});
     try{child=spawnProcess(config.command,config.args,{windowsHide:true,shell:false,env,stdio:['pipe','pipe','pipe']});}catch{finish(fail('来源只读程序无法启动','UNAVAILABLE'));return;}
-    timer=setTimeout(()=>finish(fail('来源网络读取超时')),timeoutMs);timer.unref?.();signal?.addEventListener('abort',abort,{once:true});
+    timer=setTimeout(()=>finish(fail('来源网络读取超时','TIMEOUT')),timeoutMs);timer.unref?.();signal?.addEventListener('abort',abort,{once:true});
     child.on('error',()=>finish(fail('来源只读程序无法启动','UNAVAILABLE')));child.stdin.on('error',()=>finish(fail('来源只读程序通信中断')));
     child.stderr.on('data',()=>{}); // Raw stderr may contain platform cookies; never persist or return it.
-    child.stdout.on('data',chunk=>{try{bytes+=chunk.length;if(bytes>512000)throw fail('来源返回超过单次读取保护');buffer+=decoder.write(chunk);let i;while((i=buffer.indexOf('\n'))>=0){const line=buffer.slice(0,i);buffer=buffer.slice(i+1);if(!line.trim())continue;const row=JSON.parse(line);if(mcp){const p=pending.get(row.id);if(p){pending.delete(row.id);row.error?p.rej(fail('来源MCP接口拒绝请求')):p.res(row.result);}}else {if(row.error)throw fail(row.error==='AUTH'?'来源授权失效':row.error==='RATE_LIMITED'?'来源访问频率受限':'来源只读客户端请求失败',row.error);finish(null,row);}}}catch(e){finish(e.kind?e:fail('来源只读程序返回格式无效'));}});
+    child.stdout.on('data',chunk=>{try{bytes+=chunk.length;if(bytes>512000)throw fail('来源返回超过单次读取保护');buffer+=decoder.write(chunk);let i;while((i=buffer.indexOf('\n'))>=0){const line=buffer.slice(0,i);buffer=buffer.slice(i+1);if(!line.trim())continue;const row=JSON.parse(line);if(mcp){const p=pending.get(row.id);if(p){pending.delete(row.id);row.error?p.rej(fail('来源MCP接口拒绝请求')):p.res(row.result);}}else {if(row.error)throw fail(row.error==='AUTH'?'来源授权失效':row.error==='RATE_LIMITED'?'来源访问频率受限':row.error==='INVALID_FORUM'?'贴吧不存在或目标不匹配':row.error==='TIMEOUT'?'来源读取超时':row.error==='UNAVAILABLE'?(row.reason==='指定贴吧暂不开放，平台拒绝读取'?row.reason:'只读依赖未安装或接口不兼容'):'来源网络读取失败',row.error);finish(null,row);}}}catch(e){finish(e.kind?e:fail('来源只读程序返回格式无效'));}});
     child.on('close',()=>{if(!settled)finish(fail('来源只读程序提前结束'));});
     if(!mcp){child.stdin.end(JSON.stringify(request)+'\n');return;}
     void(async()=>{try{
@@ -60,10 +60,10 @@ const waitAccess=(ms,signal)=>new Promise((resolve,reject)=>{if(signal?.aborted)
 export class PlatformReader {
   constructor(root,source,{exchange=processExchange}={}) {this.root=root;this.source=source;this.exchange=exchange;}
   config() {if(!sourceAllowed(this.source))throw fail('来源授权失效','AUTH');const c=connectorConfig(this.root,this.source);if(!c.config)throw fail(c.reason,'UNAVAILABLE');return c.config;}
-  async call(action,args,opts) {const config=this.config(),key=this.source.connector,delay=Math.max(2000,Number(config.minRequestMs)||2500);await waitAccess((accessAt.get(key)||0)-Date.now(),opts?.signal);accessAt.set(key,Date.now()+delay);if(config.driver==='aiotieba'){config.args=[...config.args,'-I',fileURLToPath(new URL('./community-tieba.py',import.meta.url))];}return this.exchange(config,config.driver==='polylens'?{name:action,args}:{action,...args,target:this.source.target,platform:this.source.platform},{...opts,mcp:config.driver==='polylens'});}
-  async probe(opts) {const c=this.config(),row=await this.call(c.driver==='polylens'?'__probe':'probe',{},opts);if(c.driver==='polylens'?row?.is_login!==true:row?.ready!==true)throw fail('来源需要正常登录或许可检查未通过','AUTH');return {status:'READY',reason:'已通过只读能力及登录检查',checkedAt:Date.now()};}
+  async call(action,args,opts) {const config=this.config(),key=this.source.connector,delay=Math.max(2000,Number(config.minRequestMs)||2500);await waitAccess((accessAt.get(key)||0)-Date.now(),opts?.signal);accessAt.set(key,Date.now()+delay);if(config.driver==='aiotieba'){config.args=[...config.args,'-I',fileURLToPath(new URL('./community-tieba.py',import.meta.url))];}return this.exchange(config,config.driver==='polylens'?{name:action,args}:{action,...args,target:this.source.forum?.name||this.source.target,platform:this.source.platform},{...opts,mcp:config.driver==='polylens'});}
+  async probe(opts) {const c=this.config(),row=await this.call(c.driver==='polylens'?'__probe':'probe',{},opts);if(c.driver==='polylens'?row?.is_login!==true:row?.ready!==true)throw fail('来源需要正常登录或许可检查未通过','AUTH');if(this.source.platform==='tieba'&&(!row.forum?.id||!forumMatches(this.source.target,row.forum.name)))throw fail('贴吧能力检查未返回匹配的真实贴吧','INVALID_FORUM');return {status:'READY',reason:'已通过只读能力及登录检查',checkedAt:Date.now(),...(row.forum?{forum:row.forum}:{})};}
   async discover({signal,cursor=0,topics=[],goals=[]}) {
-    const c=this.config();if(c.driver!=='polylens'){const row=await this.call('discover',{cursor,topics,goals:goals.map(g=>g.term)}, {signal});return this.normalizeDiscovery(row);}
+    const c=this.config();if(c.driver!=='polylens'){const row=await this.call('discover',{cursor,topics,goals:goals.map(g=>g.term),forum:this.source.forum}, {signal});return this.normalizeDiscovery(row);}
     let state;try{state=typeof cursor==='string'?JSON.parse(cursor):null;}catch{}state??={topic:0,cursor:null};
     const queries=explorationQueries(this.source,topics,goals);if(!queries.length)throw fail('来源没有已授权探索范围','AUTH');
     const searches=state.searches||{},now=Date.now();let index=state.topic||0,keyword;
@@ -76,7 +76,7 @@ export class PlatformReader {
     const items=jsonField(row,'results').map(r=>({id:r.url?.match(/\/(BV[\w]+|av\d+)/)?.[1],title:r.title,summary:(r.summary||'').slice(0,400),url:r.url,publishedAt:Date.parse(r.published_at)||0,tags:r.tags,stableVideo:true,commentVersion:String(r.comment_count||0)}));
     return this.normalizeDiscovery({items,cursor:JSON.stringify({topic:(index+1)%queries.length,searches:Object.fromEntries(queries.filter(q=>searches[q]).map(q=>[q,searches[q]])),cursor:more?row.next_cursor:null}),hasMore:more||queries.some(q=>!searches[q]?.doneAt)});
   }
-  normalizeDiscovery(row) {if(!Array.isArray(row?.items)||row.items.length>100)throw fail('来源发现数据无效');return {...row,items:row.items.map(r=>{if(!/^[\w-]{1,100}$/.test(r.id)||typeof r.title!=='string'||r.title.length>200||!sourceURL(r.url,this.source.platform))throw fail('来源材料标识或链接无效');return {id:r.id,title:r.title,summary:String(r.summary||'').slice(0,400),url:r.url,publishedAt:r.publishedAt,tags:String(r.tags||'').slice(0,200),...(r.stableVideo?{stableVideo:true,commentVersion:r.commentVersion,subtitleVersion:r.subtitleVersion}:{}),metadataVersion:hash(JSON.stringify([r.title,r.summary,r.tags])),fingerprint:hash(JSON.stringify(r.stableVideo?['video',this.source.platform,r.id]:[r.id,r.title,r.summary,r.updatedAt||r.revision||r.publishedAt]))};})};}
+  normalizeDiscovery(row) {if(!Array.isArray(row?.items)||row.items.length>100)throw fail('来源发现数据无效');return {...row,items:row.items.map(r=>{if(!/^[\w-]{1,100}$/.test(r.id)||typeof r.title!=='string'||r.title.length>200||!sourceURL(r.url,this.source.platform))throw fail('来源材料标识或链接无效');if(this.source.platform==='tieba'&&(!r.stableThread||!/^\d+$/.test(r.id)||new URL(r.url).pathname!=='/p/'+r.id||!r.forum?.id||!forumMatches(this.source.target,r.forum.name)))throw fail('贴吧材料不属于登记目标','INVALID_FORUM');return {id:r.id,title:r.title,summary:String(r.summary||'').slice(0,400),url:r.url,publishedAt:r.publishedAt,tags:String(r.tags||'').slice(0,200),...(r.stableThread?{stableThread:true,forum:r.forum,replyCount:r.replyCount,lastReplyAt:r.lastReplyAt}:{}),...(r.stableVideo?{stableVideo:true,commentVersion:r.commentVersion,subtitleVersion:r.subtitleVersion}:{}),metadataVersion:hash(JSON.stringify([r.title,r.summary,r.tags])),fingerprint:hash(JSON.stringify(r.stableThread?['thread',this.source.id,r.id]:r.stableVideo?['video',this.source.platform,r.id]:[r.id,r.title,r.summary,r.updatedAt||r.revision||r.publishedAt]))};})};}
   async contentVersion(item,{signal}={}) {
     if(this.config().driver!=='polylens')return null;
     const r=await this.call('get_subtitles',{video:item.id,jq:jq('map(.content) | join("\\n")')},{signal});let text=r.subtitles;
@@ -84,17 +84,26 @@ export class PlatformReader {
     if(typeof text!=='string'||text.length>120000)throw fail('来源字幕超过版本检查保护');return hash(text);
   }
   async fetch(item,{signal,readCursor=null,offset=item.offset||0}={}) {
-    const c=this.config();if(c.driver!=='polylens'){const r=await this.call('read',{id:item.id,cursor:readCursor},{signal});return this.normalizeRead(item,r);}
+    const c=this.config();if(c.driver!=='polylens'){const r=await this.call('read',{id:item.id,cursor:readCursor,forum:item.forum},{signal});return this.normalizeRead(item,r);}
     const s=readCursor||{stage:'subtitles',offset};let text,next,paginationStopped;
     if(s.stage==='subtitles'){
       const r=await this.call('get_subtitles',{video:item.id,jq:jq(`map(.content) | join("\\n") | .[${s.offset}:${s.offset+2400}]`)},{signal});text=typeof r.subtitles==='string'?r.subtitles:'';try{text=JSON.parse(text);}catch{}
-      next=text.length>=2400?{stage:'subtitles',offset:s.offset+2400}:{stage:'comments',cursor:null};
+      const characters=Array.from(text).length;
+      next=characters>=2400?{stage:'subtitles',offset:s.offset+characters}:{stage:'comments',cursor:null};
     }else if(s.stage==='replies'){
       const r=await this.call('get_comment_replies',{video:item.id,comment_ids:[s.parents[0]],pages:1,start_page:s.page,jq:jq('map({id,parent_id,content})')},{signal});const thread=r.results?.[0],rows=jsonField(thread,'replies');text=rows.length?'主评论 '+s.parents[0]+' 的回复：\n'+rows.map(r=>'回复 '+r.id+' → '+(r.parent_id||s.parents[0])+': '+r.content).join('\n'):'';next=thread?.has_more&&rows.length?{...s,page:s.page+1}:s.parents.length>1?{...s,parents:s.parents.slice(1),page:1}:s.next??null;if(thread?.has_more&&!rows.length)paginationStopped='EMPTY_REPLY_PAGE';
     }else{
       const r=await this.call('get_comments',{video:item.id,count:20,cursor:s.cursor,mode:'newest',jq:jq('map({id,content,reply_count})')},{signal});if(r.message)throw fail('来源访问频率受限','RATE_LIMITED');const rows=jsonField(r,'comments');text=rows.map(r=>'主评论 '+r.id+': '+r.content).join('\n');const parents=rows.filter(r=>r.reply_count>0).map(r=>r.id);const advances=rows.length&&r.next_cursor!=null&&JSON.stringify(r.next_cursor)!==JSON.stringify(s.cursor);const after=r.has_more&&advances?{stage:'comments',cursor:r.next_cursor}:null;next=parents.length?{stage:'replies',parents,page:1,next:after}:after;if(r.has_more&&!advances)paginationStopped=rows.length?'COMMENT_CURSOR_NOT_ADVANCING':'EMPTY_COMMENT_PAGE';
     }
-    return {...this.normalizeRead(item,{text,readCursor:next,complete:next===null,contentType:s.stage}),...(paginationStopped?{paginationStopped}:{})};
+    return {...this.normalizeRead(item,{text,readCursor:next,complete:next===null,contentType:s.stage}),...(s.stage==='subtitles'?{nextOffset:s.offset+Array.from(text).length,offsetUnit:'unicode-codepoints'}:{}),...(paginationStopped?{paginationStopped}:{})};
   }
-  normalizeRead(item,r) {if(typeof r?.text!=='string'||r.text.length>16000||typeof r.complete!=='boolean')throw fail('来源正文过大或缺少分页完成标记');return {...item,text:r.text,readCursor:r.readCursor??null,complete:r.complete,nextOffset:(item.offset||0)+r.text.length,contentType:r.contentType||'body',segmentHash:hash(r.text)};}
+  normalizeRead(item,r) {if(typeof r?.text!=='string'||r.text.length>16000||typeof r.complete!=='boolean')throw fail('来源正文过大或缺少分页完成标记');const base=this.source.platform==='tieba'?Object.fromEntries(['id','title','summary','url','fingerprint','stableThread','platform','source','forum'].filter(k=>item[k]!==undefined).map(k=>[k,item[k]])):item;return {...base,text:r.text,readCursor:r.readCursor??null,complete:r.complete,nextOffset:(item.offset||0)+r.text.length,contentType:r.contentType||'body',...(this.source.platform==='tieba'?{records:validateTiebaRecords(item,r),forum:r.forum,paginationStopped:r.paginationStopped}:{}),segmentHash:hash(r.text)};}
+}
+
+export function forumMatches(target,name) {return typeof name==='string'&&[target,target?.endsWith('吧')?target.slice(0,-1):target].some(t=>t?.normalize('NFC').toLowerCase()===name.normalize('NFC').toLowerCase());}
+function validateTiebaRecords(item,r) {
+  if(!Array.isArray(r.records)||r.records.length>1||!r.forum?.id||!forumMatches(item.forum?.name||'',r.forum.name)||String(item.forum.id)!==String(r.forum.id))throw fail('贴吧读取缺少匹配的结构化证据','INVALID_FORUM');
+  if(!r.complete&&(!r.readCursor||typeof r.readCursor!=='object'))throw fail('贴吧缺少后续阅读游标');
+  for(const x of r.records)if(x.tid!==item.id||!/^\d+$/.test(x.pid)||x.replyId!==null&&!/^\d+$/.test(x.replyId)||x.replyId&&x.parentPid!==x.pid||typeof x.text!=='string'||!r.text.endsWith(x.text)||hash(x.text)!==x.contentHash||!/^([a-f0-9]{64})$/.test(x.itemHash)||!Number.isSafeInteger(x.offset)||x.offset<0||!Number.isSafeInteger(x.end)||x.end<x.offset||typeof x.itemComplete!=='boolean')throw fail('贴吧楼层/回复结构或内容哈希无效');
+  return r.records;
 }

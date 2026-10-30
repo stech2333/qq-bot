@@ -2,11 +2,15 @@
 import { memoryTerms } from './memory-recall.mjs';
 import { createHash } from 'node:crypto';
 export const normalized = text => String(text||'').normalize('NFKC').toLowerCase().replace(/\s+/g,' ').trim();
-export function containsTerm(text,term) {const n=normalized(text),t=normalized(term);return /^[a-z0-9 ]+$/i.test(t)?new RegExp('(?:^|[^a-z0-9])'+t.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?:$|[^a-z0-9])','i').test(n):n.includes(t);}
-const ALIASES=[['失传媒体','lost media'],['人设','persona'],['用户生成内容','ugc'],['专业生产内容','pgc'],['地球online','地球 online']];
+export function containsTerm(text,term) {
+  const n=normalized(text),t=normalized(term);if(!t)return false;
+  if(/^[\u4e00-\u9fff]$/.test(t))return new RegExp('(?:^|[^\\p{L}\\p{N}])'+t+'(?=$|[^\\p{L}\\p{N}]|是什么意思|是啥|什么意思|啥意思|这个词|这个梗)','u').test(n);
+  return /^[a-z0-9 ]+$/i.test(t)?new RegExp('(?:^|[^a-z0-9])'+t.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?:$|[^a-z0-9])','i').test(n):n.includes(t);
+}
+const ALIASES=[['失传媒体','lost media'],['人设','persona'],['用户生成内容','ugc'],['专业生产内容','pgc'],['地球online','地球 online','地球ol','地球 ol']];
 const SYNONYMS=[['跨子网','其他子网','不同子网','跨网段','其他网段','不同网段'],['下方','底下'],['子网','网段']];
 const SHORT_TERMS=['子网','网关','ip','mac','ugc','pgc','大v'];
-export function termAliases(term) {const text=normalized(term),base=text.replace(/[（(][^()（）]*[)）]/g,'').trim(),inside=[...text.matchAll(/[（(]([^()（）]+)[)）]/g)].map(m=>m[1]);return [...new Set([text,base,...inside,...ALIASES.filter(g=>g.includes(text)||g.includes(base)||g.some(x=>inside.includes(x))).flat()])].filter(t=>t.length>=2);}
+export function termAliases(term) {const text=normalized(term),base=text.replace(/[（(][^()（）]*[)）]/g,'').trim(),inside=[...text.matchAll(/[（(]([^()（）]+)[)）]/g)].map(m=>m[1]);return [...new Set([text,base,...inside,...ALIASES.filter(g=>g.includes(text)||g.includes(base)||g.some(x=>inside.includes(x))).flat()])].filter(t=>t.length>=2||/^[\u4e00-\u9fff]$/.test(t));}
 export const conceptKey=term=>{const a=termAliases(term);return ALIASES.find(g=>g.some(t=>a.includes(t)))?.[0]||a[1]||a[0]||'';};
 export const senseKey=text=>normalized(text).replace(/[\s\p{P}\p{S}]/gu,'');
 export const expressionKey=k=>createHash('sha256').update(conceptKey(k.term)+':'+senseKey(k.meaning)).digest('hex');

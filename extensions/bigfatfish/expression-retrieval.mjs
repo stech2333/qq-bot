@@ -11,13 +11,14 @@ export function literalUse(text,k) {return termAliases(k.term).some(t=>containsT
 export class ExpressionRetrieval {
   constructor() { this.usage = new Map(); }
   knowledge(app,key,st,query,scene,{now=Date.now()}={}) {
-    if(!app.globalStyle.allowed(key)||!expressionScene(query,scene).allowed)return {hits:0,selected:[]};
+    const diagnostic={};
+    const community=app.community.retrieve(query,{key,mode:'expression',scene,limit:2,maxChars:1800,diagnostics:diagnostic});
+    if(!app.globalStyle.allowed(key)||!expressionScene(query,scene).allowed)return {hits:0,selected:[],diagnostic};
     const native=app.slang?.contextEntries(app.slang.entries?.()||[],key,scene,query,{mode:'expression'})||[];
-    const community=app.community.retrieve(query,{mode:'expression',scene,limit:2,maxChars:1800});
     const recent=normalizeExpressionUse(st.bigfatfish.expressionUse).recent;
     const pool=fuseKnowledge([...community,...native],{limit:4,maxChars:3500});
     const selected=fuseKnowledge(pool.filter(k=>!recent.some(r=>r.id===expressionKey(k)&&now-r.at<20*60000)),{limit:2,maxChars:Math.max(0,1800-(st.bffKnowledgeChars||0)),exclude:st.bffKnowledgeSelections||[]});
-    return {hits:pool.length,selected};
+    return {hits:pool.length,selected,diagnostic};
   }
   retrieve(profile, { scene, condition, query = '', now = Date.now(), preview = false, personaSignature = '', conversationKey='' }) {
     if (!profile) return [];

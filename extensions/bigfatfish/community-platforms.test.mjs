@@ -21,23 +21,7 @@ test('Polylens reply pagination preserves parent relation and only completes aft
 function fakeMcp(calls) {return ()=>{const p=new EventEmitter();p.stdin=new PassThrough();p.stdout=new PassThrough();p.stderr=new PassThrough();p.kill=()=>{};let buffer='';p.stdin.on('data',chunk=>{buffer+=chunk;let i;while((i=buffer.indexOf('\n'))>=0){const r=JSON.parse(buffer.slice(0,i));buffer=buffer.slice(i+1);calls.push(r);if(!r.id)continue;const result=r.method==='initialize'?{protocolVersion:'2024-11-05',capabilities:{},serverInfo:{name:'synthetic',version:'1'}}:r.method==='tools/list'?{tools:['get_login_status','search_videos','get_subtitles','get_comments'].map(name=>({name,inputSchema:{type:'object'}}))}:{structuredContent:{is_login:true}};queueMicrotask(()=>p.stdout.write(JSON.stringify({jsonrpc:'2.0',id:r.id,result})+'\n'));}});return p;};}
 test('MCP transport initializes, lists capabilities and allows only fixed read tool names',async()=>{const calls=[],config={command:'synthetic',args:[]};const r=await processExchange(config,{name:'__probe',args:{}},{mcp:true,spawnProcess:fakeMcp(calls)});assert.equal(r.is_login,true);assert.equal(calls.find(r=>r.method==='tools/call').params.name,'get_login_status');const denied=[];await assert.rejects(processExchange(config,{name:'post_comment',args:{}},{mcp:true,spawnProcess:fakeMcp(denied)}),/白名单/);assert.equal(denied.some(r=>r.method==='tools/call'),false);});
 test('worker transport strips QQ secrets, hides stderr and forwards cancellation',async()=>{const controller=new AbortController(),child=new EventEmitter();child.stdin=new PassThrough();child.stdout=new PassThrough();child.stderr=new PassThrough();child.kill=()=>{};let captured;process.env.QQ_TEST_PRIVATE_SECRET='never-forward';try{const task=processExchange({command:'synthetic',args:[]},{action:'read'},{signal:controller.signal,spawnProcess:(_c,_a,o)=>{captured=o;return child;}});assert.equal(captured.shell,false);assert.equal(captured.windowsHide,true);assert.equal(captured.env.QQ_TEST_PRIVATE_SECRET,undefined);child.stderr.write('Cookie: synthetic-sensitive-cookie');controller.abort();await assert.rejects(task,e=>!e.message.includes('synthetic-sensitive-cookie')&&e.kind==='CANCELLED');}finally{delete process.env.QQ_TEST_PRIVATE_SECRET;}});
-test('the optional aiotieba worker executes only read APIs and keeps thread/floor relations with fake Python modules',()=>{
-  const worker=path.resolve('extensions/bigfatfish/community-tieba.py');const code=`import sys,types,asyncio,runpy,json
-class Page:
- has_more=False
-class Rows(list):
- page=Page()
- err=None
-class Client:
- def __init__(self,*a): pass
- async def __aenter__(self): return self
- async def __aexit__(self,*a): pass
- async def get_posts(self,tid,**kwargs): return Rows([types.SimpleNamespace(pid=8,text='一般楼层内容',reply_num=0)])
-sys.modules['aiotieba']=types.SimpleNamespace(Client=Client)
-m=runpy.run_path(sys.argv[1],run_name='test_only')
-r=asyncio.run(m['execute']({'action':'read','id':'123','cursor':None}))
-assert '帖子123/楼层8' in r['text'] and r['complete'] is True
-print('PASS fake aiotieba read contract')
-`;
-  const r=spawnSync(process.env.BFF_TEST_PYTHON||'python',['-I','-c',code,worker],{encoding:'utf8',windowsHide:true});assert.equal(r.status,0,r.stderr||r.error?.message);assert.match(r.stdout,/PASS/);
+test('the aiotieba worker passes the isolated read-only Python contract suite',()=>{
+  const r=spawnSync(process.env.BFF_TEST_PYTHON||'python',['-I',path.resolve('extensions/bigfatfish/community-tieba.test.py')],{encoding:'utf8',windowsHide:true,timeout:15000});
+  assert.equal(r.status,0,r.stderr||r.error?.message);assert.match(r.stderr,/Ran 22 tests/);
 });

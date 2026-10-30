@@ -1,10 +1,12 @@
+import { zhihuCheckpoint, zhihuPart, zhihuEvidence } from './community-zhihu-state.mjs';
+import { tiebaCheckpoint, tiebaEvidenceFingerprint } from './community-tieba-state.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { randomUUID } from 'node:crypto';
 import { hash, sourceAllowed, knowledgeAllowed } from './community-adapters.mjs';
 import { memoryTerms } from './memory-recall.mjs';
-import {conceptKey,senseKey,termAliases,retrievalWords,relevance,normalized,expressionScene} from './community-retrieval.mjs';
+import {conceptKey,senseKey,termAliases,containsTerm,retrievalWords,relevance,normalized,expressionScene} from './community-retrieval.mjs';
 
 const require = createRequire(import.meta.url);
 export const day = now => new Date(now + 8 * 3600000).toISOString().slice(0, 10);
@@ -27,15 +29,20 @@ export function searchTerms(text) {
 const decode = row => row ? JSON.parse(row.data) : null;
 export const termKey = value => String(value).normalize('NFKC').trim().toLowerCase();
 export class CommunityStore {
-  constructor(root) {
+  constructor(root, { readOnly = false } = {}) {
     this.root = root;
     this.file = path.join(root, 'state', 'community.sqlite');
     this.archiveDir = path.join(root, 'logs', 'bridge', 'community-learning');
     this.archiveMaxBytes = ARCHIVE_MAX_BYTES;
-    fs.mkdirSync(path.dirname(this.file), { recursive: true });
+    if (!readOnly) fs.mkdirSync(path.dirname(this.file), { recursive: true });
     const { DatabaseSync } = require('node:sqlite');
-    this.db = new DatabaseSync(this.file);
+    this.db = new DatabaseSync(this.file, { readOnly });
     try {
+      if (readOnly) {
+        this.db.exec('PRAGMA busy_timeout=100;');
+        if (this.db.prepare('PRAGMA user_version').get().user_version !== 3) throw Error('社区数据库Schema不兼容');
+        return;
+      }
       this.db.exec('PRAGMA busy_timeout=100; PRAGMA foreign_keys=ON;');
       const version = this.db.prepare('PRAGMA user_version').get().user_version;
       if (version > 3) throw Error('社区数据库版本高于当前程序，请升级程序');
@@ -90,9 +97,26 @@ export class CommunityStore {
           this.db.exec('DELETE FROM documents; UPDATE sources SET cursor=0;');
         });
       }
+      this.migrateTiebaQueue();
       this.db.exec('PRAGMA journal_mode=WAL;');
       this.db.exec('CREATE INDEX IF NOT EXISTS evidence_source ON evidence(source); CREATE INDEX IF NOT EXISTS jobs_time ON jobs(at DESC); CREATE INDEX IF NOT EXISTS usage_day ON usage(day);');
     } catch (e) { this.db.close(); throw e; }
+  }
+  migrateTiebaQueue() {
+    const groups=new Map();
+    for(const r of this.db.prepare("SELECT q.* FROM material_queue q JOIN sources s ON s.id=q.source WHERE json_extract(s.data,'$.platform')='tieba' AND json_extract(s.data,'$.adapter')='platform-reader'").all()){
+      const key=r.source+':'+r.id;if(!groups.has(key))groups.set(key,[]);groups.get(key).push(r);
+    }
+    const changes=[...groups.values()].filter(rows=>rows.length>1||rows[0].fingerprint!==hash(JSON.stringify(['thread',rows[0].source,rows[0].id])));
+    if(!changes.length)return;
+    this.backup();
+    this.tx(()=>{for(const rows of changes){
+      const score=r=>{const d=decode(r);return (r.status==='COMPLETED'?1e12:0)+(d.approved?1e10:d.extracted?1e9:d.reading?1e8:0)+(d.offset||0);};
+      rows.sort((a,b)=>score(b)-score(a)||b.updated-a.updated);
+      const best=rows[0],data={...decode(best),stableThread:true,fingerprint:hash(JSON.stringify(['thread',best.source,best.id])),segments:[...new Set(rows.flatMap(r=>decode(r).segments||[]))],tiebaItems:Object.assign({},...rows.map(r=>decode(r).tiebaItems||{})),tiebaParts:Object.assign({},...rows.map(r=>decode(r).tiebaParts||{})),legacyFingerprints:rows.map(r=>r.fingerprint)};
+      this.db.prepare('DELETE FROM material_queue WHERE source=? AND id=?').run(best.source,best.id);
+      this.db.prepare('INSERT INTO material_queue VALUES(?,?,?,?,?,?,?)').run(best.source,best.id,data.fingerprint,best.status,best.updated,best.retry_at,JSON.stringify(data));
+    }});
   }
   tx(fn) { this.db.exec('BEGIN IMMEDIATE'); try { const r = fn(); this.db.exec('COMMIT'); return r; } catch (e) { this.db.exec('ROLLBACK'); throw e; } }
   close() { this.db.close(); }
@@ -109,8 +133,8 @@ export class CommunityStore {
       const old = this.source(source.id);
       if(!old && this.sources().length>=32)throw Error('授权来源最多32个');
       if ((old?.revision ?? 0) !== revision) throw Error('来源版本已变化，请刷新');
-      if(old && ['platform','adapter','file','endpoint','connector','target'].some(k=>old[k]!==source[k]))throw Error('来源身份不能改写，请使用新来源编号登记不同材料入口');
-      this.db.prepare('INSERT INTO sources(id,revision,cursor,data) VALUES(?,?,0,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,cursor=0,data=excluded.data')
+      if(old && ['platform','adapter','file','endpoint','connector','target',...(source.platform==='zhihu'?['targetType','questionId','topicMode']:[])].some(k=>old[k]!==source[k]))throw Error('来源身份不能改写，请使用新来源编号登记不同材料入口');
+      this.db.prepare('INSERT INTO sources(id,revision,cursor,data) VALUES(?,?,0,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,data=excluded.data')
         .run(source.id, revision + 1, JSON.stringify(source));
       if (!source.license.allowStore || source.license.expiresAt && source.license.expiresAt <= Date.now()) this.purgeSource(source.id);
       this.db.prepare('DELETE FROM source_state WHERE id=?').run(source.id);
@@ -184,25 +208,64 @@ export class CommunityStore {
   sourceState(id) { return decode(this.db.prepare('SELECT data FROM source_state WHERE id=?').get(id))||{id,status:'NEEDS_AUTH',nextAt:0,failures:0}; }
   saveSourceState(s) { this.db.prepare('INSERT OR REPLACE INTO source_state VALUES(?,?)').run(s.id,JSON.stringify(s)); }
   latestMaterial(source,id) {const row=this.db.prepare('SELECT data,status,retry_at FROM material_queue WHERE source=? AND id=? ORDER BY updated DESC LIMIT 1').get(source,id);return row?{...decode(row),status:row.status,retryAt:row.retry_at}:null;}
-  enqueue(source,items,cursor) { return this.tx(()=>{let added=0;for(const item of items){
-    const old=item.stableVideo?this.latestMaterial(source.id,item.id):null;
+  enqueue(source,items,cursor,{details=false}={}) { return this.tx(()=>{let added=0;const decisions=[];
+    const decision=(item,row,inserted=false,changed=false)=>{const continuing=changed||!!(row.offset||row.readCursor||row.reading||row.extracted||row.approved),status=inserted?'QUEUED':row.status==='COMPLETED'?'COMPLETED':row.status==='SKIPPED'?'DUPLICATE':continuing?'CONTINUING':'ALREADY_QUEUED';decisions.push({id:item.id,title:item.title,url:item.url,fingerprint:row.fingerprint,discoveredFingerprint:item.fingerprint,...(source.platform==='zhihu'?Object.fromEntries(['questionId','answerId','articleId','contentType'].filter(k=>item[k]!==undefined).map(k=>[k,item[k]])):{}),status,queueStatus:row.status,added:inserted,reactivated:changed});};
+    for(let item of items){
+    const old=item.stableVideo||item.stableThread||source.platform==='zhihu'&&item.stableContent?this.latestMaterial(source.id,item.id):null;
+    if(source.platform==='zhihu'&&item.stableContent){
+      if(old){
+        const changed=!!(item.bodyVersion&&old.bodyVersion&&item.bodyVersion!==old.bodyVersion),revisit=old.status==='COMPLETED'&&Date.now()-(old.completedAt||0)>=60000;
+        const row=this.checkpoint(old,changed||revisit?'QUEUED':old.status,{...item,fingerprint:old.fingerprint,...(changed||revisit?{offset:0,readCursor:null,reading:undefined,extracted:undefined,validation:undefined,prepared:undefined,approved:undefined,finished:false,ranked:true,zhihuSnapshot:undefined}:{})},changed||revisit?0:old.retryAt||0);
+        decision(item,row,false,changed||revisit);continue;
+      }
+      item={...item,ranked:this.zhihuPeers(source,item.id).some(r=>Object.keys(r.zhihuCache||{}).length>0)};
+    }
+    if(old&&item.stableThread){
+      const revisit=old.status==='COMPLETED'&&Date.now()-(old.completedAt||0)>=60000;
+      const row=this.checkpoint(old,revisit?'QUEUED':old.status,{...item,fingerprint:old.fingerprint,...(revisit?{readCursor:null,offset:0,finished:false,ranked:true,scanSeen:{},scanUncertain:false}:{} )},revisit?0:old.retryAt||0);
+      decision(item,row,false,revisit);continue;
+    }
     if(old){
       const changed=old.status!=='SKIPPED'&&item.subtitleVersion&&old.subtitleVersion&&item.subtitleVersion!==old.subtitleVersion;
       const metadata=Object.fromEntries(Object.entries(item).filter(([,v])=>v!==undefined));
       // Comment counts and metadata are observations, not a request to learn this video again.
-      this.checkpoint(old,changed?'QUEUED':old.status,{...metadata,fingerprint:old.fingerprint,...(changed?{offset:0,readCursor:{stage:'subtitles',offset:0},reading:undefined,extracted:undefined,approved:undefined,prepared:undefined,validation:undefined,finished:false,ranked:true}:{})},changed?0:old.retryAt||0);continue;
+      const row=this.checkpoint(old,changed?'QUEUED':old.status,{...metadata,fingerprint:old.fingerprint,...(changed?{offset:0,readCursor:{stage:'subtitles',offset:0},reading:undefined,extracted:undefined,approved:undefined,prepared:undefined,validation:undefined,finished:false,ranked:true}:{})},changed?0:old.retryAt||0);decision(item,row,false,!!changed);continue;
     }
-    const r={...item,source:source.id,platform:source.platform,discoveredAt:Date.now(),updatedAt:Date.now(),offset:0,failures:0};added+=Number(this.db.prepare("INSERT OR IGNORE INTO material_queue VALUES(?,?,?,'DISCOVERED',?,0,?)").run(source.id,item.id,item.fingerprint,Date.now(),JSON.stringify(r)).changes);
-  }this.advance(source,cursor);return added;}); }
+    const r={...item,source:source.id,platform:source.platform,discoveredAt:Date.now(),updatedAt:Date.now(),offset:0,failures:0},inserted=!!this.db.prepare("INSERT OR IGNORE INTO material_queue VALUES(?,?,?,'DISCOVERED',?,0,?)").run(source.id,item.id,item.fingerprint,Date.now(),JSON.stringify(r)).changes;added+=Number(inserted);decision(item,this.material(source.id,item.id,item.fingerprint),inserted);
+  }this.advance(source,cursor);return details?{added,returned:items.length,items:decisions}:added;}); }
   pending(source,limit=32,now=Date.now()) { return this.db.prepare("SELECT data,status,retry_at FROM material_queue WHERE source=? AND status IN ('DISCOVERED','QUEUED','READING','EXTRACTING','VALIDATING','RETRYABLE') AND retry_at<=? ORDER BY updated,id LIMIT ?").all(source,now,limit).map(r=>({...decode(r),status:r.status,retryAt:r.retry_at})); }
   material(source,id,fingerprint) {const r=this.db.prepare('SELECT data,status,retry_at FROM material_queue WHERE source=? AND id=? AND fingerprint=?').get(source,id,fingerprint);return r?{...decode(r),status:r.status,retryAt:r.retry_at}:null;}
   checkpoint(row,status,patch={},retryAt=0) {const data={...row,...patch,updatedAt:Date.now(),retryAt};this.db.prepare('UPDATE material_queue SET status=?,updated=?,retry_at=?,data=? WHERE source=? AND id=? AND fingerprint=?').run(status,data.updatedAt,retryAt,JSON.stringify(data),row.source,row.id,row.fingerprint);return {...data,status};}
   requeue(source=null) { const where=source?' AND source=?':'';this.db.prepare("UPDATE material_queue SET status='QUEUED' WHERE status IN ('READING','EXTRACTING','VALIDATING')"+where).run(...(source?[source]:[])); }
   conflicts(term) {const keys=termAliases(term),slots=keys.map(()=>'?').join(',');return {published:this.db.prepare(`SELECT data FROM knowledge WHERE term_key IN (${slots}) AND status='published' LIMIT 12`).all(...keys).map(decode),pending:this.db.prepare(`SELECT data FROM candidates WHERE term_key IN (${slots}) AND status='pending' LIMIT 12`).all(...keys).map(decode)};}
   candidateKey(c) {return hash(JSON.stringify([c.kind,conceptKey(c.term),senseKey(c.meaning)]));}
+  zhihuPeers(source,id) {
+    return this.db.prepare("SELECT q.data FROM material_queue q JOIN sources s ON s.id=q.source WHERE q.id=? AND json_extract(s.data,'$.platform')='zhihu'").all(id).map(decode).filter(r=>{const s=this.source(r.source);return s&&s.allowUse!==false&&sourceAllowed({...s,enabled:true});});
+  }
+  zhihuCached(source,reading) {
+    const key=zhihuPart(reading);if(!key)return null;
+    for(const row of this.zhihuPeers(source,reading.id)){
+      const s=this.source(row.source),cache=row.zhihuCache?.[key];
+      if(cache&&cache.revision===s.revision&&cache.generation===this.generation()&&row.zhihuVersions?.[cache.unitKey]===cache.unitVersion)return cache;
+      if(row.extracted&&row.reading&&zhihuPart(row.reading)===key)return {extracted:row.extracted,decisions:[]};
+    }
+    return null;
+  }
+  evidenceLive(e) {
+    if(e.fingerprint?.startsWith('zh:')){const [,unit,version]=e.fingerprint.split(':'),row=this.latestMaterial(e.source,e.document);return row?.zhihuVersions?.[unit]===version;}
+
+    if(!e.fingerprint?.startsWith('tb:'))return true;
+    const [,pid,reply,itemHash]=e.fingerprint.split(':'),row=this.latestMaterial(e.source,e.document),state=row?.tiebaItems?.[pid+(reply==='0'?'':'/'+reply)];
+    return !!state&&!state.deleted&&state.hash===itemHash;
+  }
   evidenceRefs(c,source,items) {
-    if(c.refs)return c.refs.filter(r=>{const s=this.source(r.source);return s&&sourceAllowed(s)&&s.revision===r.revision&&typeof r.context==='string'&&r.context.includes(r.quote);});
-    return (c.evidence||[]).flatMap(e=>{const item=items.find(i=>i.id===e.id);if(!item||!item.text?.includes(e.quote))return[];const at=item.text.indexOf(e.quote);return [{id:hash(source.id+':'+item.id+':'+hash(e.quote)),source:source.id,revision:source.revision,platform:source.platform,document:item.id,fingerprint:item.fingerprint,url:item.url,title:item.title,quote:e.quote,context:item.text.slice(Math.max(0,at-100),at+e.quote.length+100)}];});
+    if(c.refs)return c.refs.filter(r=>{const s=this.source(r.source);return s&&sourceAllowed(s)&&s.revision===r.revision&&typeof r.context==='string'&&r.context.includes(r.quote)&&(!r.zhihuLocation||items.some(i=>i.id===r.document&&i.records?.some(x=>x.unitId===r.zhihuLocation.unitId&&x.version===r.zhihuLocation.version&&x.contentHash===r.zhihuLocation.contentHash))||this.evidenceLive({...r,fingerprint:zhihuEvidence({...r.zhihuLocation,quote:r.quote})}))&&(!r.location||items.some(i=>i.id===r.document&&i.records?.some(x=>x.itemHash===r.location.itemHash&&x.pid===r.location.pid&&x.replyId===r.location.replyId))||this.evidenceLive({...r,fingerprint:tiebaEvidenceFingerprint(r)}));});
+    if(source.platform==='zhihu'&&items.some(i=>i.stableContent))return (c.evidence||[]).flatMap(e=>{
+      const item=items.find(i=>i.id===e.id),record=item?.records?.find(r=>r.text.includes(e.quote));if(!item||!record)return [];
+      const at=item.text.indexOf(e.quote),zhihuLocation=Object.fromEntries(['unitId','version','offset','contentHash','commentId','parentId','rootId'].filter(k=>record[k]!==undefined).map(k=>[k,record[k]]));
+      return [{id:hash(source.id+':'+item.id+':'+zhihuEvidence({...zhihuLocation,quote:e.quote})),source:source.id,revision:source.revision,platform:'zhihu',document:item.id,fingerprint:item.fingerprint,url:item.url,title:item.title,quote:e.quote,zhihuLocation,questionId:item.questionId,answerId:item.answerId,articleId:item.articleId,context:item.text.slice(Math.max(0,at-100),at+e.quote.length+100)}];
+    });
+    return (c.evidence||[]).flatMap(e=>{const item=items.find(i=>i.id===e.id);if(!item||!item.text?.includes(e.quote))return[];const at=item.text.indexOf(e.quote);return [{id:hash(source.id+':'+item.id+':'+(item.records?.length?item.records[0].pid+':'+(item.records[0].replyId||'0')+':'+item.records[0].itemHash+':':'')+hash(e.quote)),source:source.id,revision:source.revision,platform:source.platform,document:item.id,fingerprint:item.fingerprint,url:item.url,title:item.title,quote:e.quote,...(item.records?.length?{location:Object.fromEntries(['tid','pid','replyId','parentPid','floorNumber','itemHash','offset','contentHash'].map(k=>[k,item.records[0][k]]))}:{}),context:item.text.slice(Math.max(0,at-100),at+e.quote.length+100)}];});
   }
   legacyCandidate(row) {
     const c=decode(row);if(c.refs)return {...c,pendingIds:[...new Set([...(c.pendingIds||[]),row.id])]};
@@ -239,7 +302,7 @@ export class CommunityStore {
       const key=c.key,known=this.db.prepare('SELECT status,data FROM candidates WHERE id=?').get(key);
       if(known&&['rejected','expired','published'].includes(known.status)&&decode(known).evidenceVersion===c.evidenceVersion){counters.duplicates++;continue;}
       const published=this.conflicts(c.term).published.find(k=>senseKey(k.meaning)===senseKey(c.meaning)&&k.kind===c.kind);
-      if(published&&c.refs.every(r=>this.db.prepare('SELECT 1 FROM evidence WHERE knowledge=? AND source=? AND document=? AND quote=?').get(published.id,r.source,r.document,r.quote))){counters.duplicates++;continue;}
+      if(published&&c.refs.every(r=>this.db.prepare('SELECT 1 FROM evidence WHERE knowledge=? AND source=? AND document=? AND '+(r.location||r.zhihuLocation?'fingerprint=?':'quote=?')).get(published.id,r.source,r.document,r.zhihuLocation?zhihuEvidence({...r.zhihuLocation,quote:r.quote}):r.location?tiebaEvidenceFingerprint(r):r.quote))){counters.duplicates++;continue;}
       const oldData=known?decode(known):null;
       c.newEvidenceCount=c.refs.filter(r=>!oldData?.refs?.some(e=>e.id===r.id)).length;
       if(oldData&&known.status!=='published'){c.lastReviewedEvidence=oldData.lastReviewedEvidence||c.lastReviewedEvidence;c.nextReviewAt=oldData.nextReviewAt||c.nextReviewAt;c.reviewAttempts=Math.max(c.reviewAttempts,oldData.reviewAttempts||0);c.firstSeenAt=Math.min(c.firstSeenAt,oldData.firstSeenAt||now);}
@@ -259,7 +322,7 @@ export class CommunityStore {
   }}
   goals() {return this.db.prepare('SELECT data FROM learning_goals ORDER BY updated DESC LIMIT 16').all().map(decode);}
   goal(term,source,reason) {const id=hash(termKey(term)+':'+source);this.db.prepare('INSERT OR REPLACE INTO learning_goals VALUES(?,?,?)').run(id,Date.now(),JSON.stringify({id,term,source,reason}));this.db.exec('DELETE FROM learning_goals WHERE id IN (SELECT id FROM learning_goals ORDER BY updated DESC LIMIT -1 OFFSET 100)');}
-  stats(source=null) {const params=source?[source]:[],where=source?' WHERE source=?':'';const rows=this.db.prepare('SELECT status,count(*) n FROM material_queue'+where+' GROUP BY status').all(...params),counts=Object.fromEntries(rows.map(r=>[r.status,r.n]));const k=this.db.prepare("SELECT kind,count(*) n FROM knowledge WHERE status='published' GROUP BY kind").all();return {discovered:rows.reduce((n,r)=>n+r.n,0),completed:counts.COMPLETED||0,skipped:counts.SKIPPED||0,blocked:counts.BLOCKED||0,pending:rows.filter(r=>!['COMPLETED','SKIPPED','BLOCKED'].includes(r.status)).reduce((n,r)=>n+r.n,0),published:k.reduce((n,r)=>n+r.n,0),slang:k.find(r=>r.kind==='slang')?.n||0,strategies:k.find(r=>r.kind==='strategy')?.n||0,unverified:this.db.prepare("SELECT count(*) n FROM candidates WHERE status='pending'").get().n,multipleSenses:this.db.prepare("SELECT count(*) n FROM (SELECT term_key FROM knowledge WHERE status='published' GROUP BY term_key HAVING count(*)>1)").get().n};}
+  stats(source=null) {const params=source?[source]:[],where=source?' WHERE source=?':'';const rows=this.db.prepare('SELECT status,count(*) n FROM material_queue'+where+' GROUP BY status').all(...params),counts=Object.fromEntries(rows.map(r=>[r.status,r.n]));const k=this.db.prepare("SELECT kind,count(*) n FROM knowledge WHERE status='published' GROUP BY kind").all();return {discovered:rows.reduce((n,r)=>n+r.n,0),completed:counts.COMPLETED||0,skipped:counts.SKIPPED||0,blocked:counts.BLOCKED||0,pending:rows.filter(r=>!['COMPLETED','SKIPPED','BLOCKED'].includes(r.status)).reduce((n,r)=>n+r.n,0),published:source?this.db.prepare("SELECT count(DISTINCT e.knowledge) n FROM evidence e JOIN knowledge k ON k.id=e.knowledge WHERE e.source=? AND k.status='published'").get(source).n:k.reduce((n,r)=>n+r.n,0),slang:k.find(r=>r.kind==='slang')?.n||0,strategies:k.find(r=>r.kind==='strategy')?.n||0,unverified:this.db.prepare("SELECT count(*) n FROM candidates WHERE status='pending'").get().n,multipleSenses:this.db.prepare("SELECT count(*) n FROM (SELECT term_key FROM knowledge WHERE status='published' GROUP BY term_key HAVING count(*)>1)").get().n};}
   seen(source, item) { return !!this.db.prepare('SELECT 1 FROM documents WHERE source=? AND id=? AND fingerprint=?').get(source, item.id, item.fingerprint); }
   reserve(job, stage, input, output, rates, policy) {
     return this.tx(() => {
@@ -269,7 +332,7 @@ export class CommunityStore {
       const budgetCost = (input * rates.input + output * rates.output) / 1e6;
       const sessionCost=job.session?this.usage(null,job.session).costUpperBound:0;
       if ((policy.dailyTokenBudget!=null&&tokens+input+output>policy.dailyTokenBudget)||(policy.dailyInputTokens!=null&&rows.reduce((n,r)=>n+r.input,0)+input>policy.dailyInputTokens)||(policy.dailyOutputTokens!=null&&rows.reduce((n,r)=>n+r.output,0)+output>policy.dailyOutputTokens)||(policy.dailyCostLimit!=null&&cost+budgetCost>policy.dailyCostLimit)||(policy.sessionCostLimit!=null&&sessionCost+budgetCost>policy.sessionCostLimit))throw Error('社区学习费用或Token保护阈值已触发，请调整配置后继续');
-      const record = { id: randomUUID(), job:job.id, session:job.session||null, stage, model:job.model||null, input, output, cost: budgetCost, status: 'reserved', at: Date.now(), rates };
+      const record = { id: randomUUID(), job:job.id, session:job.session||null, stage, model:job.model||null, input, output, cost: budgetCost, status: 'reserved', at: Date.now(), rates, ...(stage!=='select'&&job.material?{material:job.material}:{}) };
       this.db.prepare('INSERT INTO usage(id,day,job,stage,data,session_id) VALUES(?,?,?,?,?,?)').run(record.id, date, job.id, stage, JSON.stringify(record),job.session||null); return record;
     });
   }
@@ -332,7 +395,7 @@ export class CommunityStore {
         if(c.mergeInto&&(!old||old.kind!==c.kind||conceptKey(old.term)!==conceptKey(c.term)))throw Error('社区同义知识合并目标无效');
         if (row?.status === 'revoked') continue;
         const refs=this.evidenceRefs(c,source,items);if(!refs.length)throw Error('社区候选证据来源失效');
-        const fresh=refs.filter(r=>!this.db.prepare('SELECT 1 FROM evidence WHERE knowledge=? AND source=? AND document=? AND quote=?').get(key,r.source,r.document,r.quote));
+        const fresh=refs.filter(r=>!this.db.prepare('SELECT 1 FROM evidence WHERE knowledge=? AND source=? AND document=? AND '+(r.location||r.zhihuLocation?'fingerprint=?':'quote=?')).get(key,r.source,r.document,r.zhihuLocation?zhihuEvidence({...r.zhihuLocation,quote:r.quote}):r.location?tiebaEvidenceFingerprint(r):r.quote));
         const {evidence:quotedEvidence,...content}=this.reviewPayload(c);
         const next={...content,...(old?{term:old.term,meaning:old.meaning}:{}),contextTerms:[...new Set([...(old?.contextTerms||[]),...c.contextTerms])].slice(0,10),id:key,version:(row?.version||0)+1,at:old?.at||Date.now(),updatedAt:Date.now()};
         const metadataChanged=old&&['usage','contextTerms','confidence','validUntil','timeSensitive'].some(k=>JSON.stringify(old[k])!==JSON.stringify(next[k]));
@@ -345,7 +408,7 @@ export class CommunityStore {
         this.db.prepare('INSERT INTO knowledge(id,kind,term,status,version,at,data,term_key) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET version=excluded.version,data=excluded.data')
           .run(key,c.kind,next.term,'published',next.version,next.at,JSON.stringify(next),conceptKey(next.term));
         for (const r of fresh) {
-          this.db.prepare('INSERT OR REPLACE INTO evidence VALUES(?,?,?,?,?,?,?)').run(key,r.source,r.document,hash(r.fingerprint+':'+r.quote),r.quote,r.url,Date.now());
+          this.db.prepare('INSERT OR REPLACE INTO evidence VALUES(?,?,?,?,?,?,?)').run(key,r.source,r.document,(r.zhihuLocation?zhihuEvidence({...r.zhihuLocation,quote:r.quote}):tiebaEvidenceFingerprint(r)),r.quote,r.url,Date.now());
         }
         this.db.prepare('INSERT INTO revisions(knowledge,at,action,data) VALUES(?,?,?,?)').run(key, Date.now(), old ? 'reinforce' : 'publish', JSON.stringify(old || next));
         this.db.prepare('DELETE FROM knowledge_fts WHERE id=?').run(key);
@@ -355,7 +418,7 @@ export class CommunityStore {
       this.hold(job,job.pending||[]);for(const c of (job.pending||[]).filter(c=>!c.finalStatus))this.goal(c.term,source.id,'候选缺少充分证据');for(const c of candidates.filter(c=>c.kind==='slang'||c.conflict))this.goal(c.term,source.id,'寻找其他语境与跨材料证据');
       for (const item of items) {
         if(item.complete!==false)this.db.prepare('INSERT OR IGNORE INTO documents VALUES(?,?,?,?)').run(source.id,item.id,item.fingerprint,Date.now());
-        const row=this.material(source.id,item.id,item.fingerprint);if(row)this.checkpoint(row,item.complete===false?'QUEUED':'COMPLETED',{offset:item.nextOffset??row.offset,readCursor:Object.hasOwn(item,'readCursor')?item.readCursor:row.readCursor,segments:[...new Set([...(row.segments||[]),hash((item.contentType||'body')+':'+item.text)])].slice(-500),reading:undefined,extracted:undefined,approved:undefined,prepared:undefined,validation:undefined,failures:0,error:undefined,finished:item.complete!==false,completedAt:item.complete===false?null:Date.now()});
+        const row=this.material(source.id,item.id,item.fingerprint);if(row)this.checkpoint(row,item.complete===false?'QUEUED':'COMPLETED',{...tiebaCheckpoint(row,item),...zhihuCheckpoint(row,item,{extracted:row.extracted||[],approved:candidates,generation:this.generation(),revision:source.revision}),offset:item.nextOffset??row.offset,readCursor:Object.hasOwn(item,'readCursor')?item.readCursor:row.readCursor,segments:[...new Set([...(row.segments||[]),hash((item.contentType||'body')+':'+item.text)])].slice(-500),reading:undefined,extracted:undefined,approved:undefined,prepared:undefined,validation:undefined,failures:0,error:undefined,finished:item.complete!==false,completedAt:item.complete===false?null:Date.now()});
       }
       const totals={added,updated,evidenceAdded,duplicates};
       if(append){for(const k of Object.keys(totals))totals[k]+=job[k]||0;for(const [id,n] of Object.entries(job.publication||{}))publication[id]=(publication[id]||0)+n;for(const [id,counts] of Object.entries(job.publicationDetails||{})){publicationDetails[id]??={added:0,updated:0,evidenceAdded:0,duplicates:0};for(const [k,n] of Object.entries(counts))publicationDetails[id][k]+=n;}}
@@ -364,7 +427,7 @@ export class CommunityStore {
     });
     Object.assign(job,committed.nextJob);return committed.added;
   }
-  advance(source, cursor) { this.db.prepare('UPDATE sources SET cursor=? WHERE id=? AND revision=?').run(cursor, source.id, source.revision); }
+  advance(source, cursor) { this.db.prepare('UPDATE sources SET cursor=? WHERE id=? AND revision=?').run(typeof cursor==='object'?JSON.stringify(cursor):cursor, source.id, source.revision); }
   revoke(id) {
     this.tx(() => {
       const row = this.db.prepare('SELECT * FROM knowledge WHERE id=?').get(id); if (!row) throw Error('知识不存在');
@@ -374,22 +437,46 @@ export class CommunityStore {
     });
   }
   list({offset=0,limit=100}={}) { return this.db.prepare('SELECT * FROM knowledge ORDER BY at DESC,id LIMIT ? OFFSET ?').all(limit,offset).map(r => ({ ...decode(r), status: r.status, version: r.version,sources:this.db.prepare('SELECT DISTINCT url FROM evidence WHERE knowledge=? LIMIT 4').all(r.id).map(e=>e.url) })); }
-  communityStrategies(cutoff=0) {const out=[];for(const r of this.db.prepare("SELECT * FROM knowledge WHERE kind='strategy' AND status='published'").all()){const k=decode(r),e=this.db.prepare('SELECT DISTINCT source,document,at FROM evidence WHERE knowledge=?').all(r.id).filter(e=>e.at>cutoff&&knowledgeAllowed(this.source(e.source)));if(new Set(e.map(x=>x.source+':'+x.document)).size>=3&&new Set(e.map(x=>day(x.at))).size>=2)out.push(k.strategy);}return [...new Set(out)];}
-  search(query, { limit = 3, maxChars = 1800, kinds, mode='explain', recent='', scene='' } = {}) {
-    this.expireSources();
-    if(mode==='expression'&&!expressionScene(query,scene).allowed)return [];
-    const terms = [...new Set([...searchTerms(query),...retrievalWords(query).flatMap(searchTerms)])].slice(0,100); if (!terms.length) return [];
-    const matches = this.db.prepare('SELECT id,bm25(knowledge_fts) AS rank FROM knowledge_fts WHERE knowledge_fts MATCH ? ORDER BY rank LIMIT 40').all(terms.map(t => '"' + t.replaceAll('"','""') + '"').join(' OR '));
+  communityStrategies(cutoff=0) {const out=[];for(const r of this.db.prepare("SELECT * FROM knowledge WHERE kind='strategy' AND status='published'").all()){const k=decode(r),e=this.db.prepare('SELECT DISTINCT source,document,fingerprint,at FROM evidence WHERE knowledge=?').all(r.id).filter(e=>e.at>cutoff&&this.evidenceLive(e)&&knowledgeAllowed(this.source(e.source)));if(new Set(e.map(x=>x.source+':'+x.document)).size>=3&&new Set(e.map(x=>day(x.at))).size>=2)out.push(k.strategy);}return [...new Set(out)];}
+  applicationState(now=Date.now()) {
+    const rows=this.db.prepare('SELECT status,kind,count(*) n FROM knowledge GROUP BY status,kind').all();
+    const publishedByKind=Object.fromEntries(['knowledge','slang','meme','culture','strategy'].map(kind=>[kind,rows.find(r=>r.status==='published'&&r.kind===kind)?.n||0]));
+    const sources=new Set(this.sources().filter(s=>knowledgeAllowed(s,now)).map(s=>s.id));
+    let usable=0,sourceFiltered=0,expired=0;
+    for(const r of this.db.prepare("SELECT id,data FROM knowledge WHERE status='published'").all()) {
+      const k=decode(r);
+      if(k.validUntil&&k.validUntil<=now){expired++;continue;}
+      if(!this.db.prepare('SELECT source,document,fingerprint FROM evidence WHERE knowledge=?').all(r.id).some(e=>sources.has(e.source)&&this.evidenceLive(e))){sourceFiltered++;continue;}
+      usable++;
+    }
+    return {publishedCount:rows.filter(r=>r.status==='published').reduce((n,r)=>n+r.n,0),publishedByKind,
+      pendingCount:this.db.prepare("SELECT count(*) n FROM candidates WHERE status='pending'").get().n,
+      revokedCount:rows.filter(r=>r.status==='revoked').reduce((n,r)=>n+r.n,0),validSourceCount:sources.size,usableCount:usable,sourceFilteredCount:sourceFiltered,expiredCount:expired};
+  }
+  search(query, { limit = 3, maxChars = 1800, kinds, mode='explain', recent='', scene='', diagnostics = {} } = {}) {
+    Object.assign(diagnostics,{reasonCode:'NO_MATCH',mode,candidateCount:0,validResultCount:0,sourceFilteredCount:0,databaseError:false});
+    // Chat reads never purge data or alter learning checkpoints when a license expires.
+    if(mode==='expression'&&!expressionScene(query,scene).allowed){diagnostics.reasonCode='SCENE_SUPPRESSED';return [];}
+    const terms = [...new Set([...searchTerms(query),...retrievalWords(query).flatMap(searchTerms)])].slice(0,100);
+    const matches = terms.length?this.db.prepare("SELECT f.id,bm25(knowledge_fts) AS rank FROM knowledge_fts f JOIN knowledge k ON k.id=f.id WHERE knowledge_fts MATCH ? AND k.status='published' ORDER BY rank LIMIT 40").all(terms.map(t => '"' + t.replaceAll('"','""') + '"').join(' OR ')):[];
+    // An exact published term must not be crowded out by the bounded FTS candidate window.
+    const exact=this.db.prepare("SELECT id,term,kind FROM knowledge WHERE status='published'").all().filter(r=>(!kinds||kinds.includes(r.kind))&&termAliases(r.term).some(t=>containsTerm(query,t)));
+    const candidates=[...exact.map(r=>({id:r.id,rank:0})),...matches.filter(m=>!exact.some(r=>r.id===m.id))];
+    diagnostics.candidateCount=candidates.length;
     const sources = new Map(this.sources().filter(s=>knowledgeAllowed(s)).map(s=>[s.id,s])), out=[]; let chars=0;
-    for (const m of matches) {
+    for (const m of candidates) {
       const row = this.db.prepare("SELECT * FROM knowledge WHERE id=? AND status='published'").get(m.id); if (!row || kinds && !kinds.includes(row.kind)) continue;
-      const k = decode(row), evidence = this.db.prepare('SELECT source,url,at FROM evidence WHERE knowledge=?').all(row.id).filter(e=>sources.has(e.source));
-      if (!evidence.length) continue;
+      const k = decode(row), evidence = this.db.prepare('SELECT source,document,fingerprint,url,at FROM evidence WHERE knowledge=?').all(row.id).filter(e=>sources.has(e.source)&&this.evidenceLive(e));
+      if (!evidence.length) {diagnostics.sourceFilteredCount++;continue;}
       if(k.validUntil&&k.validUntil<=Date.now())continue;
       const match=relevance({...k,evidenceCount:evidence.length},query,{mode,recent});if(!match)continue;
       out.push({id:k.id,kind:k.kind,term:k.term,meaning:k.meaning,usage:k.usage,contextTerms:k.contextTerms,confidence:k.confidence,conflict:k.conflict,version:row.version,sources:[...new Set(evidence.map(e=>e.url))].slice(0,2),rank:m.rank,...match,origin:'community'});
     }
     const best=new Map();for(const r of out)best.set(conceptKey(r.term),Math.max(best.get(conceptKey(r.term))||0,r.contextScore));
-    const seen=new Set();return out.filter(r=>!best.get(conceptKey(r.term))||r.contextScore===best.get(conceptKey(r.term))).sort((a,b)=>b.score-a.score||a.rank-b.rank).filter(r=>{const key=conceptKey(r.term);if(seen.has(key))return false;const size=JSON.stringify(r).length;if(chars+size>maxChars)return false;seen.add(key);chars+=size;return true;}).slice(0,Math.min(limit,mode==='expression'?2:3));
+    const seen=new Set();const result=out.filter(r=>!best.get(conceptKey(r.term))||r.contextScore===best.get(conceptKey(r.term))).sort((a,b)=>b.score-a.score||a.rank-b.rank).filter(r=>{const key=conceptKey(r.term);if(seen.has(key))return false;const size=JSON.stringify(r).length;if(chars+size>maxChars)return false;seen.add(key);chars+=size;return true;}).slice(0,Math.min(limit,mode==='expression'?2:3));
+    diagnostics.validResultCount=result.length;
+    if(result.length)diagnostics.reasonCode='MATCHED';
+    else {const state=this.applicationState();if(!state.publishedCount)diagnostics.reasonCode='NO_PUBLISHED_KNOWLEDGE';else if(state.sourceFilteredCount===state.publishedCount)diagnostics.reasonCode='ALL_SOURCES_UNUSABLE';else if(!state.usableCount)diagnostics.reasonCode='NO_VALID_KNOWLEDGE';}
+    return result;
   }
 }

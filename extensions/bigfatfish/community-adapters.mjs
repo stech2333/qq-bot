@@ -1,3 +1,4 @@
+import { ZhihuAdapter, zhihuTarget, zhihuURL } from './community-zhihu.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -12,6 +13,8 @@ export function sourceURL(value, platform) {
   try {
     const u = new URL(value);
     if (u.protocol !== 'https:' || u.username || u.password || u.port || u.hash || u.search || !HOSTS[platform]?.some(h => u.hostname === h || u.hostname.endsWith('.' + h))) return '';
+    if(platform==='zhihu')return zhihuURL(value);
+    if(platform==='tieba'&&(u.hostname!=='tieba.baidu.com'||!/^\/p\/[1-9]\d{0,24}$/.test(u.pathname)))return '';
     return u.href;
   } catch { return ''; }
 }
@@ -36,20 +39,21 @@ export function normalizeSource(raw) {
     if (u.protocol !== 'https:' || u.username || u.password || u.search || u.hash || u.port) throw Error('Feed须为无凭据、查询参数的HTTPS地址');
   }
   if(raw.allowUse!==undefined&&typeof raw.allowUse!=='boolean')throw Error('历史知识应用开关无效');
-  const connector=String(raw.connector||raw.platform),target=String(raw.target||'');
-  if(raw.adapter==='platform-reader'&&(!/^[a-z][a-z0-9_-]{0,47}$/.test(connector)||target.length>100||!safeGeneralText(target)))throw Error('平台连接器名称或探索入口无效');
+  const connector=String(raw.connector||raw.platform);let target=String(raw.target||'').trim().normalize('NFC');const zhihu=raw.platform==='zhihu'&&(raw.targetType||raw.adapter==='platform-reader')?zhihuTarget({...raw,target}):null;if(zhihu)target=zhihu.target;
+  if(raw.platform==='tieba'&&raw.adapter==='platform-reader'&&(!target||/[\u0000-\u001f\u007f/\\<>?&#=:%]/.test(target)))throw Error('贴吧名称为空或含非法字符，请填写具体吧名');
+  if(raw.adapter==='platform-reader'&&(!/^[a-z][a-z0-9_-]{0,47}$/.test(connector)||target.length>(zhihu?300:100)||!zhihu&&!safeGeneralText(target)))throw Error('平台连接器名称或探索入口无效');
   return { id: raw.id, platform: raw.platform, adapter: raw.adapter, enabled: raw.enabled,allowUse:raw.allowUse!==false,
     file: raw.adapter === 'authorized-file' ? file : '', endpoint: raw.adapter === 'authorized-feed' ? endpoint : '',
-    ...(raw.adapter==='platform-reader'?{connector,target}:{}),
+    ...(raw.adapter==='platform-reader'?{connector,target}:{}),...(zhihu?{...zhihu,connector}:{}),
     license: { reference: l.reference, expiresAt: l.expiresAt, allowRead: l.allowRead, allowStore: l.allowStore, allowLearning: l.allowLearning } };
 }
 // A source is an operator-provided, licensed JSON export/feed, never a platform crawler.
 // Both operations accept AbortSignal; discovery exposes only bounded metadata to the model.
 export class CommunityAdapter {
-  constructor(root, source, { fetcher = safeFetch } = {}) { this.root = root; this.source = source; this.fetcher = fetcher; }
-  capability() {if(!sourceAllowed(this.source))return {status:'NEEDS_AUTH',reason:'需要有效的读取、保存与AI学习许可'};if(this.source.adapter==='platform-reader')return connectorConfig(this.root,this.source);if(this.source.adapter==='authorized-file'){try{const dir=fs.realpathSync(path.join(this.root,'state/community-imports')),file=path.join(dir,this.source.file);if(fs.lstatSync(file).isSymbolicLink()||!fs.statSync(file).isFile()||path.dirname(fs.realpathSync(file))!==dir)throw Error();}catch{return {status:'UNAVAILABLE',reason:'授权文件不存在或路径不可用'};}}return {status:'NEEDS_AUTH',reason:'入口已配置，尚待实际读取检查',configured:true};}
-  async probe({signal}={}) {if(!sourceAllowed(this.source))throw Object.assign(Error('来源授权失效'),{kind:'AUTH'});if(this.source.adapter==='platform-reader')return new PlatformReader(this.root,this.source).probe({signal});await this.read(signal);return {status:'READY',reason:this.source.adapter==='authorized-file'?'授权文件读取检查通过':'授权Feed读取检查通过'};}
-  async read(signal) {
+  constructor(root, source, { fetcher = safeFetch } = {}) { this.root = root; this.source = source; this.fetcher = fetcher; this.zhihu=source.platform==='zhihu'&&(source.targetType||source.adapter==='platform-reader')?new ZhihuAdapter(root,source,{loadExport:signal=>this.readData(signal)}):null; }
+  capability() {if(this.zhihu)return this.zhihu.capability();if(!sourceAllowed(this.source))return {status:'NEEDS_AUTH',reason:'需要有效的读取、保存与AI学习许可'};if(this.source.adapter==='platform-reader')return connectorConfig(this.root,this.source);if(this.source.adapter==='authorized-file'){try{const dir=fs.realpathSync(path.join(this.root,'state/community-imports')),file=path.join(dir,this.source.file);if(fs.lstatSync(file).isSymbolicLink()||!fs.statSync(file).isFile()||path.dirname(fs.realpathSync(file))!==dir)throw Error();}catch{return {status:'UNAVAILABLE',reason:'授权文件不存在或路径不可用'};}}return {status:'NEEDS_AUTH',reason:'入口已配置，尚待实际读取检查',configured:true};}
+  async probe({signal}={}) {if(this.zhihu)return this.zhihu.probe({signal});if(!sourceAllowed(this.source))throw Object.assign(Error('来源授权失效'),{kind:'AUTH'});if(this.source.adapter==='platform-reader')return new PlatformReader(this.root,this.source).probe({signal});await this.read(signal);return {status:'READY',reason:this.source.adapter==='authorized-file'?'授权文件读取检查通过':'授权Feed读取检查通过'};}
+  async readData(signal) {
     signal?.throwIfAborted();
     if (!sourceAllowed(this.source)) throw Error('来源许可已失效或未授权保存与AI学习');
     let text;
@@ -64,7 +68,10 @@ export class CommunityAdapter {
       text = res.body;
     }
     signal?.throwIfAborted();
-    const data = JSON.parse(text);
+    return JSON.parse(text);
+  }
+  async read(signal) {
+    const data=await this.readData(signal);
     if (data.version !== 1 || !Array.isArray(data.items) || data.items.length > 1000) throw Error('授权材料须为version=1、最多1000条items的JSON');
     const ids = new Set();
     return data.items.map(r => {
@@ -78,15 +85,17 @@ export class CommunityAdapter {
     });
   }
   async discover({ signal, cursor = 0, limit = 10,topics=[],goals=[] }) {
+    if(this.zhihu)return this.zhihu.discover({signal,cursor,limit,topics,goals});
     if(this.source.adapter==='platform-reader')return new PlatformReader(this.root,this.source).discover({signal,cursor,limit,topics,goals});
     const rows = await this.read(signal), start = Math.min(cursor, rows.length);
     return { items: rows.slice(start, start + limit).map(({ text, ...r }) => r), cursor: start + limit >= rows.length ? 0 : start + limit,hasMore:start+limit<rows.length };
   }
   async fetch(item, { signal,offset=0,readCursor=null }={}) {
+    if(this.zhihu)return this.zhihu.fetch(item,{signal,offset,readCursor});
     if(this.source.adapter==='platform-reader')return new PlatformReader(this.root,this.source).fetch(item,{signal,readCursor});
     const row = (await this.read(signal)).find(r => r.id === item.id && r.fingerprint === item.fingerprint);
     if (!row) throw Error('来源在发现后已变化，等待下一轮重新读取');
     const end=Math.min(row.text.length,offset+2400);return { ...row, text: row.text.slice(offset,end),nextOffset:end,complete:end>=row.text.length };
   }
-  async contentVersion(item,opts) {return this.source.adapter==='platform-reader'?new PlatformReader(this.root,this.source).contentVersion(item,opts):null;}
+  async contentVersion(item,opts) {if(this.zhihu)return this.zhihu.contentVersion(item,opts);return this.source.adapter==='platform-reader'?new PlatformReader(this.root,this.source).contentVersion(item,opts):null;}
 }
