@@ -1790,7 +1790,7 @@ button:active:not(:disabled) {
         <button class="metric metric-link" data-view="sessions"><span>已建立会话</span><strong id="metricSessions">—</strong><small>查看会话映射 <span aria-hidden="true">↗</span></small></button>
         <button class="metric metric-link" data-view="sessions" data-target="section-pending"><span>待处理请求</span><strong id="metricPending">—</strong><small>提问与工具审批 <span aria-hidden="true">↗</span></small></button>
       </div>
-<div id="consoleSubnav" class="row" aria-label="当前功能分组"><div class="row" data-family="sessions" hidden><button type="button" data-subpage="sessions">会话与审批</button><button type="button" data-subpage="bff-mood">会话心情</button></div><div class="row" data-family="persona" hidden><button type="button" data-subpage="persona">人格模板</button><button type="button" data-subpage="social-v2">二代仿真</button><button type="button" data-subpage="bff-policy">话题与主动策略</button></div><div class="row" data-family="learning" hidden><button type="button" data-subpage="bff-memory">长期记忆</button><button type="button" data-subpage="bff-global-style">全局风格</button><button type="button" data-subpage="slang">全局黑话</button><button type="button" data-subpage="bff-community">社区持续自主学习</button></div><div class="row" data-family="models" hidden><button type="button" data-subpage="model-pool">模型与 API 池</button><button type="button" data-subpage="usage">令牌与花费</button></div><div class="row" data-family="settings" hidden><button type="button" data-subpage="access">访问与安全</button><button type="button" data-subpage="operations">调试与运维</button><button type="button" data-subpage="reference">工具参考</button></div></div>
+<div id="consoleSubnav" class="row" aria-label="当前功能分组"><div class="row" data-family="sessions" hidden><button type="button" data-subpage="sessions">会话与审批</button><button type="button" data-subpage="bff-mood">会话心情</button></div><div class="row" data-family="persona" hidden><button type="button" data-subpage="persona">人格模板</button><button type="button" data-subpage="social-v2">二代仿真</button><button type="button" data-subpage="bff-policy">话题与主动策略</button></div><div class="row" data-family="learning" hidden><button type="button" data-subpage="bff-memory">长期记忆</button><button type="button" data-subpage="bff-global-style">全局风格</button><button type="button" data-subpage="bff-community">社区持续自主学习</button></div><div class="row" data-family="models" hidden><button type="button" data-subpage="model-pool">模型与 API 池</button><button type="button" data-subpage="usage">令牌与花费</button></div><div class="row" data-family="settings" hidden><button type="button" data-subpage="access">访问与安全</button><button type="button" data-subpage="operations">调试与运维</button><button type="button" data-subpage="reference">工具参考</button></div></div>
       <div class="grid">
         <section id="section-mode" data-page="overview" class="card span-all">
       <h2>运行模式</h2>
@@ -1938,13 +1938,13 @@ button:active:not(:disabled) {
         <label class="v2-tool-item"><input type="checkbox" data-v2-tool="listStickers"> <span><b>qq_list_stickers</b><span class="meta">查看/搜索 QQ 收藏表情（含备注和本地笔记）</span></span></label>
         <label class="v2-tool-item"><input type="checkbox" data-v2-tool="getStickerImage"> <span><b>qq_get_sticker_image</b><span class="meta">看图理解没有备注的收藏表情</span></span></label>
         <label class="v2-tool-item"><input type="checkbox" data-v2-tool="sendSticker"> <span><b>qq_send_sticker</b><span class="meta">发送收藏表情（一条消息只能一张，不能带文字）</span></span></label>
-        <label class="v2-tool-item"><input type="checkbox" data-v2-tool="collectSticker"> <span><b>qq_collect_sticker</b><span class="meta">AI 偶尔收藏别人发的表情并写简短备注</span></span></label>
+        <label class="v2-tool-item"><input type="checkbox" data-v2-tool="collectSticker"> <span><b>qq_collect_sticker</b><span class="meta">先识图理解，再收藏并保存本地用途</span></span></label>
         <label class="v2-tool-item"><input type="checkbox" data-v2-tool="getSelfImage"> <span><b>qq_get_self_image</b><span class="meta">查看自己的默认 Q 版形象图片</span></span></label>
         <label class="v2-tool-item"><input type="checkbox" data-v2-tool="stickerNote"> <span><b>qq_sticker_note</b><span class="meta">给表情记录本地含义/标签/用法</span></span></label>
         <label class="v2-tool-item"><input type="checkbox" data-v2-tool="setStickerRemark"> <span><b>qq_set_sticker_remark</b><span class="meta">修改 QQ 官方表情备注（默认禁用，慎用）</span></span></label>
         <label class="v2-tool-item"><input type="checkbox" data-v2-tool="sendVoice"> <span><b>qq_send_voice / qq_list_voices</b><span class="meta">发送语音条（只能发语音库里的音频；偶然而为的强表达）</span></span></label>
       </div>
-      <div class="meta" style="margin-top:6px">二代黑话学习：AI 可用 <code>qq_slang_submit</code> 提交陌生词，也可由桥接自动提取；管理员在「黑话词库」页面筛选确认后，词条会自动写入黑话提示词并注入 <code>qq_get_prompt</code> 与后续唤醒。</div>
+      <div class="meta" style="margin-top:6px">二代黑话学习：AI 可用 <code>qq_slang_submit</code> 提交陌生词，也可由桥接自动提取；系统自动核验词义、来源和作用域，达标后自动写入统一知识库；不需要管理员送研究或手动确认。</div>
 
       </div></details>
 <details class="settings-group"><summary>语音库与语音发送（调试）</summary><div class="settings-content">
@@ -2081,7 +2081,7 @@ button:active:not(:disabled) {
         <label style="flex:1">列表最大返回数</label><input type="number" id="v2StickerMaxList" min="1" max="500" style="width:90px">
       </div>
       <div class="row">
-        <label style="flex:1">提示中列出常用表情数</label><input type="number" id="v2StickerPromptMax" min="1" max="30" style="width:90px">
+        <label style="flex:1">提示中列出适配候选数</label><input type="number" id="v2StickerPromptMax" min="1" max="30" style="width:90px">
         <label style="flex:1">在 prompt/唤醒里附带表情摘要</label><input type="checkbox" id="v2StickerIncludePrompt" style="width:auto">
         <span class="meta" style="flex:2">关闭后 AI 仍可主动调用 qq_list_stickers，只是不主动喂到上下文。</span>
       </div>
@@ -2092,10 +2092,17 @@ button:active:not(:disabled) {
       </div>
       <div class="row">
         <label style="flex:1">收藏备注最大字数</label><input type="number" id="v2StickerCollectRemarkMax" min="1" max="50" style="width:80px">
-        <span class="meta" style="flex:2">AI 收藏别人表情时写的简短备注长度上限。</span>
+        <span class="meta" style="flex:2">仅保存简短收藏备注；修改QQ官方备注仍需独立权限。</span>
       </div>
 
       </div></details>
+<details class="settings-group" id="stickerManager"><summary>表情包认知与使用管理</summary><div class="settings-content">
+  <p>先看懂用途，再按语境使用。旧收藏默认待理解；识图仅在收藏或手动整理时调用当前模型，最多每小时20张。管理员备注受保护。QQ原始备注保持独立管理。</p>
+  <div class="row"><input id="stickerQuery" placeholder="搜索备注、含义或标签"><button type="button" id="stickerRefresh">刷新列表</button><button type="button" id="stickerSync">同步收藏</button><button type="button" id="stickerBatch">补充理解待确认表情（最多5张）</button><button type="button" id="stickerCancel">取消整理</button></div>
+  <p id="stickerNotice" role="status"></p><p id="stickerStats"></p><p id="stickerProgress"></p>
+  <div id="stickerRecovery"></div><details><summary>最近使用诊断（仅场景、ID与结果）</summary><pre id="stickerDecisions" style="white-space:pre-wrap"></pre></details>
+  <div id="stickerCards"></div><div class="row"><button type="button" id="stickerPrev">上一页</button><span id="stickerPage"></span><button type="button" id="stickerNext">下一页</button></div>
+</div></details>
 <details class="settings-group"><summary>上下文参数（recent / unread / contextWindow）</summary><div class="settings-content">
       <div class="row">
         <label style="flex:1">最近消息上限</label><input type="number" id="v2ContextRecentLimit" min="1" style="width:80px">
@@ -2192,122 +2199,6 @@ button:active:not(:disabled) {
 
       </div></section>
 <section id="section-bff-community" data-page="bff-community" class="card span-all" hidden><h2>社区持续自主学习</h2></section>
-<section id="section-slang" data-page="slang" class="card span-all">
-      <h2>群聊黑话 / 网络用语库</h2>
-      <div class="meta">DSH 会从群聊中自动提取疑似黑话候选；二代仿真模式下 AI 也可用 <code>qq_slang_submit</code> 主动提交陌生词。候选可批量送 DSH 深度联网研究，研究结果回到控制台由你删改修正后转正；确认后的词条会写入“黑话提示词”，注入一代/二代 AI 的聊天上下文，成为 AI 可查询和使用的记忆。</div>
-
-      <div class="slang-tabs">
-        <button class="slang-tab active" data-slang-tab="candidate">候选词</button>
-        <button class="slang-tab" data-slang-tab="confirmed">已确认</button>
-        <button class="slang-tab" data-slang-tab="rejected">已拒绝</button>
-      </div>
-      <span class="meta" id="slangMsg"></span>
-
-      <!-- 候选词面板 -->
-      <div class="slang-panel active" id="slangPanelCandidate">
-        <div class="row" style="margin-top:8px">
-          <label style="display:flex;align-items:center;gap:6px;margin:0"><input type="checkbox" id="slangCandidateSelectAll"> 全选</label>
-          <button id="slangBatchResearch" class="small">批量送 DSH 深度研究</button>
-          <button id="slangBatchConfirm" class="small">批量确认（有含义）</button>
-          <button id="slangBatchReject" class="small">批量拒绝</button>
-          <button id="slangBatchDeleteCand" class="small danger">批量删除候选</button>
-          <button id="slangExtract" class="small">立即提取候选</button>
-          <button id="slangResearch" class="small">研究全部候选</button>
-        </div>
-        <div class="row" style="margin-top:8px">
-          <input type="text" id="slangSearchCand" placeholder="搜索词条 / 草稿含义 / 语境证据" style="flex:1">
-          <select id="slangLimitCand" style="width:110px">
-            <option value="50">每页 50</option>
-            <option value="100" selected>每页 100</option>
-            <option value="200">每页 200</option>
-            <option value="500">每页 500</option>
-          </select>
-        </div>
-        <div class="slang-scroll" id="slangCandidateList">加载中…</div>
-      </div>
-
-      <!-- 已确认面板 -->
-      <div class="slang-panel" id="slangPanelConfirmed">
-        <div class="row" style="margin-top:8px">
-          <label style="display:flex;align-items:center;gap:6px;margin:0"><input type="checkbox" id="slangConfirmedSelectAll"> 全选</label>
-          <button id="slangBatchDeleteConfirmed" class="small danger">批量删除已确认</button>
-        </div>
-        <div class="row" style="margin-top:8px">
-          <input type="text" id="slangSearchConfirmed" placeholder="搜索词条 / 含义 / 用法 / 示例 / 来源" style="flex:1">
-          <select id="slangLimitConfirmed" style="width:110px">
-            <option value="50">每页 50</option>
-            <option value="100" selected>每页 100</option>
-            <option value="200">每页 200</option>
-            <option value="500">每页 500</option>
-          </select>
-        </div>
-        <div class="slang-scroll" id="slangConfirmedList">加载中…</div>
-      </div>
-
-      <!-- 已拒绝面板 -->
-      <div class="slang-panel" id="slangPanelRejected">
-        <div class="row" style="margin-top:8px">
-          <label style="display:flex;align-items:center;gap:6px;margin:0"><input type="checkbox" id="slangRejectedSelectAll"> 全选</label>
-          <button id="slangBatchRestore" class="small">恢复为候选</button>
-          <button id="slangBatchDeleteRejected" class="small danger">批量删除已拒绝</button>
-        </div>
-        <div class="row" style="margin-top:8px">
-          <input type="text" id="slangSearchRejected" placeholder="搜索词条 / 拒绝原因" style="flex:1">
-          <select id="slangLimitRejected" style="width:110px">
-            <option value="50">每页 50</option>
-            <option value="100" selected>每页 100</option>
-            <option value="200">每页 200</option>
-            <option value="500">每页 500</option>
-          </select>
-        </div>
-        <div class="slang-scroll" id="slangRejectedList">加载中…</div>
-      </div>
-
-      <div class="divider"></div>
-      <div class="meta" style="margin-bottom:6px">手动添加黑话</div>
-      <div class="row">
-        <input type="text" id="slangContent" placeholder="词条，如：绝绝子" style="flex:1">
-        <input type="text" id="slangMeaning" placeholder="含义，如：很好、很棒" style="flex:1">
-      </div>
-      <div class="row" style="margin-top:6px">
-        <input type="text" id="slangUsage" placeholder="用法（可选）" style="flex:1">
-        <input type="text" id="slangExample" placeholder="示例（可选）" style="flex:1">
-      </div>
-      <div class="row" style="margin-top:8px">
-        <button id="slangAdd" class="small">添加入库（确认）</button>
-      </div>
-      <details style="margin-top:10px">
-        <summary class="meta">黑话系统参数（可调）</summary>
-        <div class="row">
-          <label style="flex:1">启用黑话学习</label><input type="checkbox" id="slangEnabled" style="width:auto">
-        </div>
-        <div class="row">
-          <label style="flex:1">触发提取最少消息数</label><input type="number" id="slangExtractMin" min="1" style="width:90px">
-        </div>
-        <div class="row">
-          <label style="flex:1">提取冷却（毫秒）</label><input type="number" id="slangCooldown" min="0" step="1000" style="width:110px">
-        </div>
-        <div class="row">
-          <label style="flex:1">研究触发阈值（逗号分隔）</label><input type="text" id="slangThresholds" placeholder="2,4,8" style="width:120px">
-        </div>
-        <div class="row">
-          <label style="flex:1">注入最大条数</label><input type="number" id="slangInjectMax" min="1" max="30" style="width:90px">
-        </div>
-        <div class="row">
-          <label style="flex:1">学习会话 preset</label><input type="text" id="slangLearnerPreset" placeholder="qq-chat" style="width:120px">
-        </div>
-        <div class="row">
-          <label style="flex:1">学习工作区名</label><input type="text" id="slangWorkspaceTitle" placeholder="QQ 黑话学习" style="width:120px">
-        </div>
-        <div class="row">
-          <label style="flex:1">自动联网研究</label><input type="checkbox" id="slangAutoResearch" style="width:auto">
-        </div>
-        <div class="row" style="margin-top:8px">
-          <button id="slangConfigSave" class="small">保存黑话参数</button>
-          <span class="meta" id="slangConfigMsg"></span>
-        </div>
-      </details>
-    </section>
 <section id="section-reference" data-page="reference" class="card span-all">
       <h2>DSH 侧 MCP 工具</h2>
       <div class="meta">由 qq-bridge 的 MCP server 提供给 DSH agent；修改后需重启 DSH 才会刷新工具 schema。</div>
@@ -2502,27 +2393,7 @@ button:active:not(:disabled) {
       <footer class="page-footer"><span>QQ Bridge · 连接日常，保持自主</span><span id="lastUpdated">等待首次同步</span></footer>
     </main>
   </div>
-      <div class="modal-overlay" id="slangModalOverlay">
-      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="slangModalTitle" tabindex="-1">
-        <h3 id="slangModalTitle">确认黑话</h3>
-        <div class="meta" id="slangModalContent" style="margin-bottom:6px"></div>
-        <label>含义 *</label>
-        <input type="text" id="slangModalMeaning" placeholder="必须填写，确认后才会注入 AI 上下文">
-        <label>用法（可选）</label>
-        <input type="text" id="slangModalUsage" placeholder="使用场景 / 语气">
-        <label>示例（可选）</label>
-        <input type="text" id="slangModalExample" placeholder="自然短句示例">
-        <label>风险/慎用说明（可选）</label>
-        <input type="text" id="slangModalRisk" placeholder="敏感 / 慎用风险">
-        <label>参考来源（可选，每行一个 URL）</label>
-        <textarea id="slangModalSources" rows="3" placeholder="https://..."></textarea>
-        <div class="row">
-          <button id="slangModalDirectConfirm" class="small">直接确认（转正）</button>
-          <button id="slangModalSendResearch" class="small">送 DSH 深度研究</button>
-          <button id="slangModalCancel" class="small">取消</button>
-        </div>
-      </div>
-    </div>
+      
 
 
   <div class="toast" id="consoleToast" role="status" hidden></div>
@@ -3800,365 +3671,6 @@ document.getElementById('v2ToolLogClear').addEventListener('click', async () => 
   renderV2ToolLog([]);
 });
 
-let slangEntriesCache = [];
-let slangSelected = new Set();
-let slangActiveTab = 'candidate';
-let slangModalId = null;
-let slangModalMode = 'confirm'; // confirm | edit
-
-function slangStatusLabel(status) {
-  return { candidate: '候选', confirmed: '已确认', rejected: '已拒绝' }[status] || esc(status);
-}
-function slangStatusClass(status) {
-  return { candidate: 'pill b', confirmed: 'pill g', rejected: 'pill r' }[status] || 'pill';
-}
-function slangSourceLabel(e) {
-  if (e.source === 'manual') return '手动';
-  if (Array.isArray(e.evidence) && e.evidence.some((ev) => ev.sender === 'AI提交')) return 'AI提交';
-  return '自动提取';
-}
-function slangEvidenceHtml(e) {
-  return Array.isArray(e.evidence) && e.evidence.length
-    ? e.evidence.slice(-2).map((ev) => `<span class="meta">${esc(String(ev.sender || '未知'))}：${esc(String(ev.text || '').slice(0, 30))}</span>`).join('<br>')
-    : '<span class="meta">—</span>';
-}
-function slangSourcesHtml(e) {
-  return Array.isArray(e.sources) && e.sources.length
-    ? e.sources.slice(0, 5).map((s) => `<span class="meta">🔗 ${esc(s)}</span>`).join('<br>')
-    : '';
-}
-function slangSearchFields(e) {
-  return [e.content, e.meaning, e.usage, e.example, e.risk, Array.isArray(e.sources) ? e.sources.join(' ') : '', Array.isArray(e.evidence) ? e.evidence.map((x) => x.text || '').join(' ') : ''].join(' ').toLowerCase();
-}
-function getSlangLimit() {
-  const id = slangActiveTab === 'candidate' ? 'slangLimitCand' : slangActiveTab === 'confirmed' ? 'slangLimitConfirmed' : 'slangLimitRejected';
-  return Math.max(10, Number(document.getElementById(id)?.value) || 100);
-}
-function getSlangSearch() {
-  const id = slangActiveTab === 'candidate' ? 'slangSearchCand' : slangActiveTab === 'confirmed' ? 'slangSearchConfirmed' : 'slangSearchRejected';
-  return String(document.getElementById(id)?.value || '').trim().toLowerCase();
-}
-function selectedIdsForStatus(status) {
-  return [...slangSelected].filter((id) => slangEntriesCache.some((e) => e.id === id && e.status === status));
-}
-function setSlangMsg(text, ok = true) {
-  const msg = document.getElementById('slangMsg');
-  if (!msg) return;
-  msg.textContent = text;
-  msg.className = ok ? 'meta ok' : 'meta err';
-}
-function setSlangTab(tab) {
-  slangActiveTab = tab;
-  document.querySelectorAll('.slang-tab').forEach((btn) => btn.classList.toggle('active', btn.dataset.slangTab === tab));
-  document.querySelectorAll('.slang-panel').forEach((panel) => panel.classList.toggle('active', panel.id === 'slangPanel' + tab[0].toUpperCase() + tab.slice(1)));
-  renderSlangPanel();
-}
-function updateSlangSelectAll(status) {
-  const id = status === 'candidate' ? 'slangCandidateSelectAll' : status === 'confirmed' ? 'slangConfirmedSelectAll' : 'slangRejectedSelectAll';
-  const el = document.getElementById(id);
-  if (!el) return;
-  const list = slangEntriesCache.filter((e) => e.status === status);
-  const q = getSlangSearch();
-  const filtered = q ? list.filter((e) => slangSearchFields(e).includes(q)) : list;
-  el.checked = filtered.length > 0 && filtered.every((e) => slangSelected.has(e.id));
-  el.indeterminate = filtered.some((e) => slangSelected.has(e.id)) && !el.checked;
-}
-
-function renderSlangPanel() {
-  const status = slangActiveTab;
-  const containerId = status === 'candidate' ? 'slangCandidateList' : status === 'confirmed' ? 'slangConfirmedList' : 'slangRejectedList';
-  const box = document.getElementById(containerId);
-  if (!box) return;
-  const list = slangEntriesCache.filter((e) => e.status === status);
-  const q = getSlangSearch();
-  const filtered = q ? list.filter((e) => slangSearchFields(e).includes(q)) : list;
-  if (!filtered.length) {
-    box.innerHTML = '<div class="meta" style="padding:8px">' + (list.length ? '没有符合条件的词条' : (status === 'candidate' ? '暂无候选黑话，等 DSH 自动提取、AI 提交或手动添加' : status === 'confirmed' ? '暂无已确认黑话' : '暂无已拒绝词条')) + '</div>';
-    updateSlangSelectAll(status);
-    return;
-  }
-  const limit = getSlangLimit();
-  const shown = filtered.slice(0, limit);
-  let html = `<div class="meta" style="padding:6px 8px">共 ${filtered.length} 条，显示 ${shown.length} 条（可滚动查找）</div>`;
-  html += '<table><tr><th>选择</th><th>词条</th><th>次数</th><th>来源</th><th>含义 / 用法 / 示例</th><th>参考来源</th><th>语境证据</th><th>操作</th></tr>';
-  for (const e of shown) {
-    const meaning = e.senses?.length ? e.senses.map(s=>esc(s.meaning)+' <span class="meta">（'+esc({candidate:'待验证',confirmed:'已确认',revoked:'已撤销',rejected:'已拒绝'}[s.status]||s.status)+'）</span>').join('<br>') : e.meaning ? esc(e.meaning) : (status === 'candidate' ? '<span class="meta">待研究</span>' : '<span class="meta">无</span>');
-    const checked = slangSelected.has(e.id) ? ' checked' : '';
-    const actions = [];
-    if (status === 'candidate') {
-      actions.push(`<button class="small" data-slang-confirm="${esc(e.id)}">确认</button>`);
-      actions.push(`<button class="small" data-slang-edit="${esc(e.id)}">编辑</button>`);
-      actions.push(`<button class="small" data-slang-reject="${esc(e.id)}">拒绝</button>`);
-    } else if (status === 'confirmed') {
-      actions.push(`<button class="small" data-slang-edit="${esc(e.id)}">编辑</button>`);
-    } else {
-      actions.push(`<button class="small" data-slang-restore="${esc(e.id)}">恢复候选</button>`);
-    }
-    actions.push(`<button class="small danger" data-slang-del="${esc(e.id)}">删</button>`);
-    html += `<tr>
-      <td><input type="checkbox" data-slang-select="${esc(e.id)}"${checked}></td>
-      <td><b>${esc(e.content)}</b><br><span class="${slangStatusClass(status)}">${slangStatusLabel(status)}</span></td>
-      <td>${esc(e.count)}</td>
-      <td>${esc(slangSourceLabel(e))}</td>
-      <td>${slangResearchBadge(e)}${meaning}${e.usage ? '<br><span class="meta">用法：' + esc(e.usage) + '</span>' : ''}${e.example ? '<br><span class="meta">例：' + esc(e.example) + '</span>' : ''}${e.risk ? '<br><span class="meta">风险：' + esc(e.risk) + '</span>' : ''}</td>
-      <td>${slangSourcesHtml(e) || '<span class="meta">—</span>'}</td>
-      <td>${slangEvidenceHtml(e)}</td>
-      <td class="row">${actions.join('')}</td>
-    </tr>`;
-  }
-  box.innerHTML = html + '</table>';
-  box.querySelectorAll('[data-slang-select]').forEach((cb) => cb.addEventListener('change', () => {
-    const id = cb.dataset.slangSelect;
-    if (cb.checked) slangSelected.add(id); else slangSelected.delete(id);
-    updateSlangSelectAll(status);
-  }));
-  box.querySelectorAll('[data-slang-confirm]').forEach((btn) => btn.addEventListener('click', () => openSlangModal(btn.dataset.slangConfirm, 'confirm')));
-  box.querySelectorAll('[data-slang-edit]').forEach((btn) => btn.addEventListener('click', () => openSlangModal(btn.dataset.slangEdit, 'edit')));
-  box.querySelectorAll('[data-slang-reject]').forEach((btn) => btn.addEventListener('click', async () => {
-    const r2 = await api('/api/slang/' + btn.dataset.slangReject + '/reject', 'POST', {});
-    if (!r2.ok) alert(r2.error || '拒绝失败');
-    setSlangMsg(r2.ok ? '✅ 已拒绝' : ('❌ ' + (r2.error || '失败')), r2.ok);
-    refreshSlang();
-  }));
-  box.querySelectorAll('[data-slang-restore]').forEach((btn) => btn.addEventListener('click', async () => {
-    const e = slangEntriesCache.find((x) => x.id === btn.dataset.slangRestore);
-    if (!e) return;
-    const r2 = await api('/api/slang/' + e.id, 'PATCH', { status: 'candidate' });
-    if (!r2.ok) alert(r2.error || '恢复失败');
-    setSlangMsg(r2.ok ? '✅ 已恢复为候选' : ('❌ ' + (r2.error || '失败')), r2.ok);
-    refreshSlang();
-  }));
-  box.querySelectorAll('[data-slang-del]').forEach((btn) => btn.addEventListener('click', async () => {
-    if (!confirm('确定删除该黑话？')) return;
-    const r2 = await api('/api/slang/' + btn.dataset.slangDel, 'DELETE', {});
-    if (!r2.ok) alert(r2.error || '删除失败');
-    setSlangMsg(r2.ok ? '✅ 已删除' : ('❌ ' + (r2.error || '失败')), r2.ok);
-    slangSelected.delete(btn.dataset.slangDel);
-    refreshSlang();
-  }));
-  updateSlangSelectAll(status);
-}
-
-// BigFatFish manual research feedback v1
-function slangResearchMessage(r) {
-  if (!r.ok) return '❌ ' + (r.error || '研究提交失败');
-  if (!r.count) return '已有研究正在执行，无需重复提交；请查看上方“DSH研究任务与返回”。';
-  return '✅ 已排队 ' + r.count + ' 条（每批5词），请查看上方“DSH研究任务与返回”，进度及结果自动刷新。';
-}
-function slangResearchBadge(e) {
-  if (!e.research) return '';
-  const labels = { pending: '待研究', queued: '已排队', researching: '研究中', approved: '研究通过', rejected: '研究未确认', failed: '研究失败' };
-  return '<div class="meta"><b>' + esc(labels[e.research.status] || e.research.status) + '</b> · ' + esc(e.research.reason || '') + '</div>';
-}
-async function refreshSlang() {
-  try {
-    const r = await api('/api/slang');
-    slangEntriesCache = r.entries || [];
-    renderSlangPanel();
-    document.dispatchEvent(new CustomEvent('bff-slang-results', { detail: { jobs: r.researchJobs || [], entries: r.entries || [] } }));
-  } catch (e) {
-    const box = document.getElementById('slangCandidateList');
-    if (box) box.innerHTML = '<span class="meta">加载失败</span>';
-  }
-}
-
-function openSlangModal(id, mode) {
-  const e = slangEntriesCache.find((x) => x.id === id);
-  if (!e) return;
-  slangModalId = id;
-  slangModalMode = mode;
-  document.getElementById('slangModalTitle').textContent = mode === 'confirm' ? `确认黑话：${e.content}` : `编辑黑话：${e.content}`;
-  document.getElementById('slangModalContent').textContent = mode === 'confirm'
-    ? '你可以直接填写含义/用法并转正，也可以先送 DSH 深度联网研究，研究结果回来后在此处删改再确认。'
-    : '修改后保存；候选不会转正，已确认仍保持已确认。';
-  document.getElementById('slangModalMeaning').value = e.meaning || '';
-  document.getElementById('slangModalUsage').value = e.usage || '';
-  document.getElementById('slangModalExample').value = e.example || '';
-  document.getElementById('slangModalRisk').value = e.risk || '';
-  document.getElementById('slangModalSources').value = Array.isArray(e.sources) ? e.sources.join('\n') : '';
-  document.getElementById('slangModalDirectConfirm').textContent = mode === 'confirm' ? '直接确认（转正）' : '保存修改';
-  document.getElementById('slangModalSendResearch').style.display = mode === 'confirm' && e.status === 'candidate' ? '' : 'none';
-  document.getElementById('slangModalOverlay').classList.add('open');
-}
-function closeSlangModal() {
-  document.getElementById('slangModalOverlay').classList.remove('open');
-  slangModalId = null;
-}
-function readSlangModalPayload() {
-  return {
-    meaning: document.getElementById('slangModalMeaning').value.trim(),
-    usage: document.getElementById('slangModalUsage').value.trim(),
-    example: document.getElementById('slangModalExample').value.trim(),
-    risk: document.getElementById('slangModalRisk').value.trim(),
-    sources: document.getElementById('slangModalSources').value.split(/\n/).map((s) => s.trim()).filter(Boolean)
-  };
-}
-
-document.querySelectorAll('.slang-tab').forEach((btn) => btn.addEventListener('click', () => setSlangTab(btn.dataset.slangTab)));
-document.getElementById('slangSearchCand').addEventListener('input', renderSlangPanel);
-document.getElementById('slangSearchConfirmed').addEventListener('input', renderSlangPanel);
-document.getElementById('slangSearchRejected').addEventListener('input', renderSlangPanel);
-document.getElementById('slangLimitCand').addEventListener('change', renderSlangPanel);
-document.getElementById('slangLimitConfirmed').addEventListener('change', renderSlangPanel);
-document.getElementById('slangLimitRejected').addEventListener('change', renderSlangPanel);
-document.getElementById('slangCandidateSelectAll').addEventListener('change', (e) => {
-  const list = slangEntriesCache.filter((x) => x.status === 'candidate');
-  const q = getSlangSearch();
-  const filtered = q ? list.filter((x) => slangSearchFields(x).includes(q)) : list;
-  for (const x of filtered) { if (e.target.checked) slangSelected.add(x.id); else slangSelected.delete(x.id); }
-  renderSlangPanel();
-});
-document.getElementById('slangConfirmedSelectAll').addEventListener('change', (e) => {
-  const list = slangEntriesCache.filter((x) => x.status === 'confirmed');
-  const q = getSlangSearch();
-  const filtered = q ? list.filter((x) => slangSearchFields(x).includes(q)) : list;
-  for (const x of filtered) { if (e.target.checked) slangSelected.add(x.id); else slangSelected.delete(x.id); }
-  renderSlangPanel();
-});
-document.getElementById('slangRejectedSelectAll').addEventListener('change', (e) => {
-  const list = slangEntriesCache.filter((x) => x.status === 'rejected');
-  const q = getSlangSearch();
-  const filtered = q ? list.filter((x) => slangSearchFields(x).includes(q)) : list;
-  for (const x of filtered) { if (e.target.checked) slangSelected.add(x.id); else slangSelected.delete(x.id); }
-  renderSlangPanel();
-});
-document.getElementById('slangBatchResearch').addEventListener('click', async () => {
-  const ids = selectedIdsForStatus('candidate');
-  if (!ids.length) { alert('请先勾选要研究的候选词'); return; }
-  const r = await api('/api/slang/research', 'POST', { ids });
-  setSlangMsg(slangResearchMessage(r), r.ok);
-  if (r.ok) refreshSlang();
-});
-document.getElementById('slangBatchConfirm').addEventListener('click', async () => {
-  const ids = selectedIdsForStatus('candidate');
-  if (!ids.length) { alert('请先勾选要确认的候选词'); return; }
-  if (!confirm(`确定批量确认 ${ids.length} 条候选？缺少含义的会被跳过。`)) return;
-  const r = await api('/api/slang/batch-confirm', 'POST', { ids });
-  setSlangMsg(r.ok ? `✅ 已确认 ${r.confirmedCount} 条，跳过 ${r.skippedCount} 条` : ('❌ ' + (r.error || '失败')), r.ok);
-  if (r.ok) { slangSelected.clear(); refreshSlang(); }
-});
-document.getElementById('slangBatchReject').addEventListener('click', async () => {
-  const ids = selectedIdsForStatus('candidate');
-  if (!ids.length) { alert('请先勾选要拒绝的候选词'); return; }
-  if (!confirm(`确定拒绝 ${ids.length} 条候选？`)) return;
-  const r = await api('/api/slang/batch-reject', 'POST', { ids });
-  setSlangMsg(r.ok ? `✅ 已拒绝 ${r.rejectedCount} 条` : ('❌ ' + (r.error || '失败')), r.ok);
-  if (r.ok) { slangSelected.clear(); refreshSlang(); }
-});
-document.getElementById('slangBatchDeleteCand').addEventListener('click', async () => {
-  const ids = selectedIdsForStatus('candidate');
-  if (!ids.length) { alert('请先勾选要删除的候选词'); return; }
-  if (!confirm(`确定删除 ${ids.length} 条候选？此操作不可恢复！`)) return;
-  const r = await api('/api/slang/batch-delete', 'POST', { ids });
-  setSlangMsg(r.ok ? `✅ 已删除 ${r.removedCount} 条候选` : ('❌ ' + (r.error || '失败')), r.ok);
-  if (r.ok) { slangSelected.clear(); refreshSlang(); }
-});
-document.getElementById('slangBatchDeleteConfirmed').addEventListener('click', async () => {
-  const ids = selectedIdsForStatus('confirmed');
-  if (!ids.length) { alert('请先勾选要删除的已确认词条'); return; }
-  if (!confirm(`确定删除 ${ids.length} 条已确认黑话？此操作不可恢复！`)) return;
-  const r = await api('/api/slang/batch-delete', 'POST', { ids });
-  setSlangMsg(r.ok ? `✅ 已删除 ${r.removedCount} 条已确认` : ('❌ ' + (r.error || '失败')), r.ok);
-  if (r.ok) { slangSelected.clear(); refreshSlang(); }
-});
-document.getElementById('slangBatchDeleteRejected').addEventListener('click', async () => {
-  const ids = selectedIdsForStatus('rejected');
-  if (!ids.length) { alert('请先勾选要删除的已拒绝词条'); return; }
-  if (!confirm(`确定删除 ${ids.length} 条已拒绝词条？此操作不可恢复！`)) return;
-  const r = await api('/api/slang/batch-delete', 'POST', { ids });
-  setSlangMsg(r.ok ? `✅ 已删除 ${r.removedCount} 条已拒绝` : ('❌ ' + (r.error || '失败')), r.ok);
-  if (r.ok) { slangSelected.clear(); refreshSlang(); }
-});
-document.getElementById('slangBatchRestore').addEventListener('click', async () => {
-  const ids = selectedIdsForStatus('rejected');
-  if (!ids.length) { alert('请先勾选要恢复的已拒绝词条'); return; }
-  let okCount = 0;
-  for (const id of ids) {
-    const r = await api('/api/slang/' + id, 'PATCH', { status: 'candidate' });
-    if (r.ok) okCount++;
-  }
-  setSlangMsg(`✅ 已恢复 ${okCount}/${ids.length} 条为候选`);
-  if (okCount) { slangSelected.clear(); refreshSlang(); }
-});
-document.getElementById('slangModalDirectConfirm').addEventListener('click', async () => {
-  if (!slangModalId) return;
-  const payload = readSlangModalPayload();
-  if (!payload.meaning) { alert('请先填写含义，确认后才会注入 AI 上下文'); return; }
-  const e = slangEntriesCache.find((x) => x.id === slangModalId);
-  if (!e) return;
-  const path = slangModalMode === 'confirm' ? `/api/slang/${e.id}/confirm` : `/api/slang/${e.id}`;
-  const r2 = await api(path, slangModalMode === 'confirm' ? 'POST' : 'PATCH', payload);
-  if (!r2.ok) alert(r2.error || '保存失败');
-  setSlangMsg(r2.ok ? (slangModalMode === 'confirm' ? '✅ 已确认转正' : '✅ 已保存') : ('❌ ' + (r2.error || '失败')), r2.ok);
-  closeSlangModal();
-  refreshSlang();
-});
-document.getElementById('slangModalSendResearch').addEventListener('click', async () => {
-  if (!slangModalId) return;
-  const r = await api('/api/slang/research', 'POST', { ids: [slangModalId] });
-  setSlangMsg(slangResearchMessage(r), r.ok);
-  closeSlangModal();
-  refreshSlang();
-});
-document.getElementById('slangModalCancel').addEventListener('click', closeSlangModal);
-document.getElementById('slangModalOverlay').addEventListener('click', (e) => { if (e.target.id === 'slangModalOverlay') closeSlangModal(); });
-
-document.getElementById('slangAdd').addEventListener('click', async () => {
-  const content = document.getElementById('slangContent').value.trim();
-  const meaning = document.getElementById('slangMeaning').value.trim();
-  const usage = document.getElementById('slangUsage').value.trim();
-  const example = document.getElementById('slangExample').value.trim();
-  if (!content) { alert('词条不能为空'); return; }
-  const r = await api('/api/slang', 'POST', { content, meaning, usage, example });
-  document.getElementById('slangMsg').textContent = r.ok ? '✅ 已添加' : ('❌ ' + (r.error || '失败'));
-  document.getElementById('slangMsg').className = r.ok ? 'meta ok' : 'meta err';
-  if (r.ok) {
-    document.getElementById('slangContent').value = '';
-    document.getElementById('slangMeaning').value = '';
-    document.getElementById('slangUsage').value = '';
-    document.getElementById('slangExample').value = '';
-    refreshSlang();
-  }
-});
-document.getElementById('slangExtract').addEventListener('click', async () => {
-  const r = await api('/api/slang/extract', 'POST', {});
-  setSlangMsg(r.ok ? '✅ 已触发提取' : ('❌ ' + (r.error || '失败')), r.ok);
-});
-document.getElementById('slangResearch').addEventListener('click', async () => {
-  const r = await api('/api/slang/research', 'POST', {});
-  setSlangMsg(slangResearchMessage(r), r.ok);
-  if (r.ok) refreshSlang();
-});
-function loadSlangConfig() {
-  api('/api/slang').then(r => {
-    const c = r.config || {};
-    document.getElementById('slangEnabled').checked = c.enabled !== false;
-    document.getElementById('slangExtractMin').value = c.extractMinMessages ?? 10;
-    document.getElementById('slangCooldown').value = c.extractCooldownMs ?? 300000;
-    document.getElementById('slangThresholds').value = (c.inferenceThresholds || [2, 4, 8]).join(', ');
-    document.getElementById('slangInjectMax').value = c.injectMax ?? 8;
-    document.getElementById('slangLearnerPreset').value = c.learnerPreset || 'qq-chat';
-    document.getElementById('slangWorkspaceTitle').value = c.workspaceTitle || 'QQ 黑话学习';
-    document.getElementById('slangAutoResearch').checked = c.autoResearch !== false;
-  }).catch(() => {});
-}
-document.getElementById('slangConfigSave').addEventListener('click', async () => {
-  const r = await api('/api/slang/config', 'POST', {
-    enabled: document.getElementById('slangEnabled').checked,
-    extractMinMessages: Number(document.getElementById('slangExtractMin').value) || 10,
-    extractCooldownMs: Number(document.getElementById('slangCooldown').value) || 300000,
-    inferenceThresholds: document.getElementById('slangThresholds').value.split(/[,，\s]+/).map(Number).filter(Boolean),
-    injectMax: Number(document.getElementById('slangInjectMax').value) || 8,
-    learnerPreset: document.getElementById('slangLearnerPreset').value.trim(),
-    workspaceTitle: document.getElementById('slangWorkspaceTitle').value.trim(),
-    autoResearch: document.getElementById('slangAutoResearch').checked
-  });
-  const msg = document.getElementById('slangConfigMsg');
-  msg.textContent = r.ok ? '✅ 已保存' : ('❌ ' + (r.error || '失败'));
-  msg.className = r.ok ? 'meta ok' : 'meta err';
-  if (r.ok) loadSlangConfig();
-});
-
 function loadSecurity() {
   api('/api/security').then(r => {
     document.getElementById('secInterceptNotify').checked = r.security?.interceptNotify !== false;
@@ -4338,7 +3850,7 @@ document.querySelectorAll('input,select,textarea').forEach(input => {
     input.setAttribute('aria-label', names[input.id] || input.placeholder || input.closest('section')?.querySelector('h2')?.textContent || '设置');
   }
 });
-const primaryActions = ['roleSet','roleCreate','v2ConfigSave','v2ConfigSaveTop','wlSave','secSave','consoleTokenSave','tsSend','aiNotifySend','slangAdd','slangConfigSave','slangModalDirectConfirm'];
+const primaryActions = ['roleSet','roleCreate','v2ConfigSave','v2ConfigSaveTop','wlSave','secSave','consoleTokenSave','tsSend','aiNotifySend',];
 primaryActions.forEach(id => document.getElementById(id)?.classList.add('primary'));
 document.querySelectorAll('.meta[id$="Msg"], .meta[id$="Msg2"]').forEach(el => el.setAttribute('role','status'));
 document.getElementById('section-mode').querySelector('h2').dataset.note = '选择后即时生效';
@@ -4371,10 +3883,7 @@ searchInput.addEventListener('input', () => {
       setConsolePage(entry.page);
       let ancestor = entry.target.closest('details');
       while (ancestor) { ancestor.open = true; ancestor = ancestor.parentElement.closest('details'); }
-      if (entry.target.closest('.slang-panel')) {
-        const panels = { slangPanelCandidate: 'candidate', slangPanelConfirmed: 'confirmed', slangPanelRejected: 'rejected' };
-        setSlangTab(panels[entry.target.closest('.slang-panel').id]);
-      }
+
       entry.target.scrollIntoView({ block:'center', behavior:'instant' });
       if (!entry.target.hasAttribute('tabindex') && !entry.target.matches('input,textarea,select,button,summary')) entry.target.tabIndex = -1;
       entry.target.focus({ preventScroll:true });
@@ -4393,24 +3902,6 @@ searchInput.addEventListener('keydown', event => {
 document.addEventListener('click', event => { if (!event.target.closest('.search-wrap')) closeConsoleSearch(); });
 searchResults.addEventListener('keydown', event => { if (event.key === 'Escape') { closeConsoleSearch(); searchInput.focus(); } });
 
-// Keyboard support for the existing editor dialog without replacing its save flow.
-let modalPreviousFocus;
-const slangOverlay = document.getElementById('slangModalOverlay');
-new MutationObserver(() => {
-  if (slangOverlay.classList.contains('open')) {
-    modalPreviousFocus = document.activeElement;
-    document.getElementById('slangModalMeaning').focus();
-  } else modalPreviousFocus?.focus();
-}).observe(slangOverlay, { attributes:true, attributeFilter:['class'] });
-slangOverlay.addEventListener('keydown', event => {
-  if (event.key === 'Escape') { event.preventDefault(); closeSlangModal(); }
-  if (event.key === 'Tab') {
-    const controls = [...slangOverlay.querySelectorAll('button,input,textarea,select')].filter(el => !el.disabled && el.getClientRects().length);
-    const first = controls[0], last = controls.at(-1);
-    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-  }
-});
 const tokenToggle = document.createElement('button');
 tokenToggle.id = 'consoleTokenToggle'; tokenToggle.className = 'small'; tokenToggle.textContent = '显示令牌'; tokenToggle.type = 'button'; tokenToggle.setAttribute('aria-pressed','false');
 tokenToggle.addEventListener('click', () => {
@@ -4847,8 +4338,8 @@ document.getElementById('usageClear').addEventListener('click', async () => {
 
 setConsolePage(location.hash.slice(1), { updateHash:false });
 
-refresh(); refreshRoles(); refreshWhitelist(); refreshSessions(); refreshPending(); refreshPresets();  loadV2Config(); refreshV2Activity(); loadV2ToolLog(); loadV2SessionOptions();  refreshSlang(); loadSlangConfig(); loadSecurity(); refreshSimPrompt(); refreshDshModel(); refreshUsage(); refreshUsageChart(); refreshUsageRecent();
-setInterval(() => { refresh(); refreshSessions(); refreshPending();  refreshSlang(); }, 3000);
+refresh(); refreshRoles(); refreshWhitelist(); refreshSessions(); refreshPending(); refreshPresets();  loadV2Config(); refreshV2Activity(); loadV2ToolLog(); loadV2SessionOptions();   loadSecurity(); refreshSimPrompt(); refreshDshModel(); refreshUsage(); refreshUsageChart(); refreshUsageRecent();
+setInterval(() => { refresh(); refreshSessions(); refreshPending();   }, 3000);
 // 用量看板只在本页可见时轮询：既保证「实时」，又不让其它页白白多打两份接口。
 setInterval(() => { if (currentConsolePage !== 'usage') return; refreshUsage(); refreshUsageChart(); refreshUsageRecent(); }, 3000);
 // 主题切换（纯前端，不发任何请求；选择写入 localStorage，未选择时跟随系统）
@@ -4927,9 +4418,9 @@ setInterval(() => { if (currentConsolePage !== 'usage') return; refreshUsage(); 
   for(const page of ['bff-policy','bff-memory']){const nav=document.querySelector('#consoleSubnav [data-subpage="'+page+'"]');nav.onclick=()=>{setConsolePage(page,{focus:true});run(refresh);};}
   const quick = card('overview', 'section-bff-overview', '大肥鱼 · 功能管理');
   const summary = document.createElement('p'); summary.id = 'bfOverviewStatus'; summary.textContent = '正在读取本地设置…'; quick.append(summary);
-  for (const [page, label, target] of [['sessions', '添加群聊 / 私聊', peers.id], ['persona', '新增与编辑人格', 'roleList'], ['bff-policy', '话题与主动策略', panel.id], ['bff-memory', '记忆与表达风格', 'section-bff-memory'], ['slang', '黑话评分与入库', 'section-bff-slang'], ['operations', '启动与服务管理', 'section-bff-services']]) {
+  for (const [page, label, target] of [['sessions', '添加群聊 / 私聊', peers.id], ['persona', '新增与编辑人格', 'roleList'], ['bff-policy', '话题与主动策略', panel.id], ['bff-memory', '记忆与表达风格', 'section-bff-memory'], ['bff-community', '自动黑话与统一知识', 'bfQQAutoStatus'], ['operations', '启动与服务管理', 'section-bff-services']]) {
     const b = document.createElement('button'); b.type = 'button'; b.textContent = label;
-    b.onclick = () => { setConsolePage(page, { focus: true, target }); run(refresh); if (page === 'persona') run(refreshPersonas); if (page === 'slang') run(refreshSlangScores); if (page === 'operations') run(refreshServices); }; quick.append(b);
+    b.onclick = () => { setConsolePage(page, { focus: true, target }); run(refresh); if (page === 'persona') run(refreshPersonas); if (page === 'operations') run(refreshServices); }; quick.append(b);
   }
   const accessActions = document.createElement('div'); accessActions.className = 'row';
   for (const [kind, title] of [['group', '添加群聊'], ['private', '添加私聊']]) {
@@ -5138,95 +4629,8 @@ setInterval(() => { if (currentConsolePage !== 'usage') return; refreshUsage(); 
   el('bfMemoryExpire').onclick = () => run(async () => mutateMemory({ action: 'clearExpired' }));
   el('bfVoiceOpen').onclick = () => run(async () => notice((await call('/api/bigfatfish/voice-open', 'POST', {})).message));
   el('bfManagerOpen').onclick = () => window.open('http://127.0.0.1:3105/?token=' + encodeURIComponent(localStorage.getItem('consoleToken') || ''), '_blank', 'noopener');
-  const slangCard = card('slang', 'section-bff-slang', '聊天黑话 · 评分与自动入库');
-  slangCard.innerHTML += `<p>沿用原黑话提取、释义研究和词库。自动提取与 AI 提交的新词须先达到“进入候选至少真人消息数”，再进入候选词库；次数按已启用群聊跨群累计，同一条消息重复提词只算一次。只使用回看时长内保留的真人消息，不采纳 AI 自报次数、私聊或机器人自己的消息。已有词条和人工添加不受新候选门槛影响。进入候选后，仍须单独确认才能用于聊天；候选释义可在原词库编辑。自动提取和上下文注入还需开启下方“黑话系统参数”中的“启用黑话学习”；释义可使用原自动联网研究或人工补充。</p>
-    <form id="bfSlangPolicy"><label><input type="checkbox" name="enabled">启用评分</label><label><input type="checkbox" name="autoConfirm">达到门槛后自动确认到原黑话词库</label><div id="bfSlangFields"></div><button>保存黑话策略</button></form>
-    <p><button id="bfSlangRefresh">刷新评分</button><button id="bfSlangScan">立即按当前策略检查</button></p><p id="bfSlangStatus" role="status"></p><div id="bfSlangRows" class="bf-table"></div><h3>最近自动入库记录</h3><div id="bfSlangAudit"></div>`;
-  const researchPanel = document.createElement('div'); researchPanel.id = 'bfSlangResearchPanel';
-  researchPanel.innerHTML = '<h3>DSH研究任务与返回</h3><p>每批最多5词，单批最多等待5分钟；结果自动刷新。研究未确认也会显示原因及返回摘录。通过研究仍须符合正式入库条件。</p><p id="bfSlangResearchStatus" role="status">暂无研究任务记录</p><div id="bfSlangResearchJobs"></div><div id="bfSlangResearchResults"></div>';
-  slangCard.append(researchPanel);
-  const researchLabels = { pending: '待研究', queued: '已排队', researching: '研究中', approved: '研究通过', rejected: '研究未确认', failed: '研究失败' };
-  function renderResearchResults(jobs = [], entries = []) {
-    const opened = new Set([...researchPanel.querySelectorAll('details[open][data-research-key]')].map(node => node.dataset.researchKey));
-    el('bfSlangResearchStatus').textContent = jobs.length ? '最近任务：' + (jobs[0].stage || jobs[0].status) : '暂无手动研究任务记录；自动研究状态见词条行。';
-    el('bfSlangResearchJobs').replaceChildren();
-    for (const job of jobs.slice(0, 10)) {
-      const box = document.createElement('details'), title = document.createElement('summary');
-      box.dataset.researchKey = 'job:' + job.id; box.open = opened.has(box.dataset.researchKey);
-      title.textContent = `${new Date(job.createdAt).toLocaleString('zh-CN')} · ${job.done}/${job.total}条 · ${job.stage} · 任务${job.id.slice(0, 8)}`; box.append(title);
-      const words = document.createElement('p'); words.textContent = '词条：' + job.words.join('、'); box.append(words);
-      for (const response of job.returns || []) { const nested = document.createElement('details'), label = document.createElement('summary'), pre = document.createElement('pre');
-        nested.dataset.researchKey = 'return:' + job.id + ':' + response.batch; nested.open = opened.has(nested.dataset.researchKey);
-        label.textContent = `第${response.batch}批返回摘录`; pre.textContent = response.text; pre.style.cssText = 'white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow:auto'; nested.append(label, pre); box.append(nested); }
-      el('bfSlangResearchJobs').append(box);
-    }
-    el('bfSlangResearchResults').replaceChildren();
-    const history = new Map();
-    for (const entry of [...jobs.flatMap(j => j.results || []), ...entries.filter(e => e.research?.mode === 'manual')]) if (!history.has(entry.id) || history.get(entry.id).research.at <= entry.research.at) history.set(entry.id, entry);
-    for (const entry of [...history.values()].sort((a, b) => b.research.at - a.research.at).slice(0, 100)) {
-      const data = entry.research, box = document.createElement('details'), title = document.createElement('summary');
-      box.dataset.researchKey = 'word:' + entry.id; box.open = opened.has(box.dataset.researchKey);
-      title.textContent = `${entry.content} · ${researchLabels[data.status] || data.status} · ${data.reason || ''}`; box.append(title);
-      if (data.result) for (const [field, label] of [['meaning', '含义'], ['usage', '用法'], ['example', '示例'], ['risk', '风险'], ['reason', '研究结论'], ['sources', '参考来源']]) {
-        const row = document.createElement('p'); row.textContent = label + '：' + (Array.isArray(data.result[field]) ? data.result[field].join('；') : data.result[field] || '未返回'); box.append(row);
-      }
-      if (data.result) { const confidence = document.createElement('p'); confidence.textContent = `置信度${Math.round(data.confidence * 100)}%${data.status !== 'approved' ? '；未确认内容仅供参考，未写入正式释义' : ''}`; box.append(confidence); }
-      box.append(button('查看 / 编辑原词条', async () => { await refreshSlang(); openSlangModal(entry.id, 'edit'); })); el('bfSlangResearchResults').append(box);
-    }
-  }
-  let researchVersion = '';
-  document.addEventListener('bff-slang-results', event => {
-    renderResearchResults(event.detail.jobs, event.detail.entries);
-    const version = event.detail.entries.map(e => [e.id, e.research?.status, e.research?.at].join(':')).join('|');
-    if (version !== researchVersion && currentConsolePage === 'slang') run(() => refreshSlangScores()); researchVersion = version;
-  });
-  const autoResearchLabel = document.createElement('label'); autoResearchLabel.innerHTML = '<input type="checkbox" name="autoResearch">候选达标后自动研究释义'; el('bfSlangPolicy').prepend(autoResearchLabel);
-  const slangFields = { candidateMinMessages: ['进入候选至少真人消息数', 1, 100], researchMinMessages: ['自动研究至少真人消息数', 3, 100], threshold: ['候选转正式的分数门槛', 0, 100], minMessages: ['转正式至少真人消息数', 2, 100], minSpeakers: ['转正式至少发言人数', 2, 20], minSpanMinutes: ['转正式至少使用跨度（分钟）', 1, 10080], lookbackHours: ['回看时长（小时）', 1, 720], scanIntervalMinutes: ['评分检查间隔（分钟）', 1, 1440], maxAutoPerDay: ['每日自动入库上限', 0, 100] };
-  for (const [key, [label, min, max]] of Object.entries(slangFields)) {
-    const wrap = document.createElement('label'); wrap.textContent = label + ' '; const input = document.createElement('input'); Object.assign(input, { type: 'number', name: key, min, max, required: true }); wrap.append(input); el('bfSlangFields').append(wrap);
-  }
-  let slangDirty = false;
-  el('bfSlangPolicy').addEventListener('input', () => { slangDirty = true; });
-  async function refreshSlangScores(scan = false) {
-    const data = await call('/api/bigfatfish/slang', scan ? 'POST' : 'GET', scan ? { action: 'scan' } : undefined);
-    if (!slangDirty) {
-      const f = el('bfSlangPolicy').elements;
-      for (const [key, value] of Object.entries(data.policy)) f[key][typeof value === 'boolean' ? 'checked' : 'value'] = value;
-    }
-    el('bfSlangStatus').textContent = `原词库${data.writable ? '可写' : '只读'} · 自动确认${data.nativeEnabled === false ? '暂停（原黑话学习已关闭）' : data.policy.autoConfirm && data.policy.enabled ? '开启' : '关闭'} · 今日自动入库预留/已用 ${data.todayUsed}/${data.policy.maxAutoPerDay} · 候选 ${data.totalCandidates} 条${data.totalCandidates > data.rows.length ? '（显示前500条）' : ''} · 最近检查 ${data.lastScanAt ? new Date(data.lastScanAt).toLocaleString('zh-CN') : '尚未检查'}${data.lastError ? ' · ' + data.lastError : ''}`;
-    el('bfSlangRows').replaceChildren();
-    if (!data.rows.length) el('bfSlangRows').textContent = '暂无候选。可使用下方原黑话工具从近期聊天提取候选，并研究释义。';
-    else {
-      const table = document.createElement('table'), head = document.createElement('thead'), tr = document.createElement('tr');
-      for (const title of ['黑话 / 释义', '分数', '真人证据', '判断 / 操作']) { const th = document.createElement('th'); th.textContent = title; tr.append(th); } head.append(tr); table.append(head);
-      const tbody = document.createElement('tbody');
-      for (const row of data.rows) {
-        const tr = document.createElement('tr');
-        for (const text of [row.content + '：' + (row.meaning || '待研究'), row.score + '/100', `${row.messages}条 · ${row.speakers}人 · ${row.spanMinutes}分钟`]) { const td = document.createElement('td'); td.textContent = text; tr.append(td); }
-        tr.children[1].title = Object.entries(row.parts).map(([key, value]) => key + ': ' + value).join('；');
-        const action = document.createElement('td'); action.textContent = (row.research ? '研究：' + ({ pending: '待研究', researching: '进行中', approved: '通过', rejected: '尚未确认', failed: '等待重试' }[row.research.status] || '待研究') + '；' : '') + (row.eligible ? '满足入库条件 ' : row.reasons.join('；') + ' ');
-        action.append(button('查看 / 编辑原词条', async () => { await refreshSlang(); openSlangModal(row.id, 'confirm'); })); tr.append(action); tbody.append(tr);
-      }
-      table.append(tbody); el('bfSlangRows').append(table);
-    }
-    el('bfSlangAudit').replaceChildren();
-    for (const row of data.audit) { const p = document.createElement('p'); p.textContent = `${new Date(row.at).toLocaleString('zh-CN')} · ${row.content} · ${row.score}分 · ${{ confirmed: '已确认入原词库', reserved: '额度已预留，结果待核对', failed: '保存失败，已撤回' }[row.status] || row.status}`; el('bfSlangAudit').append(p); }
-    if (!data.audit.length) el('bfSlangAudit').textContent = '暂无自动入库记录';
-  }
-  el('bfSlangPolicy').onsubmit = event => { event.preventDefault(); run(async () => {
-    const f = event.target.elements, policy = { enabled: f.enabled.checked, autoConfirm: f.autoConfirm.checked, autoResearch: f.autoResearch.checked };
-    for (const key of Object.keys(slangFields)) policy[key] = Number(f[key].value);
-    await call('/api/bigfatfish/settings', 'POST', { slangPolicy: policy }); slangDirty = false; await refreshSlangScores(); notice('黑话策略已保存');
-  }); };
-  el('bfSlangRefresh').onclick = () => run(() => refreshSlangScores());
-  el('bfSlangScan').onclick = () => run(async () => { await refreshSlangScores(true); await refreshSlang(); notice('已按当前策略检查，原词库已刷新'); });
-  slangCard.parentElement.insertBefore(slangCard, document.querySelector('[data-page="slang"]'));
-  // Native manual confirmation/research remains authoritative; refresh scores after its mutations.
-  document.addEventListener('click', event => {
-    if (event.target.closest('#mainNav [data-view="slang"]')) run(() => refreshSlangScores());
-    if (event.target.closest('#mainNav [data-view="sessions"]')) run(refresh);
-    if (event.target.closest('#mainNav [data-view="operations"]')) { run(refresh); run(refreshServices); }
-  });
+  // QQ slang now uses the automatic, read-only status in Community Knowledge.
+  document.addEventListener('click',event=>{if(event.target.closest('#mainNav [data-view="sessions"]'))run(refresh);if(event.target.closest('#mainNav [data-view="operations"]')){run(refresh);run(refreshServices);}});
   const servicesCard = card('operations', 'section-bff-services', '一键启动与服务管理');
   const servicesStatus = document.createElement('p'); servicesStatus.id = 'bfServicesStatus'; servicesStatus.textContent = '点击刷新查看当前服务。';
   const serviceRows = document.createElement('div'); serviceRows.id = 'bfServicesRows';
@@ -5256,7 +4660,7 @@ setInterval(() => { if (currentConsolePage !== 'usage') return; refreshUsage(); 
   setConsolePage(location.hash.slice(1) || currentConsolePage, { updateHash: false });
   run(refresh);
   run(refreshPersonas);
-  if (currentConsolePage === 'slang') run(() => refreshSlangScores());
+
   if (currentConsolePage === 'operations') run(refreshServices);
 })();
 
@@ -5509,7 +4913,9 @@ setInterval(() => { if (currentConsolePage !== 'usage') return; refreshUsage(); 
   async function loadStyle(){profile=await request('/api/bigfatfish/global-style');el('bfGlobalStatus').textContent=profile.error||`${profile.policy.enabled?'自动学习开启':'学习已暂停'} · ${profile.locked?'版本锁定':'自动巩固'} · ${profile.policy.apply?'全局应用开启':'应用已暂停'}`;el('bfGlobalVersion').textContent='全局 v'+profile.version;el('bfGlobalSamples').textContent=`有效来源 ${profile.sample?.messages||0} 条 · ${profile.sample?.groups||0} 个群 · ${profile.sample?.speakers||0} 位成员 · ${profile.sample?.days||0} 天`;
     if(!dirty)for(const k of ['enabled','apply','minMessages','minDays','minSpeakers']){const input=el('bfGlobalPolicy').elements[k];input[input.type==='checkbox'?'checked':'value']=profile.policy[k];}
     const features=el('bfGlobalFeatures');features.replaceChildren();for(const [k,f]of Object.entries(profile.features||{}))line(features,`${k}：${profile.traits?.[k]?.[f.value]||f.value}`);for(const e of profile.expressionExamples||[])line(features,`${e.scene} · ${e.action} · ${e.strategy}`);if(!features.children.length)line(features,'暂无稳定成果，正在积累跨日和多成员证据。');
-    const candidates=el('bfGlobalCandidates');candidates.replaceChildren();for(const c of (profile.candidates||[]).slice(-30))line(candidates,`${c.trait||c.scene||'迁移候选'} · ${c.value||c.strategy||''} · 已观察 ${c.observations||0} 轮`);if(!candidates.children.length)line(candidates,'暂无待验证候选，后台按额度自动研究。');
+    const progress=profile.progress;const candidates=el('bfGlobalCandidates');candidates.replaceChildren();
+    if(progress){const stages={COLLECTING:'收集语料中',SAMPLES_COLLECTED:'已收集有效样本，等待研究',ACCUMULATING:'候选积累中',APPROVED:'已有批准风格'};line(candidates,`${stages[progress.stage]||progress.stage} · 新增有效消息 ${progress.newMessages} · 候选 ${progress.candidateCount} · 待稳定 ${progress.waitingStabilityCount} · 实际应用特征 ${progress.appliedFeatures}`);line(candidates,`最近研究 ${progress.research.status} · 自动研究日额度 ${progress.research.sharedDailyUsed}/${progress.research.sharedDailyLimit} · 失败次数 ${progress.research.failureCount}${progress.research.nextAt?' · 下次最早 '+new Date(progress.research.nextAt).toLocaleString('zh-CN'):''}`);for(const b of progress.blockers)line(candidates,`${b.message}${b.gap?'（还差 '+b.gap+'）':''}`);if(progress.research.lastFailure)line(candidates,'最近失败原因：'+progress.research.lastFailure.code);}
+    for(const c of (profile.candidates||[]).slice(-30)){const state=progress?.candidates.find(x=>x.id===c.id);line(candidates,`${c.trait||c.scene||'迁移候选'} · ${c.value||c.strategy||''} · 已观察 ${c.observations||0}/${state?.requiredRounds||profile.policy.stabilityRounds} 轮`);}if(!candidates.children.length)line(candidates,'暂无待验证候选。');
     const history=el('bfGlobalHistory');history.replaceChildren();for(const h of [...(profile.history||[])].reverse()){const o=document.createElement('option');o.value=h.version;o.textContent=`v${h.version} · ${new Date(h.at).toLocaleString('zh-CN')} · ${h.reason}`;history.append(o);}el('bfGlobalChoices').replaceChildren();for(const [id,title]of Object.entries(profile.choices||{})){const label=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.value=id;input.checked=profile.published.includes(id);label.append(input,document.createTextNode(title));el('bfGlobalChoices').append(label,document.createElement('br'));}el('bfReplyDelivery').value=profile.replyDelivery;
   }
   const action=async body=>{if(!profile)throw Error('请先读取风格状态');await request('/api/bigfatfish/global-style','POST',{...body,revision:profile.revision});await loadStyle();};
@@ -5542,6 +4948,13 @@ setInterval(() => { if (currentConsolePage !== 'usage') return; refreshUsage(); 
   <label>授权依据 <input name="reference" required minlength="5" maxlength="500" style="width:460px"></label><label>授权到期 <input name="expiresAt" type="datetime-local"></label><div class="row"><label><input name="enabled" type="checkbox">继续读取该来源</label><label><input name="allowUse" type="checkbox" checked>允许应用历史知识</label><label><input name="allowRead" type="checkbox">有读取许可</label><label><input name="allowStore" type="checkbox">有保存许可</label><label><input name="allowLearning" type="checkbox">有AI学习许可</label></div><p class="meta">收回保存许可会清理关联正文、候选和证据，失去其他证据支撑的知识会撤销。</p><button>保存来源及许可</button></form><div id="bfCommunitySources"></div></details>
   <details id="bfCommunityJobDetails"><summary>最近短任务</summary><div id="bfCommunityJobs"></div></details><h4>最近知识成果</h4><div id="bfCommunityKnowledge"></div><div class="row"><button id="bfCommunityKnowledgePrev" type="button">上一页知识</button><button id="bfCommunityKnowledgeNext" type="button">下一页知识</button></div>`;
   page.append(section);
+  const qqAuto=document.createElement('div');qqAuto.innerHTML='<h4>QQ 黑话自动学习</h4><p class="meta">聊天中的陌生表达进入自动研究队列，研究得到通用词义后直接加入统一公共黑话库，跨会话共享。不设原群词库，无需送审、打分、手动确认或额外公开来源审核；个人信息和私人关系不入库。</p><p id="bfQQAutoStatus" role="status"></p><div id="bfQQAutoRows"></div>';section.prepend(qqAuto);
+  const knowledgeControls=document.createElement('div');knowledgeControls.className='row';
+  knowledgeControls.innerHTML=`<h4>社区学习与统一知识</h4><label>来源 <select id="bfKnowledgePlatform"><option value="">全部来源</option><option value="qq">QQ 群聊</option><option value="bilibili">B站</option><option value="tieba">贴吧</option><option value="zhihu">知乎</option></select></label><label>类型 <select id="bfKnowledgeKind"><option value="">全部类型</option><option value="knowledge">通用知识</option><option value="slang">黑话</option><option value="meme">梗</option><option value="culture">文化知识</option><option value="strategy">策略</option></select></label><label>状态 <select id="bfKnowledgeStatus"><option value="published">正式发布</option><option value="pending">待验证</option><option value="revoked">已撤销</option><option value="">全部正式记录</option></select></label><label><input id="bfKnowledgeMultiple" type="checkbox">多义词</label><label>会话 <input id="bfKnowledgeKey" placeholder="group:群号 或 private:QQ号"></label><button id="bfKnowledgeInspect" type="button">查看应用诊断</button><p id="bfKnowledgeSummary" class="meta"></p><p id="bfKnowledgeDiagnosis" class="meta" role="status"></p>`;
+  el('bfCommunityKnowledge').before(knowledgeControls);
+  document.querySelector('[data-subpage="slang"]')?.remove();
+  document.querySelector('[data-subpage="bff-community"]').textContent='社区学习与知识';
+  consolePages['bff-community']=['社区学习与知识','让语言素材自然参与聊天。','统一管理各来源知识、作用域、候选审核、学习进度与应用诊断。'];
   // Keep the main controls ahead of optional configuration, without duplicating event targets.
   el('bfCommunityPolicy').before(el('bfCommunityStart').parentElement);
   section.querySelectorAll('input:not([type])').forEach(i=>i.type='text');
@@ -5596,10 +5009,14 @@ setInterval(() => { if (currentConsolePage !== 'usage') return; refreshUsage(); 
   }
   function fillSource(){const f=el('bfCommunitySource').elements,s=view?.sources?.find(s=>s.id===el('bfCommunitySourceSelect').value);f.id.readOnly=!!s;for(const k of ['platform','adapter','targetType','topicMode'])f[k].disabled=!!s;for(const k of ['target','connector','file','endpoint'])f[k].readOnly=!!s;for(const k of ['id','platform','adapter','file','endpoint','connector','target'])f[k].value=s?.[k]??(k==='platform'?'bilibili':k==='adapter'?'authorized-file':'');f.reference.value=s?.license.reference||'';f.expiresAt.value=s?.license.expiresAt?new Date(s.license.expiresAt-new Date(s.license.expiresAt).getTimezoneOffset()*60000).toISOString().slice(0,16):'';for(const k of ['enabled','allowRead','allowStore','allowLearning','allowUse'])f[k].checked=k==='enabled'?s?.enabled===true:k==='allowUse'?s?.allowUse!==false:s?.license[k]===true;f.targetType.value=s?.targetType||'';f.topicMode.value=s?.topicMode||'exact';f.readComments.checked=s?.readComments===true;zhihuFields();sourceDirty=false;}
   function renderDetails(r){view={...view,...r};const choices=el('bfCommunitySource').elements.platform;if(!choices.options.length)for(const x of view.platforms){const o=document.createElement('option');o.value=x.id;o.textContent=x.name;choices.append(o);}const signature=JSON.stringify(r.sources);if(signature!==sourceSignature){sourceSignature=signature;const select=el('bfCommunitySourceSelect'),old=select.value;select.replaceChildren();const create=document.createElement('option');create.value='';create.textContent='新建来源';select.append(create);for(const s of r.sources){const o=document.createElement('option');o.value=s.id;o.textContent=s.target?s.id+' · '+s.target:s.id;select.append(o);}select.value=r.sources.some(s=>s.id===old)?old:'';if(!sourceDirty)fillSource();}const sources=el('bfCommunitySources');sources.replaceChildren();for(const s of r.sources){const row=line(sources,`${s.id} · ${s.target||s.platform} · ${s.state?.forum?.name||''} · ${connections[s.state?.status]||s.state?.status||'待检查'} · 待处理 ${s.stats?.pending||0} / 完成 ${s.stats?.completed||0} / 知识 ${s.stats?.published||0} · ${s.state?.error||''}${s.state?.nextAt?' · 下次 '+new Date(s.state.nextAt).toLocaleTimeString('zh-CN'):''} · ${s.adapter}${s.platform==='zhihu'?' · '+(s.targetType||'通用导入')+' · '+(s.state?.mode||'待检查')+(s.targetType==='topic'&&s.topicMode==='keyword'?' · 话题关键词搜索':''):''} · ${s.enabled?'继续读取':'停止读取'} · ${s.allowUse===false?'历史知识停用':'历史知识可用'} · ${s.license.reference}`),retry=document.createElement('button');retry.type='button';retry.textContent='恢复该来源重试';retry.onclick=()=>run(()=>action({action:'retry',id:s.id}));row.append(retry);const toggle=document.createElement('button'),probe=document.createElement('button');toggle.type=probe.type='button';toggle.textContent=s.enabled?'暂停此来源':'启用此来源';probe.textContent='检查此来源';toggle.onclick=()=>run(()=>action({action:'source',source:{...s,enabled:!s.enabled},revision:s.revision}));probe.onclick=()=>run(()=>action({action:'probe',id:s.id}));row.append(toggle,probe);}const jobs=el('bfCommunityJobs');jobs.replaceChildren();for(const j of r.jobs)line(jobs,`${new Date(j.at).toLocaleString('zh-CN')} · ${states[j.status]||j.status} · ${j.source} · ${j.progress||0}% · 新增 ${j.added||0} · ${j.error||''}`);}
-  async function knowledge(){const r=await request('GET',undefined,`?view=knowledge&offset=${knowledgeOffset}&limit=20`),box=el('bfCommunityKnowledge');box.replaceChildren();for(const k of r.knowledge){const row=line(box,`${k.term} · ${k.meaning} · v${k.version} · ${k.status} · ${(k.sources||[]).join('，')}`);if(k.status==='published'){const b=document.createElement('button');b.type='button';b.textContent='撤销知识';b.onclick=()=>run(()=>action({action:'revoke',id:k.id}));row.append(b);}}if(!r.knowledge.length)line(box,'本页暂无知识。');el('bfCommunityKnowledgePrev').disabled=knowledgeOffset===0;el('bfCommunityKnowledgeNext').disabled=r.knowledge.length<20;}
+  async function knowledge(){const params=new URLSearchParams({view:'knowledge',offset:String(knowledgeOffset),limit:'20',platform:el('bfKnowledgePlatform').value,kind:el('bfKnowledgeKind').value,status:el('bfKnowledgeStatus').value,multiple:String(el('bfKnowledgeMultiple').checked),key:el('bfKnowledgeKey').value.trim()});const r=await request('GET',undefined,'?'+params),box=el('bfCommunityKnowledge');box.replaceChildren();for(const k of r.knowledge){const row=line(box,`${k.term} · ${k.meaning} · v${k.version} · ${k.status} · ${k.scope==='public'?'公共':k.scope||'待确认作用域'} · ${(k.sources||[]).join('，')}`);if(k.status==='published'){const b=document.createElement('button');b.type='button';b.textContent='撤销知识';b.onclick=()=>run(()=>action({action:'revoke',id:k.id}));row.append(b);}}if(!r.knowledge.length)line(box,'本页暂无知识。');if(r.application)el('bfKnowledgeSummary').textContent=`统一正式知识 ${r.application.publishedCount} · 当前可用 ${r.application.usableCount} · 群限定 ${r.application.groupLimitedCount} · 待验证 ${r.application.pendingCount}；以上为存储/来源状态，会话实际权限请查看应用诊断。`;el('bfCommunityKnowledgePrev').disabled=knowledgeOffset===0;el('bfCommunityKnowledgeNext').disabled=r.knowledge.length<20;}
+  for(const id of ['bfKnowledgePlatform','bfKnowledgeKind','bfKnowledgeStatus','bfKnowledgeMultiple'])el(id).onchange=()=>run(async()=>{knowledgeOffset=0;await knowledge();});
+  el('bfKnowledgeInspect').onclick=()=>run(async()=>{const key=el('bfKnowledgeKey').value.trim();if(!key)throw Error('请先填写要诊断的会话 key');const r=await request('GET',undefined,'?view=diagnostics&key='+encodeURIComponent(key)),c=r.community,d=r.lastPrompt;el('bfKnowledgeDiagnosis').textContent=`会话允许 ${c.sessionAllowed?'是':'否'} · 应用开关 ${c.applyKnowledge?'开':'关'} · 会话可检索 ${c.retrievableCount??'未知'} · 状态 ${c.reasonCode} · 本轮选中 ${d?.contextualKnowledgeSelectedCount??'未知'} · 模型接受注入 ${d?.injectedKnowledgeCount??'未知'} · 已发送文字出现 ${d?.deliveredLiteralUseCount??'未知'}（字面出现不等于语义正确）`;});
   async function logs(){const r=await request('GET',undefined,'?view=logs&since_id='+logCursor);if(r.reset)logRows=[];logCursor=r.cursor;renderLogs(r.rows);}
-  async function poll(){const n=++sequence;const [s,u]=await Promise.all([request('GET',undefined,'?view=status'),request('GET',undefined,'?view=usage')]);if(n!==sequence)return;renderStatus(s);renderUsage(u);await logs();if(el('bfCommunityJobDetails').open||el('bfCommunitySourceSelect').closest('details').open)renderDetails(await request('GET',undefined,'?view=details'));}
-  async function load(){const n=++sequence,[r,pool]=await Promise.all([request(),api('/api/model-pool')]);if(n!==sequence)return;const select=el('bfCommunityModelRoute'),selected=dirty?select.value:r.policy.modelRoute||'follow-chat';select.replaceChildren();for(const [value,label]of [['follow-chat','跟随聊天模型'],['builtin','原 DeepSeek 接口'],...(pool.entries||[]).filter(e=>e.enabled&&e.keyStored&&e.protocol==='openai-completions'&&/deepseek/i.test(e.model)).map(e=>[e.id,e.name+' · '+e.model])]){const o=document.createElement('option');o.value=value;o.textContent=label;select.append(o);}if(![...select.options].some(o=>o.value===selected)){const o=document.createElement('option');o.value=selected;o.textContent='已配置接口不可用，请重新选择';select.append(o);}select.value=selected;renderStatus(r);renderUsage(r);renderDetails(r);logCursor=Math.max(0,...(r.logs||[]).map(x=>Number(x.id)||0));renderLogs(r.logs||[],true);await knowledge();}
+  let qqAutoAt=0;
+  async function automatic(){const r=await request('GET',undefined,'?view=qq-auto');qqAutoAt=Date.now();const labels={PAUSED:'自动学习已暂停',RUNNING:'正在自动研究',WAITING_BUDGET:'共享研究额度已用尽，恢复后自动续办',WAITING_EVIDENCE:'等待聊天语料，自动研究完成即入库'};el('bfQQAutoStatus').textContent=`${labels[r.status]||r.status} · QQ 来源正式知识 ${r.published} · 候选 ${r.pending}`;const box=el('bfQQAutoRows');box.replaceChildren();for(const row of r.rows||[])line(box,`${row.term} · ${row.status} · ${row.reason}`);}
+  async function poll(){const n=++sequence;const [s,u]=await Promise.all([request('GET',undefined,'?view=status'),request('GET',undefined,'?view=usage')]);if(n!==sequence)return;renderStatus(s);renderUsage(u);await logs();if(Date.now()-qqAutoAt>15000)await automatic();if(el('bfCommunityJobDetails').open||el('bfCommunitySourceSelect').closest('details').open)renderDetails(await request('GET',undefined,'?view=details'));}
+  async function load(){const n=++sequence,[r,pool]=await Promise.all([request(),api('/api/model-pool')]);if(n!==sequence)return;const select=el('bfCommunityModelRoute'),selected=dirty?select.value:r.policy.modelRoute||'follow-chat';select.replaceChildren();for(const [value,label]of [['follow-chat','跟随聊天模型'],['builtin','原 DeepSeek 接口'],...(pool.entries||[]).filter(e=>e.enabled&&e.keyStored&&e.protocol==='openai-completions'&&/deepseek/i.test(e.model)).map(e=>[e.id,e.name+' · '+e.model])]){const o=document.createElement('option');o.value=value;o.textContent=label;select.append(o);}if(![...select.options].some(o=>o.value===selected)){const o=document.createElement('option');o.value=selected;o.textContent='已配置接口不可用，请重新选择';select.append(o);}select.value=selected;renderStatus(r);renderUsage(r);renderDetails(r);logCursor=Math.max(0,...(r.logs||[]).map(x=>Number(x.id)||0));renderLogs(r.logs||[],true);await knowledge();await automatic();}
   const action=async body=>{let result;try{result=await request('POST',body);}finally{await load();}if(result?.message)showConsoleToast(result.message);};
   async function savePolicy(starting=false){const form=el('bfCommunityPolicy');if(!form.reportValidity())throw Error('请按参数范围填写有效数值');const f=form.elements,p={enabled:starting?view.policy.enabled:f.enabled.checked,applyKnowledge:f.applyKnowledge.checked,modelRoute:f.modelRoute.value,platforms:Object.fromEntries(view.platforms.map(r=>[r.id,f['platform_'+r.id].checked])),topics:f.topics.value.split(/[,，\n]/).map(s=>s.trim()).filter(Boolean),intensity:f.intensity.value};for(const k of Object.keys(numbers))p[k]=f[k].value===''?null:Number(f[k].value);const r=await api('/api/bigfatfish/settings','POST',{communityLearning:p});if(r.ok===false)throw Error(r.error);dirty=false;platformDraft=null;presetUndo=null;el('bfCommunityUndoPreset').hidden=true;}
   const presetFields=['dailyCostLimit','sessionCostLimit','dailyTokenBudget','dailyInputTokens','dailyOutputTokens','inputPriceCeiling','outputPriceCeiling','maxOutputTokens'];
@@ -5617,12 +5034,92 @@ setInterval(() => { if (currentConsolePage !== 'usage') return; refreshUsage(); 
   el('bfCommunityStart').onclick=()=>run(async()=>{await savePolicy(true);await action({action:'start'});});el('bfCommunityStop').onclick=()=>run(async()=>{await action({action:'stop'});el('bfCommunityPolicy').elements.enabled.checked=false;});el('bfCommunityRefresh').onclick=()=>run(load);el('bfCommunityProbe').onclick=()=>run(()=>action({action:'probe'}));el('bfCommunityRun').onclick=()=>run(()=>action({action:'run'}));el('bfCommunityCancel').onclick=()=>run(()=>action({action:'cancel'}));el('bfCommunityBackup').onclick=()=>run(async()=>{const r=await request('POST',{action:'backup'});showConsoleToast('备份已创建：'+r.backup);});
   el('bfCommunityKnowledgePrev').onclick=()=>run(async()=>{knowledgeOffset=Math.max(0,knowledgeOffset-20);await knowledge();});el('bfCommunityKnowledgeNext').onclick=()=>run(async()=>{knowledgeOffset+=20;await knowledge();});el('bfCommunityJobDetails').ontoggle=()=>{if(el('bfCommunityJobDetails').open)run(async()=>renderDetails(await request('GET',undefined,'?view=details')));};
   // Navigation and document visibility control front-end monitoring only; never POST stop on leave.
-  function updateMonitoring(){const next=currentConsolePage==='bff-community'&&!document.hidden;if(next===active)return;active=next;++sequence;if(active)run(load);}
+  function updateMonitoring(){if(currentConsolePage==='slang'){setConsolePage('bff-community');return;}const next=currentConsolePage==='bff-community'&&!document.hidden;if(next===active)return;active=next;++sequence;if(active)run(load);}
   document.addEventListener('console-page-change',updateMonitoring);document.addEventListener('visibilitychange',updateMonitoring);
   setInterval(()=>{if(active&&view&&!polling){polling=true;void run(poll).finally(()=>polling=false);}},1000);
   featureIndex.push({page:'bff-community',label:'社区持续自主学习 B站 贴吧 知乎 小黑盒 虎扑 开始 停止 Token 费用 日志 知识',target:page});
   section.querySelectorAll('input,select,textarea,summary').forEach(input=>{const label=input.tagName==='SUMMARY'?input.textContent:input.labels?.[0]?.textContent||input.placeholder;if(label)featureIndex.push({page:'bff-community',label:label.trim(),target:input});});
   section.dataset.available='false';section.querySelectorAll('input,select,button').forEach(i=>{if(i.id!=='bfCommunityRefresh')i.disabled=true;});updateMonitoring();
+})();
+
+// BigFatFish V4.1 sticker semantics management
+(() => {
+  const $ = id => document.getElementById(id);
+  let view, offset = 0, busy = false, previewObserver;
+  const states = { reviewed: '已确认', unreviewed: '待理解', uncertain: '有歧义', disabled: '已禁用' };
+  const list = value => String(value || '').split(/[,，\n]+/).map(s => s.trim()).filter(Boolean);
+  const request = async (path, body) => { const r = await api(path, body ? 'POST' : 'GET', body); if (r.ok === false) throw Error(r.error || '操作未完成'); return r; };
+  async function run(fn) { if (busy) return; busy = true; try { await fn(); } catch (e) { $('stickerNotice').textContent = e.message; } finally { busy = false; } }
+  function diagnostics(r) {
+    const d = r.diagnostics || {};
+    $('stickerStats').textContent = `收藏 ${d.total || 0} · 已理解 ${d.reviewed || 0} · 待理解 ${d.unreviewed || 0} · 有歧义 ${d.uncertain || 0} · 禁用 ${d.disabled || 0} · 语义可用 ${d.autoEligible || 0}（发图时仍需匹配语境）`;
+    const job = r.reviewJob || {};
+    $('stickerProgress').textContent = `整理：${({idle:'未启动',running:'处理中',completed:'完成',cancelled:'已取消',failed:'失败'})[job.status] || job.status || '未启动'} ${job.done || 0}/${job.total || 0} ` + (job.results || []).map(x => `${x.id}：${states[x.status] || x.status}${x.reason ? '（' + x.reason + '）' : ''}`).join('；');
+    $('stickerDecisions').textContent = (r.decisions || []).map(x => `${x.key} · ${new Date(x.at).toLocaleString()} · ${x.scene || '未知场景'} · 候选 ${(x.candidates || []).map(c => c.id).join(', ') || '无'} · ${x.selected || ''} · ${x.status} · ${x.reason || ''}${x.usageSaved === false ? ' · 使用记录落盘失败' : ''}`).join('\n') || '暂无诊断';
+    const box = $('stickerRecovery'); box.replaceChildren();
+    for (const item of r.recovery || []) {
+      const row = document.createElement('p'); row.textContent = `QQ已收藏，本地语义待恢复：${item.emojiId || 'ID缺失，请同步核对'} ${item.error || ''} `;
+      if (item.emojiId) { const b = document.createElement('button'); b.type = 'button'; b.textContent = '重试保存本地认知'; b.onclick = () => run(async () => { await request('/api/stickers/recover', { stickerId: item.emojiId }); await load(); }); row.append(b); }
+      box.append(row);
+    }
+    if (r.writable === false) $('stickerNotice').textContent = '表情库处于只读保护：请修复文件并重启桥接；未覆盖原库。';
+  }
+  async function preview(card) {
+    const id = card.dataset.sticker;
+    try { const r = await request('/api/stickers/image?stickerId=' + encodeURIComponent(id)); const img = card.querySelector('img'); img.src = `data:${r.image.mimeType};base64,${r.image.data}`; img.hidden = false; card.querySelector('[data-preview]').textContent = '重新查看原图'; }
+    catch { card.querySelector('[data-preview]').textContent = '缩略图读取失败，点击重试'; }
+  }
+  function render() {
+    previewObserver?.disconnect();
+    const cards = $('stickerCards'); cards.replaceChildren();
+    const entries = view.stickers || [], page = entries.slice(offset, offset + 12);
+    for (const e of page) {
+      const card = document.createElement('article'); card.dataset.sticker = e.id; card.style.cssText = 'border:1px solid var(--border,#ddd);padding:12px;margin:12px 0;border-radius:8px';
+      card.innerHTML = `<div class="row"><img alt="表情缩略图" hidden style="width:96px;height:96px;object-fit:contain"><button type="button" data-preview>查看缩略图</button><b>${esc(e.id)}</b><span>${esc(states[e.understandingStatus] || e.understandingStatus)} · ${e.understandingSource === 'manual' ? '管理员' : e.understandingSource === 'visual' ? '视觉理解' : '未确认来源'} · 自动发送：${e.autoEligible ? '语义已准入，仍需场景匹配' : '禁止'}</span></div>
+        <p>QQ原始备注：${esc(e.desc || '无')} · 使用 ${Number(e.useCount) || 0} 次 · 最近 ${e.lastUsedAt ? esc(new Date(e.lastUsedAt).toLocaleString()) : '未使用'}</p>
+        <p class="meta">图像：${esc(e.visualContent || '未理解')}；图片文字：${esc(e.imageText || '无记录')}；潜台词：${esc(e.subtext || '无记录')}；歧义：${esc(e.ambiguity || '无记录')}</p>
+        <form><p><label>图片含义 <input name="note" maxlength="200" style="width:80%" value="${esc(e.localNote)}"></label></p>
+        <p><label>适合用途 <input name="usage" maxlength="200" style="width:80%" value="${esc(e.usage)}"></label></p>
+        <p><label>标签（逗号分隔） <input name="tags" value="${esc(e.tags.join(','))}"></label> <label>语气 <input name="tone" value="${esc(e.tone.join(','))}"></label></p>
+        <p><label>适用场景 <input name="usageScenes" placeholder="casual_chat,casual_banter" value="${esc(e.usageScenes.join(','))}"></label> <label>禁止场景 <input name="avoidScenes" placeholder="help,technical,serious" value="${esc(e.avoidScenes.join(','))}"></label></p>
+        <p><label>歧义备注 <input name="ambiguity" value="${esc(e.ambiguity)}"></label> <label><input type="checkbox" name="privacySensitive" ${e.privacySensitive ? 'checked' : ''}>含不宜传播个人信息</label></p>
+        <p><label>理解状态 <select name="understandingStatus">${Object.entries(states).map(([v,label]) => `<option value="${v}" ${e.understandingStatus === v ? 'selected' : ''}>${label}</option>`).join('')}</select></label> <button type="submit">保存本地认知</button> <button type="button" data-review>重新识图</button></p></form>`;
+      card.querySelector('[data-preview]').onclick = () => run(() => preview(card));
+      card.querySelector('[data-review]').onclick = () => run(async () => {
+        $('stickerNotice').textContent = '正在读取真实图片并调用当前视觉模型…';
+        const r = await request('/api/stickers/review', { stickerId: e.id });
+        $('stickerNotice').textContent = `${states[r.result.status] || r.result.status}：${r.result.reason || '已保存本地认知'}`;
+        if (r.result.proposal) {
+          const p = r.result.proposal, f = card.querySelector('form').elements;
+          f.note.value = p.note || ''; f.usage.value = p.usage || ''; f.ambiguity.value = p.ambiguity || ''; f.privacySensitive.checked = !!p.privacySensitive;
+          for (const key of ['tags','tone','usageScenes','avoidScenes']) f[key].value = (p[key] || []).join(',');
+          // Administrator explicitly chooses status and saves the proposal.
+          card.scrollIntoView({ block: 'nearest' });
+        } else await load();
+      });
+      card.querySelector('form').onsubmit = ev => { ev.preventDefault(); run(async () => {
+        const f = ev.target.elements, body = { stickerId: e.id, expectedUpdatedAt: e.updatedAt, note: f.note.value, usage: f.usage.value, understandingStatus: f.understandingStatus.value, ambiguity: f.ambiguity.value, privacySensitive: f.privacySensitive.checked };
+        for (const key of ['tags','tone','usageScenes','avoidScenes']) body[key] = list(f[key].value);
+        if (body.understandingStatus === 'reviewed' && (!body.note.trim() || !body.usage.trim() || !body.tags.length || !body.usageScenes.some(x => ['casual_chat','casual_banter'].includes(x)) || body.ambiguity.trim() || body.privacySensitive)) throw Error('确认前请补齐含义、用途、标签和适用场景，消除歧义并检查隐私');
+        await request('/api/stickers/note', body); $('stickerNotice').textContent = '本地认知已保存，立即生效'; await load();
+      }); };
+      cards.append(card);
+    }
+    if (typeof IntersectionObserver !== 'undefined') {
+      previewObserver = new IntersectionObserver(items => { for (const item of items) if (item.isIntersecting) { previewObserver.unobserve(item.target); void preview(item.target); } });
+      for (const card of cards.children) previewObserver.observe(card);
+    }
+    $('stickerPage').textContent = `${entries.length ? Math.floor(offset / 12) + 1 : 0}/${Math.ceil(entries.length / 12)} 页 · 匹配 ${view.matched || 0}`;
+    $('stickerPrev').disabled = offset === 0; $('stickerNext').disabled = offset + 12 >= entries.length;
+  }
+  async function load() { view = await request('/api/stickers?count=500&query=' + encodeURIComponent($('stickerQuery').value)); if (offset >= view.stickers.length) offset = 0; diagnostics(view); render(); }
+  $('stickerRefresh').onclick = () => run(load);
+  $('stickerSync').onclick = () => run(async () => { await request('/api/stickers/sync', {}); await load(); });
+  $('stickerBatch').onclick = () => run(async () => { await request('/api/stickers/review', {}); await load(); });
+  $('stickerCancel').onclick = async () => { try { await request('/api/stickers/review', { cancel: true }); $('stickerNotice').textContent = '已请求取消，已保存的结果保留'; } catch (e) { $('stickerNotice').textContent = e.message; } };
+  $('stickerPrev').onclick = () => { offset = Math.max(0, offset - 12); render(); }; $('stickerNext').onclick = () => { offset += 12; render(); };
+  $('stickerManager').addEventListener('toggle', () => { if ($('stickerManager').open && !view) void run(load); });
+  setInterval(async () => { if (view?.reviewJob?.status !== 'running' || !$('stickerManager').open || document.hidden) return; try { const r = await request('/api/stickers?count=1'); diagnostics(r); view.reviewJob = r.reviewJob; if (r.reviewJob.status !== 'running') { if (!$('stickerCards').contains(document.activeElement)) await load(); else $('stickerNotice').textContent = '整理已结束；当前编辑内容已保留，刷新列表查看新认知'; } } catch {} }, 2000);
 })();
 
 </script>

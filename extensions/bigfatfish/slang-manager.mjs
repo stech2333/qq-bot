@@ -6,6 +6,7 @@ import { safeFetch } from '../../integrations/qq-bridge/src/safe-fetch.js';
 import { memoryTerms } from './memory-recall.mjs';
 import { ManualSlangResearch } from './manual-slang-research.mjs';
 import { relevance, expressionScene } from './community-retrieval.mjs';
+import { UnifiedSlang, safeScopedText } from './unified-slang.mjs';
 
 export const SLANG_POLICY = Object.freeze({ enabled: true, autoConfirm: true, threshold: 80, minMessages: 4,
   candidateMinMessages: 3, autoResearch: true, researchMinMessages: 4, minSpeakers: 2, minSpanMinutes: 30, lookbackHours: 168, scanIntervalMinutes: 5, maxAutoPerDay: 20 });
@@ -45,14 +46,32 @@ export class SlangManager {
     const st=this.app.states.get(source.key);if(!st||st.bigfatfish.memoryControl?.accumulation===false)return false;
     return this.app.learningWindow.messages(source.key,st).some(m=>String(m.messageId)===source.id&&m.time===source.time);
   }
+  connectUnified(){this.unified=new UnifiedSlang(this.app);const rows=this.unified.initialize();this.entries=()=>this.unified.entries();return rows;}
+  approveManual(entry,body={}) {
+    const scope=body.scope??entry.scope??'public';
+    if(scope!=='public'&&!this.app.learningSources.allowed(scope))throw Error('群内表达必须选择已允许的原群');
+    const safe=scope==='public'?safeGeneralText:safeScopedText;
+    const input=body.senses??[{meaning:body.meaning??entry.meaning,usage:body.usage??entry.usage,contextTerms:entry.senses?.[0]?.contextTerms||[]}];
+    if(!Array.isArray(input)||!input.length||input.length>8||input.some(s=>!s.meaning?.trim()||!safe(s.meaning)||!safe(s.usage||''))||!safe(entry.content))throw Error('仅能确认安全词义；私人事实和身份关系须保留在会话记忆中');
+    entry.scope=scope==='public'?undefined:scope;entry.senses=input.map(s=>({id:senseId(s.meaning),meaning:s.meaning,usage:s.usage||'',contextTerms:(s.contextTerms||[]).filter(safe).slice(0,12),status:'confirmed',manual:true,verified:true,generalizable:scope==='public',verifiedAt:Date.now(),evidence:[]}));
+    entry.meaning=entry.senses[0].meaning;entry.usage=entry.senses[0].usage;entry.status='confirmed';return entry;
+  }
+  safeSense(s,scope){const safe=scope?.startsWith('group:')?safeScopedText:safeGeneralText;return !!s.meaning?.trim()&&safe(s.meaning)&&safe(s.usage||'');}
   sourceRetained(source) {
-    if (!this.app.learningSources.allowed(source.key) || !Number.isFinite(source.time)) return false;
+    if (!this.app.learningSources.allowed(source.key) || !Number.isFinite(source.time) || source.time<=0 || source.time>Date.now()) return false;
     const deleted=this.app.learningWindow.deleted(source.key);
     return !this.app.learningWindow.errors.has(source.key) && !deleted.has(String(source.id));
   }
-  validSense(s) {return s.status==='confirmed'&&s.verified&&s.generalizable&&safeGeneralText(s.meaning)&&safeGeneralText(s.usage||'')&&(s.manual||s.evidence?.length>=3&&s.evidence.every(e=>this.sourceRetained(e)));}
+  reviewedSense(entry,s,{retained=false}={}) {
+    const local=s.generalizable===false&&/^group:[1-9]\d{4,15}$/.test(entry.scope||'');
+    const safe=local?safeScopedText:safeGeneralText;
+    return s.verified&&(s.generalizable===true||local)&&safe(s.meaning)&&safe(s.usage||'')
+      &&(s.manual||s.evidence?.length>=3&&s.evidence.every(e=>(!local||e.key===entry.scope)&&(retained?this.sourceRetained(e):this.sourceExists(e))));
+  }
+  validSense(s,entry={}) {return s.status==='confirmed'&&this.reviewedSense(entry,s,{retained:true});}
   visible(entry,key) {return this.app.globalStyle.allowed(key)&&entry.status==='confirmed'&&safeGeneralText(entry.content)&&entry.senses?.some(s=>this.validSense(s));}
   contextEntries(entries,key,scene='',query='',{mode='explain'}={}) {
+    if(this.unified)return this.app.community.retrieve(query,{key,scene,mode,kinds:['slang','meme','culture']}).map(k=>({...k,content:k.term,status:'confirmed',example:''}));
     if(!this.app.globalStyle.allowed(key)||!query.trim())return[];
     if(mode==='expression'&&!expressionScene(query,scene).allowed)return[];
     const q=normalizedTerm(query),terms=memoryTerms(query),out=[];
@@ -74,10 +93,12 @@ export class SlangManager {
   }
   async applyResearch(entry,output,selected) {
     const senses=Array.isArray(output.senses)?output.senses:[];if(senses.length>4)throw Error('黑话释义过多');const results=[];
-    for(const s of senses){if(!s||Object.keys(s).some(k=>!['meaning','usage','contextTerms','sourceMessageIds','publicSources','generalizable','privateReferences'].includes(k))||typeof s.meaning!=='string'||!safeGeneralText(s.meaning)||!safeGeneralText(s.usage||'')||s.generalizable!==true||s.privateReferences!==false||!Array.isArray(s.contextTerms)||s.contextTerms.length>12||s.contextTerms.some(t=>!safeGeneralText(t)))throw Error('黑话研究未通过一般化和隐私检查');
+    for(const s of senses){const safe=safeGeneralText;if(!s||Object.keys(s).some(k=>!['meaning','usage','contextTerms','sourceMessageIds','publicSources','generalizable','privateReferences'].includes(k))||typeof s.meaning!=='string'||!s.meaning.trim()||!safe(s.meaning)||!safe(s.usage||'')||s.generalizable!==true||s.privateReferences!==false||!Array.isArray(s.contextTerms)||s.contextTerms.length>12||s.contextTerms.some(t=>!safe(t)))throw Error('黑话研究结果涉及私人信息或未形成通用词义');
       const ids=[...new Set(s.sourceMessageIds||[])],rows=ids.map(id=>selected.find(m=>m.messageId===id));if(ids.length<3||rows.some(r=>!r))throw Error('黑话释义来源无效');
-      const publicSources=await this.verifyPublicSources(s.publicSources,entry.content,s.meaning);if(!publicSources.length)continue;
-      results.push({id:senseId(s.meaning),meaning:s.meaning.slice(0,300),usage:(s.usage||'').slice(0,300),contextTerms:s.contextTerms,status:'candidate',generalizable:true,verified:true,verifiedAt:Date.now(),publicSources,revision:0,evidence:rows.map(r=>({key:r.sourceKey,id:r.sourceId,time:r.time}))});
+      if(rows.some(r=>!this.sourceExists({key:r.sourceKey,id:r.sourceId,time:r.time})))throw Error('黑话释义来源已撤销');
+      const publicSources=this.unified?(s.publicSources||[]).map(publicSource).filter(Boolean).slice(0,3):await this.verifyPublicSources(s.publicSources,entry.content,s.meaning);
+      if(!this.unified&&!publicSources.length)continue;
+      results.push({id:senseId(s.meaning),meaning:s.meaning.slice(0,300),usage:(s.usage||'').slice(0,300),contextTerms:s.contextTerms,status:this.unified?'confirmed':'candidate',generalizable:true,verified:true,verifiedAt:Date.now(),publicSources,confidence:output.confidence,revision:0,evidence:rows.map(r=>({key:r.sourceKey,id:r.sourceId,time:r.time}))});
     }
     return results;
   }
@@ -85,7 +106,7 @@ export class SlangManager {
     const app = this.app, p = app.settings.slangPolicy, messages = new Map();
     for (const [key, state] of app.states) {
       const group = key.startsWith('group:') ? key.slice(6) : '';
-      if (!group || !(app.config.allow?.groups || []).map(String).includes(group) || (app.config.deny?.groups || []).map(String).includes(group)) continue;
+      if (!group || scope?.startsWith('group:')&&scope!==key || !(app.config.allow?.groups || []).map(String).includes(group) || (app.config.deny?.groups || []).map(String).includes(group)) continue;
       if (state.bigfatfish?.memoryControl?.accumulation === false) continue;
       for (const m of app.learningWindow.messages(key, state, now)) {
         const at = Number(m.time), uid = String(m.userId || ''), text = String(m.plain ?? m.text ?? '');
@@ -101,10 +122,10 @@ export class SlangManager {
     const text = String(content || '').trim(), required = this.app.settings.slangPolicy.candidateMinMessages;
     const safe = Boolean(text.length >= 2 && text.length <= 50 && this.app.privacy.reference(text) && !/\d{5,}|https?:|@|\[CQ:/i.test(text));
     const deletedFile=path.join(this.app.root,'state/slang.json.deleted.json');
-    const deleted=fs.existsSync(deletedFile)?JSON.parse(fs.readFileSync(deletedFile,'utf8')):{};
+    const deleted=this.unified?{[termId(text)]:this.unified.deleted(termId(text))}:fs.existsSync(deletedFile)?JSON.parse(fs.readFileSync(deletedFile,'utf8')):{};
     const messages = safe && !deleted[termId(text)] ? this.evidence(text, now, scope).length : 0;
     return { eligible: safe && !deleted[termId(text)] && messages >= required, messages, required,
-      reason: !safe ? '词条需要人工检查' : messages < required ? `进入候选需${required}条不同真人消息，当前${messages}条` : '已达到候选门槛' };
+      reason: !safe ? '词条未通过安全检查' : messages < required ? `进入候选需${required}条不同真人消息，当前${messages}条` : '已达到候选门槛' };
   }
   score(entry, now = Date.now()) {
     const app = this.app, p = app.settings.slangPolicy;
@@ -120,10 +141,10 @@ export class SlangManager {
       spread: Math.min(15, Math.floor(spanMinutes / p.minSpanMinutes * 15)), meaning: meaning ? 20 : 0,
       freshness: times.some(at => now - at <= 86400000) ? 15 : 0 };
     const score = Object.values(parts).reduce((a, b) => a + b, 0), reasons = [];
-    if (!entry.senses?.some(s => s.status === 'candidate' && s.verified && s.generalizable && safeGeneralText(s.meaning) && (s.manual || s.evidence?.length >= 3 && s.evidence.every(r => this.sourceExists(r))))) reasons.push('等待公开来源验证与一般化释义');
+    if (!entry.senses?.some(s => s.status === 'candidate' && this.reviewedSense(entry,s))) reasons.push('等待自动词义与来源核验');
     if (!['candidate', 'confirmed'].includes(entry.status)) reasons.push('词条已拒绝或撤销');
-    if (!safe) reasons.push('词条或释义需要人工检查');
-    if (!riskOk) reasons.push('风险说明需要人工审核');
+    if (!safe) reasons.push('词条或释义未通过安全检查');
+    if (!riskOk) reasons.push('风险说明未通过自动检查');
     if (!meaning) reasons.push('等待原黑话研究工具补充释义');
     if (p.autoResearch && (entry.research ? entry.research.status !== 'approved' : !entry.lastInferenceCount)) reasons.push('等待语料研究确认');
     if (evidence.length < p.minMessages) reasons.push('真人消息不足');
@@ -134,6 +155,7 @@ export class SlangManager {
       messages: evidence.length, speakers, spanMinutes: Math.floor(spanMinutes), eligible: !reasons.length, reasons };
   }
   scan(store, { force = false, now = Date.now() } = {}) {
+    if(this.unified)return; // Research completion publishes directly; no second scoring/confirmation stage.
     const p = this.app.settings.slangPolicy;
     if (!p.enabled || this.app.config.slang?.enabled === false || !store || !this.auditWritable || (!force && now - this.lastScanAt < p.scanIntervalMinutes * 60000)) return;
     this.lastScanAt = now; this.lastError = '';
@@ -153,7 +175,7 @@ export class SlangManager {
       this.audit = audit; remaining--;
       const before = structuredClone(entry);
       try {
-        for (const sense of entry.senses || []) if (sense.status === 'candidate' && sense.verified && sense.generalizable && safeGeneralText(sense.meaning) && (sense.manual || sense.evidence.every(r => this.sourceExists(r)))) sense.status = 'confirmed';
+        for (const sense of entry.senses || []) if (sense.status === 'candidate' && this.reviewedSense(entry,sense)) sense.status = 'confirmed';
         entry.status = 'confirmed'; entry.revision = (entry.revision || 0) + 1; entry.updatedAt = new Date(now).toISOString();
         if (store.save() !== true) throw new Error('词库未保存');
         record.status = 'confirmed';
@@ -169,7 +191,7 @@ export class SlangManager {
   snapshot(store, now = Date.now()) {
     if (!store) throw new Error('原黑话词库未连接');
     const entries = store.entries(), candidates = entries.filter(e => e.status === 'candidate');
-    return { ok: true, policy: this.app.settings.slangPolicy, nativeEnabled: this.app.config.slang?.enabled !== false, writable: store.writable(), lastScanAt: this.lastScanAt,
+    return { ok: true, automatic:true,authority:this.unified?'community.sqlite':'legacy',research:this.app.research.snapshot(now),policy: this.app.settings.slangPolicy, nativeEnabled: this.app.config.slang?.enabled !== false, writable: store.writable(), lastScanAt: this.lastScanAt,
       lastError: this.lastError, todayUsed: this.audit.filter(e => date(e.at) === date(now)).length,
       totalCandidates: candidates.length, rows: candidates.slice(0, 500).map(e => this.score(e, now)).sort((a, b) => b.score - a.score),
       researchJobs: this.manual.snapshot(), audit: this.audit.slice(-50).reverse().map(e => ({ ...e, content: entries.find(word => word.id === e.id)?.content || '词条已删除' })) };

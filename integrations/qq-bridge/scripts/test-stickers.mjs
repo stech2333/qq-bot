@@ -42,7 +42,7 @@ console.log('## sticker-lib 纯函数');
   const merged = mergeStickerLibrary(base, [
     { emoji_id: 'a', resId: 'a', url: 'https://x/a2', md5: 'ABC', desc: '笑哭' }
   ]);
-  ok(merged.length === 1, 'merge 会移除 QQ 端已删除的表情');
+  ok(merged.length === 2, 'merge 保留未返回的既有收藏及本地认知');
   ok(merged[0].id === 'a' && merged[0].url === 'https://x/a2' && merged[0].desc === '笑哭', 'merge 更新 QQ 字段');
 }
 
@@ -70,7 +70,7 @@ console.log('## sticker-lib 纯函数');
   const q2 = formatStickerList(list, '无语', 10);
   ok(q2.matched === 1 && q2.stickers[0].id === 'c', 'formatStickerList 按本地笔记搜索');
   const ctx = buildStickerContext(list, 8);
-  ok(ctx.includes('笑死') && ctx.includes('生气'), 'buildStickerContext 包含备注');
+  ok(!ctx.includes('笑死') && !ctx.includes('生气'), 'buildStickerContext 不把原始备注当作语义确认');
   ok(buildStickerStrategyHint().includes('qq_send_sticker'), '策略提示包含发送工具');
 }
 

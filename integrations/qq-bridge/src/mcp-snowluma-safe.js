@@ -157,7 +157,7 @@ function errorText(value, fallback) {
 
 async function agentApi(path, init = {}) {
   const timeoutMs = init.timeoutMs || 15000;
-  const { timeoutMs: _omit, ...rest } = init;
+  const { timeoutMs: _omit, allowPartial: _partial, ...rest } = init;
   const headers = agentHeaders(rest.headers);
   const res = await fetch(`${agentApiBase()}${path}`, { ...rest, headers, signal: AbortSignal.timeout(timeoutMs) });
   let body = null;
@@ -168,7 +168,7 @@ async function agentApi(path, init = {}) {
   // 桥接的部分端点会用 200 + {ok:false,error} 表达业务失败（例如发送被审计拦截）。
   // 不检查 body.ok 会把「被拦截」当成「发送成功」上报给模型 —— 模型据此认为消息已发出，
   // 于是不再重试也不告诉用户，是典型的静默错误。
-  if (body && typeof body === 'object' && body.ok === false) {
+  if (body && typeof body === 'object' && body.ok === false && !init.allowPartial) {
     throw new Error(errorText(body.error, '桥接 API 返回 ok:false（未说明原因）'));
   }
   return body;
@@ -1033,12 +1033,12 @@ server.tool(
 
 server.tool(
   'qq_slang_submit',
-  '把你在群里经常看到但不确定含义/用法的陌生词、黑话、梗或网络表达提交给管理员筛选。须达到管理页设置的不同真人消息条数才进入候选库；未达门槛返回 status=pending 和当前条数，不算已收录，也不要反复提交刷次数。管理员确认或满足自动确认策略后才会写入黑话提示词，成为你后续可查询和使用的记忆。',
+  '把聊天中不确定含义的陌生词、黑话、梗或网络表达提交到自动研究队列。后台研究完成便直接加入统一公共黑话库，跨已允许会话使用；不需要管理员送审、打分或确认。status=pending表示等待真实语料或研究，不算已经学会，不要反复提交刷次数。个人信息和私人关系不进入公共库。',
   {
     key: z.string().describe('会话 key，格式 group:群号 或 private:QQ号'),
     token: z.string().describe('会话令牌（见唤醒提示中的【会话令牌】）'),
     content: z.string().describe('要提交的陌生词/黑话/梗（最多 50 字）'),
-    context: z.string().optional().describe('可选：你是在什么语境/哪条消息里看到的，帮助管理员判断')
+    context: z.string().optional().describe('可选：表达出现的真实语境或消息编号，帮助后台自动研究')
   },
   async ({ key, token, content, context }) => {
     try {
@@ -1100,7 +1100,7 @@ if (cfg.socialV2?.tools?.getImages !== false) {
 if (cfg.socialV2?.sticker?.enabled !== false && cfg.socialV2?.tools?.listStickers !== false) {
   server.tool(
     'qq_list_stickers',
-    '查看 QQ 账号上已收藏的表情包（自定义表情）列表：包含 emoji_id、备注 desc、本地笔记 localNote、标签 tags、使用次数等。可通过 query 按备注/笔记/标签搜索；无备注的表情可以先调用 qq_get_sticker_image 看图理解，再用 qq_sticker_note 记下含义。刚新增/删除表情后如需立即同步，请传 refresh=true。',
+    '查看 QQ 账号上已收藏的表情包（自定义表情）列表：包含 emoji_id、备注 desc、本地笔记 localNote、标签 tags、使用次数等。可通过 query 按备注/笔记/标签搜索；仅reviewed且语义完整的表情可自动发送；selection返回真实近期语境匹配候选，不匹配可不发。旧收藏可用qq_sticker_note的reanalyze补充理解。刚新增/删除表情后如需立即同步，请传 refresh=true。',
     {
       key: z.string().describe('会话 key，格式 group:群号 或 private:QQ号'),
       token: z.string().describe('会话令牌（见唤醒提示中的【会话令牌】）'),
@@ -1184,22 +1184,28 @@ if (cfg.socialV2?.sticker?.enabled !== false && cfg.socialV2?.tools?.sendSticker
 if (cfg.socialV2?.sticker?.enabled !== false && cfg.socialV2?.tools?.collectSticker !== false) {
   server.tool(
     'qq_collect_sticker',
-    '收藏当前会话里别人发的一张表情/图片到你的 QQ 收藏表情，并可写一句简短备注（如“好图偷了，兄弟”）。messageId 用 qq_get_unread_messages / qq_get_recent_messages 返回的 messageId 或 seq。注意：不要频繁收藏，只在真的觉得有意思/好用/戳中你时才偷图；收藏后你可以在 qq_list_stickers 里看到并继续使用。',
+    '先读取当前授权会话的真实图片，由当前视觉模型理解内容、文字、动态变化、情绪、潜台词及适用/禁止场景，再收藏并自动保存本地语义。多图必须传mediaIndex或mediaId。无法识图则保留待理解，歧义明显则不自动收藏；qqCollected/localSaved/understandingStatus分别说明QQ收藏、本地落盘与理解状态。remark仅记录收藏意图，不自动修改QQ官方备注。',
     {
       key: z.string().describe('会话 key，格式 group:群号 或 private:QQ号'),
       token: z.string().describe('会话令牌（见唤醒提示中的【会话令牌】）'),
       messageId: z.string().describe('要收藏的那条消息的 messageId 或 seq（来自 qq_get_unread_messages / qq_get_recent_messages）'),
-      remark: z.string().optional().describe('简短备注，最多 20 字，例如“好图偷了，兄弟”')
+      remark: z.string().optional().describe('简短收藏备注；保留QQ官方备注独立权限'),
+      mediaIndex: z.number().int().min(0).optional().describe('目标在消息media数组中的下标，从0开始；多图必选'),
+      mediaId: z.string().optional().describe('实际媒体file/url/emojiId，必须唯一定位'),
+      note: z.string().optional().describe('图片含义补充，不能替代真实识图'),
+      usage: z.string().optional().describe('适用场合补充'),
+      tags: z.array(z.string()).optional(),
+      avoidScenes: z.array(z.string()).optional()
     },
-    async ({ key, token, messageId, remark }) => {
+    async ({ key, token, messageId, remark, mediaIndex, mediaId, note, usage, tags, avoidScenes }) => {
       try {
         const data = await agentApi('/api/socialV2/collect-sticker', {
           method: 'POST',
-          body: JSON.stringify({ key, messageId: String(messageId), remark: remark || '' }),
+          body: JSON.stringify({ key, messageId: String(messageId), remark: remark || '', mediaIndex, mediaId, note, usage, tags, avoidScenes }),
           headers: { 'x-agent-token': token },
-          timeoutMs: 60000
+          timeoutMs: 180000, allowPartial: true
         });
-        return { content: [{ type: 'text', text: serializeModelData(data) }] };
+        return { content: [{ type: 'text', text: serializeModelData(data) }], ...(data.ok === false ? { isError: true } : {}) };
       } catch (error) {
         return { content: [{ type: 'text', text: `收藏表情失败：${error?.message ?? error}` }], isError: true };
       }
@@ -1300,18 +1306,22 @@ if (cfg.socialV2?.sticker?.enabled !== false && cfg.socialV2?.tools?.stickerNote
       stickerId: z.string().describe('表情标识：emoji_id / md5 / 图片 URL（来自 qq_list_stickers）'),
       note: z.string().optional().describe('你理解的表情含义/适合场景，最多 200 字'),
       tags: z.array(z.string()).optional().describe('可选标签，如 ["嘲讽","笑哭","怼人"]'),
-      usage: z.string().optional().describe('可选用法说明，最多 200 字')
+      usage: z.string().optional().describe('可选用法说明，最多 200 字'),
+      usageScenes: z.array(z.string()).optional(),
+      avoidScenes: z.array(z.string()).optional(),
+      tone: z.array(z.string()).optional(),
+      reanalyze: z.boolean().optional().describe('显式触发一次真实视觉理解并自动保存；不覆盖管理员备注，普通聊天不反复识图')
     },
-    async ({ key, token, stickerId, note, tags, usage }) => {
+    async ({ key, token, stickerId, note, tags, usage, usageScenes, avoidScenes, tone, reanalyze }) => {
       try {
-        const payload = { key, stickerId: String(stickerId) };
+        const payload = { key, stickerId: String(stickerId), usageScenes, avoidScenes, tone, reanalyze };
         if (note !== undefined && note !== null) payload.note = String(note);
         if (tags !== undefined && tags !== null) payload.tags = Array.isArray(tags) ? tags.map(String) : [];
         if (usage !== undefined && usage !== null) payload.usage = String(usage);
         const data = await agentApi('/api/socialV2/sticker-note', {
           method: 'POST',
           body: JSON.stringify(payload),
-          headers: { 'x-agent-token': token }
+          headers: { 'x-agent-token': token }, timeoutMs: 180000
         });
         return { content: [{ type: 'text', text: serializeModelData(data) }] };
       } catch (error) {

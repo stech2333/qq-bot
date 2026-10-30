@@ -24,6 +24,6 @@ test('real bridge intake attests human sources, assembles once, publishes card t
 
 test('same-term legacy group meanings migrate into one word and pending senses without leaking',t=>{
  const f=fixture(t),file=path.join(f.root,'state/slang.json');const original=[{id:'a',content:'鱼塘',scope:A,meaning:'本群游戏频道',status:'confirmed'},{id:'b',content:'鱼塘',scope:B,meaning:'本群摄影讨论区',status:'confirmed'}];fs.writeFileSync(file,JSON.stringify(original));
- const migrated=loadSlang(file);assert.equal(migrated.length,1);assert.equal(migrated[0].senses.length,2);assert.equal(migrated[0].scope,undefined);assert.ok(fs.existsSync(file+'.pre-v3.bak'));
+ const migrated=loadSlang(file);assert.equal(migrated.length,2);assert.ok(migrated.every(e=>e.senses.length===1));assert.deepEqual(migrated.map(e=>e.scope),[A,B]);assert.ok(fs.existsSync(file+'.pre-v3.bak'));
  for(const key of [A,B,P])assert.deepEqual(f.app.slang.contextEntries(migrated,key,'help','鱼塘是什么'),[]);
 });

@@ -14,7 +14,7 @@ test('verified public sense is automatically confirmed from genuine multi-speake
  f.app.learningWindow.forget(A,'1');assert.equal(f.app.slang.contextEntries(f.entries,B,'help','摸鱼').length,0);
 });
 test('one normalized term supports multiple contextual senses; unverified/private research never enters prompts',async t=>{
- const f=slangFixture(t);upsertSlangEntry(f.entries,'摸鱼',{scope:B});assert.equal(f.entries.length,1);
+ const f=slangFixture(t);upsertSlangEntry(f.entries,'摸鱼',{scope:B});assert.equal(f.entries.length,2);assert.equal(f.entries[1].scope,B);
  f.entry=f.entries[0];f.entry.status='confirmed';f.entry.senses=[{id:senseId('偷闲'),meaning:'偷闲',usage:'',contextTerms:['工作'],status:'confirmed',verified:true,generalizable:true,manual:true},{id:senseId('捕鱼动作'),meaning:'捕鱼动作',usage:'',contextTerms:['河边'],status:'confirmed',verified:true,generalizable:true,manual:true}];
  assert.equal(f.app.slang.contextEntries(f.entries,P,'help','河边摸鱼是什么意思')[0].meaning,'捕鱼动作');
  f.output.senses[0].meaning='张三在本群的私人称呼';await assert.rejects(()=>f.app.slang.applyResearch(f.entry,f.output,f.rows));

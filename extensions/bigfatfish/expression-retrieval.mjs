@@ -1,5 +1,5 @@
 import { expressionText } from './expression-memory.mjs';
-import { expressionKey, fuseKnowledge, expressionScene, termAliases, containsTerm } from './community-retrieval.mjs';
+import { expressionKey, expressionConceptKey, fuseKnowledge, expressionScene, termAliases, containsTerm } from './community-retrieval.mjs';
 
 const METRICS=['hits','selected','injected','sentTurns','literalUses','semanticUnknown'];
 export function normalizeExpressionUse(value={}) {
@@ -12,12 +12,13 @@ export class ExpressionRetrieval {
   constructor() { this.usage = new Map(); }
   knowledge(app,key,st,query,scene,{now=Date.now()}={}) {
     const diagnostic={};
-    const community=app.community.retrieve(query,{key,mode:'expression',scene,limit:2,maxChars:1800,diagnostics:diagnostic});
+    const recentContext=(st.recentMessages||[]).filter(m=>!m.isSelf).slice(-4).map(m=>m.plain||m.text||'').join(' ').slice(-1200);
+    const community=app.community.retrieve(query,{key,mode:'expression',scene,recent:recentContext,limit:80,maxChars:1800,diagnostics:diagnostic});
     if(!app.globalStyle.allowed(key)||!expressionScene(query,scene).allowed)return {hits:0,selected:[],diagnostic};
-    const native=app.slang?.contextEntries(app.slang.entries?.()||[],key,scene,query,{mode:'expression'})||[];
+    const native=app.slang.unified?[]:app.slang?.contextEntries(app.slang.entries?.()||[],key,scene,query,{mode:'expression'})||[];
     const recent=normalizeExpressionUse(st.bigfatfish.expressionUse).recent;
-    const pool=fuseKnowledge([...community,...native],{limit:4,maxChars:3500});
-    const selected=fuseKnowledge(pool.filter(k=>!recent.some(r=>r.id===expressionKey(k)&&now-r.at<20*60000)),{limit:2,maxChars:Math.max(0,1800-(st.bffKnowledgeChars||0)),exclude:st.bffKnowledgeSelections||[]});
+    const combined=[...community,...native],pool=fuseKnowledge(combined,{limit:combined.length,maxChars:3500});
+    const selected=fuseKnowledge(pool.filter(k=>!recent.some(r=>[expressionKey(k),expressionConceptKey(k)].includes(r.id)&&now-r.at<20*60000)),{limit:pool.length,maxChars:Math.max(0,1800-(st.bffKnowledgeChars||0)),exclude:st.bffKnowledgeSelections||[]});
     return {hits:pool.length,selected,diagnostic};
   }
   retrieve(profile, { scene, condition, query = '', now = Date.now(), preview = false, personaSignature = '', conversationKey='' }) {

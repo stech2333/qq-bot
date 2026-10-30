@@ -28,6 +28,7 @@
     "test-forward": "node scripts/test-forward.mjs",
     "test-slang": "node scripts/test-slang-learn.mjs",
     "test-stickers": "node scripts/test-stickers.mjs",
+    "test:stickers:v41": "node scripts/test-stickers.mjs && node --test scripts/test-sticker-semantics.mjs ../../extensions/bigfatfish/stickers.test.mjs && node scripts/test-sticker-http-fallback.mjs",
     "test-voice": "node scripts/test-voice.mjs",
     "test-voice:gui": "node scripts/test-voice-gui.mjs",
     "test-voice:system": "node scripts/test-voice-system.mjs",

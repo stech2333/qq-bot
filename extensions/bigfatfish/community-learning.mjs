@@ -129,7 +129,7 @@ export class CommunityLearning {
     if(this.storageError)throw Error(this.storageError);
     if(!this.store&&(create||fs.existsSync(path.join(this.app.root,'state/community.sqlite')))) {
       try {
-        this.store=new CommunityStore(this.app.root);this.session=this.store.session();
+        this.store=new CommunityStore(this.app.root,{qqAccess:this.qqAccess()});this.session=this.store.session();
         if(this.session?.status==='STOPPED'&&!this.session.stoppedAt){
           this.session.stoppedAt=this.session.updatedAt||Date.now();
           this.store.saveSession(this.session);
@@ -383,8 +383,9 @@ export class CommunityLearning {
   readStore() {
     if(this.store)return this.store;
     if(!fs.existsSync(path.join(this.app.root,'state/community.sqlite')))return null;
-    return this.chatStore??=new CommunityStore(this.app.root,{readOnly:true});
+    return this.chatStore??=new CommunityStore(this.app.root,{readOnly:true,qqAccess:this.qqAccess()});
   }
+  qqAccess(){return {allowed:key=>this.app.globalStyle.allowed(key),retained:r=>this.app.slang.sourceRetained(r)};}
   recordRetrieval(key,diagnostic) {
     try {
       this.retrievalDiagnostics??=new Map();this.retrievalLogAt??=new Map();
@@ -414,17 +415,17 @@ export class CommunityLearning {
   applicationView(key) {
     const sessionAllowed=this.app.globalStyle.allowed(key),applyKnowledge=this.app.settings.communityLearning.applyKnowledge;
     let state=null,reasonCode='READY',databaseError=false;
-    try {const db=this.readStore();if(!db)reasonCode='DATABASE_MISSING';else try{state=db.applicationState();}catch{reasonCode='DATABASE_QUERY_FAILED';databaseError=true;}}
+    try {const db=this.readStore();if(!db)reasonCode='DATABASE_MISSING';else try{state=db.applicationState(Date.now(),key);}catch{reasonCode='DATABASE_QUERY_FAILED';databaseError=true;}}
     catch {reasonCode='DATABASE_OPEN_FAILED';databaseError=true;}
     if(!databaseError&&state){if(!sessionAllowed)reasonCode='SESSION_NOT_ALLOWED';else if(!applyKnowledge)reasonCode='APPLICATION_DISABLED';else if(!state.publishedCount)reasonCode='NO_PUBLISHED_KNOWLEDGE';else if(state.sourceFilteredCount===state.publishedCount)reasonCode='ALL_SOURCES_UNUSABLE';else if(!state.usableCount)reasonCode='NO_VALID_KNOWLEDGE';}
     return {key,sessionAllowed,applyKnowledge,learningEnabled:this.app.settings.communityLearning.enabled,reasonCode,databaseError,...state,
-      retrievableCount:state?sessionAllowed&&applyKnowledge?state.usableCount:0:null,
+      retrievableCount:state?sessionAllowed&&applyKnowledge?state.sessionUsableCount:0:null,
       lastRetrieval:Object.fromEntries(['explain','expression'].map(mode=>[mode,this.retrievalDiagnostics?.get(key+':'+mode)||null]))};
   }
   diagnosticsView(key) {
     const entries=this.app.slang.entries?.()||[],profile=this.app.globalStyle.state;
     const community=this.applicationView(key);
-    return {ok:true,sampledAt:Date.now(),nativeSlangCount:entries.filter(e=>e.status==='confirmed').length,
+    return {ok:true,sampledAt:Date.now(),storageAuthority:this.app.slang.unified?'community.sqlite':'legacy-and-community',unifiedSlangCount:community.publishedByKind?.slang??null,nativeSlangCount:entries.filter(e=>e.status==='confirmed').length,
       globalStyleVersion:profile.version,globalStylePublishedStrategies:profile.published.length,globalStyleFeatureCount:Object.keys(profile.features).length,
       globalStyleExpressionCount:profile.expressionExamples.filter(e=>e.status==='approved').length,
       communityPublishedCount:community.publishedCount??null,community,lastPrompt:this.app.styleResolver.diagnostics.get(key)||null,
@@ -432,15 +433,23 @@ export class CommunityLearning {
   }
   statusView() {let db;try{db=this.open(false);}catch{}const currentJob=this.activeJob();let platforms=[];try{platforms=this.platforms();}catch{}return {ok:true,controlVersion:3,policy:this.app.settings.communityLearning,status:this.app.settings.communityLearning.enabled?this.status:currentJob?'STOPPING':'STOPPED',error:this.error,session:this.session,running:!!currentJob,currentJob,sampledAt:Date.now(),readiness:this.readiness(),platforms,stats:db?.stats()||null,goals:db?.goals()||[]};}
   usageView() {let db;try{db=this.open(false);}catch{}const job=this.activeJob();return {ok:true,usage:db?.usage()||null,taskUsage:job?db.usage(job.id):null,sessionUsage:this.session?db?.usage(null,this.session.id):null,request:db?.request()||null,sampledAt:Date.now()};}
-  sourceViews(db=this.open(false)) {return db?.sources().map(s=>({...s,state:db.sourceState(s.id),stats:db.stats(s.id)}))||[];}
+  sourceViews(db=this.open(false)) {return db?.sources().filter(s=>s.sourceType!=='qq').map(s=>({...s,state:db.sourceState(s.id),stats:db.stats(s.id)}))||[];}
   snapshot() {let db;try{db=this.open(false);db?.expireSources();}catch{}return {...this.statusView(),...this.usageView(),sources:this.sourceViews(db),jobs:db?.jobs()||[],knowledge:db?.list()||[],logs:[...this.fallbackLogs,...(db?.logs()||[])].slice(0,100)};}
   async checkSources(id=null) {const db=this.open(),p=this.app.settings.communityLearning;let count=0;for(const s of db.sources().filter(s=>sourceAllowed(s)&&p.platforms[s.platform]&&(!id||s.id===id))){const old=db.sourceState(s.id);if(old.checkedAt>Date.now()-300000&&old.revision===s.revision&&old.status==='READY'){count++;continue;}if(old.blocked)continue;if(old.nextAt>Date.now()&&['RATE_LIMITED','ERROR','BLOCKED','UNAVAILABLE','NEEDS_AUTH'].includes(old.status))continue;try{const r=await this.adapter(s).probe?.({signal:AbortSignal.any([...(this.probeController?[this.probeController.signal]:[]),AbortSignal.timeout(p.requestTimeoutSeconds*1000)])})||{status:'READY'};db.saveSourceState({...old,...r,id:s.id,revision:s.revision,checkedAt:Date.now(),nextAt:0,status:'READY',blocked:false,failures:0,error:''});count++;this.log('PLATFORM_READY','平台只读能力检查通过',{source:s});}catch(e){const error=this.failure(e);db.saveSourceState({...old,id:s.id,checkedAt:Date.now(),revision:s.revision,status:e.kind==='RATE_LIMITED'?'RATE_LIMITED':e.kind==='AUTH'?'NEEDS_AUTH':['UNAVAILABLE','UNSUPPORTED_CAPABILITY'].includes(e.kind)?'UNAVAILABLE':'ERROR',error,nextAt:Date.now()+p.discoverySeconds*1000});this.log('PLATFORM_ERROR',error,{level:'warn',source:s});}}return count;}
   async admin(method,body={}) {
     if(method==='GET'){
       if(body.view==='diagnostics')return this.diagnosticsView(String(body.key||''));
+      if(body.view==='qq-auto'){
+        const db=this.readStore(),p=this.app.settings.slangPolicy,research=this.app.research.snapshot();
+        const enabled=p.enabled&&p.autoResearch&&this.app.settings.learningResearch.enabled&&this.app.config.slang?.enabled!==false&&this.app.config.slang?.autoResearch!==false;
+        const pending=db?.db.prepare("SELECT count(*) n FROM candidates WHERE job='qq-slang' AND status='pending'").get().n||0;
+        const published=db?.db.prepare("SELECT count(DISTINCT k.id) n FROM knowledge k JOIN evidence e ON e.knowledge=k.id JOIN sources s ON s.id=e.source WHERE k.status='published' AND json_extract(s.data,'$.sourceType')='qq'").get().n||0;
+        const rows=db?.db.prepare("SELECT data FROM candidates WHERE job='qq-slang' AND status='pending' ORDER BY rowid DESC LIMIT 8").all().map(r=>{const e=JSON.parse(r.data).entry;return {term:e.content,scope:'public',status:e.research?.status||'pending',reason:e.research?.reason||'等待真人语料自动研究，完成后直接入库',nextAt:e.research?.nextAt||0};})||[];
+        return {ok:true,automatic:true,enabled,pending,published,research,status:!enabled?'PAUSED':research.running?'RUNNING':research.budgetExhausted?'WAITING_BUDGET':'WAITING_EVIDENCE',rows};
+      }
       const db=this.open(false);if(body.view==='status')return this.statusView();if(body.view==='usage')return this.usageView();
       if(body.view==='logs'){const n=Number(body.since_id||0);if(!Number.isSafeInteger(n)||n<0)throw Error('日志游标无效');return {ok:true,...(db?.logPage(n)||{rows:[],cursor:n,hasMore:false,reset:false})};}
-      if(body.view==='knowledge'){const offset=Number(body.offset||0),limit=Number(body.limit||20);if(!Number.isSafeInteger(offset)||offset<0||!Number.isSafeInteger(limit)||limit<1||limit>100)throw Error('知识分页参数无效');return {ok:true,knowledge:db?.list({offset,limit})||[]};}
+      if(body.view==='knowledge'){const offset=Number(body.offset||0),limit=Number(body.limit||20);if(!Number.isSafeInteger(offset)||offset<0||!Number.isSafeInteger(limit)||limit<1||limit>100)throw Error('知识分页参数无效');return {ok:true,authority:'community.sqlite',knowledge:db?.list({offset,limit,kind:body.kind||'',status:body.status||'',platform:body.platform||'',multiple:body.multiple==='true',key:body.key})||[],application:db?.applicationState(Date.now(),body.key)||null};}
       if(body.view==='details')return {ok:true,sources:this.sourceViews(db),jobs:db?.jobs()||[]};return this.snapshot();
     }
     if(method!=='POST')throw Error('社区管理方法无效');

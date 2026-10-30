@@ -730,6 +730,12 @@ change('src/bridge.js', s => {
   const block=s.slice(start,end),needle='      return true;';
   return s.slice(0,start)+once(block,needle,"      bff.learningLog.write('slang','STORE_SAVED',{status:'PERSISTED',counts:{total:slangEntries.length,candidates:slangEntries.filter(e=>e.status==='candidate').length,confirmed:slangEntries.filter(e=>e.status==='confirmed').length}});\n"+needle)+s.slice(end);
 }, "bff.learningLog.write('slang','STORE_SAVED'");
+const unifiedPatch=require('./unified-knowledge-bridge-patch.cjs');
+change('src/bridge.js',s=>unifiedPatch.patchBridge(s,once),'// BigFatFish unified knowledge v1');
+change('src/mcp-snowluma-safe.js',s=>{
+  s=once(s,'把你在群里经常看到但不确定含义/用法的陌生词、黑话、梗或网络表达提交给管理员筛选。须达到管理页设置的不同真人消息条数才进入候选库；未达门槛返回 status=pending 和当前条数，不算已收录，也不要反复提交刷次数。管理员确认或满足自动确认策略后才会写入黑话提示词，成为你后续可查询和使用的记忆。','把聊天中不确定含义的陌生词、黑话、梗或网络表达提交到自动研究队列。后台研究完成便直接加入统一公共黑话库，跨已允许会话使用；不需要管理员送审、打分或确认。status=pending表示等待真实语料或研究，不算已经学会，不要反复提交刷次数。个人信息和私人关系不进入公共库。');
+  return once(s,'可选：你是在什么语境/哪条消息里看到的，帮助管理员判断','可选：表达出现的真实语境或消息编号，帮助后台自动研究');
+},'不需要管理员送审、打分或确认');
 const consoleScript = ['console-policy.js','console-memory.js','console-api-pool.js','console-v3.js','console-community.js'].map(name=>fs.readFileSync(path.join(root,'extensions/bigfatfish',name),'utf8')).join('\n');
 fs.writeFileSync(path.join(repo, 'public/console.html'), consoleTemplate.replace('<!--V3_SCRIPT-->', () => '<script>\n' + consoleScript + '\n</script>'));
 console.log('BigFatFish integration applied (pinned anchors, idempotent).');

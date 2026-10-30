@@ -17,7 +17,7 @@ test('native, global and community state stay separate; STOPPED and style v0 do 
   assert.equal(d.nativeSlangCount,0);assert.equal(d.globalStyleVersion,0);
   assert.equal(d.community.publishedCount,1);assert.equal(d.community.publishedByKind.slang,1);
   assert.equal(d.community.learningEnabled,false);assert.equal(d.community.retrievableCount,1);
-  assert.match(prompt,/"term":"摸鱼"/);assert.match(prompt,/不代表整个社区知识库为空/);
+  assert.match(prompt,/"term":"摸鱼"/);assert.match(prompt,/不代表整个知识库为空/);
   assert.equal(d.lastPrompt.globalStyleExpressionIds.length,0);assert.equal(d.lastPrompt.assembledKnowledgeCount,1);
   assert.equal(d.lastPrompt.injectedKnowledgeCount,0);assert.equal(f.calls.length,calls);
 });

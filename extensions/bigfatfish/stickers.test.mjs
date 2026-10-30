@@ -24,7 +24,7 @@ for (const [name, key, image, options] of [
 ]) {
   test(name + ' retains QQ sticker display and original bytes', async t => {
     const h = await fixture(t, image);
-    const sent = await h.sendStickerV2(key, 'fixture-sticker', options);
+    const sent = await h.sendStickerV2(key, 'fixture-sticker', { ...options, agent: false });
     const calls = h.calls.http.filter(c => /\/send_(group|private)_msg$/.test(c.url));
     assert.equal(calls.length, 1);
     const { body } = calls[0];
@@ -45,7 +45,7 @@ for (const [name, key, image, options] of [
 
 test('failed favorite download never sends or marks it used', async t => {
   const h = await fixture(t, GIF, { safeFetchBuffer: async () => { throw new Error('CDN unavailable'); } });
-  await assert.rejects(h.sendStickerV2('private:987654321', 'fixture-sticker'), /图片下载失败/);
+  await assert.rejects(h.sendStickerV2('private:987654321', 'fixture-sticker', { agent: false }), /图片下载失败/);
   assert.equal(h.calls.http.length, 0);
   const list = await h.listStickersForV2();
   assert.equal(list.stickers[0].useCount, 0);
@@ -57,6 +57,6 @@ test('favorite send rechecks access after downloading', async t => {
     h.cfg.allow.groups = [];
     return { buffer: PNG };
   } });
-  await assert.rejects(h.sendStickerV2('group:123456', 'fixture-sticker'), /白名单已变化/);
+  await assert.rejects(h.sendStickerV2('group:123456', 'fixture-sticker', { agent: false }), /白名单已变化/);
   assert.equal(h.calls.http.length, 0);
 });

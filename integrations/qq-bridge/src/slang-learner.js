@@ -211,7 +211,7 @@ export function createSlangEntry({ content, meaning = '', usage = '', example = 
 export function upsertSlangEntry(entries, content, patch = {}) {
   const normalizedContent = String(content ?? '').trim();
   if (!normalizedContent) return { entries, entry: null, created: false };
-  const existing = entries.find(e => normalizedTerm(e.content) === normalizedTerm(normalizedContent));
+  const existing = entries.find(e => normalizedTerm(e.content) === normalizedTerm(normalizedContent)&&(e.scope||'public')===(patch.scope||'public'));
   if (existing) {
     const next = normalizeSlangEntry({
       ...existing,

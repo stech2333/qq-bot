@@ -19,7 +19,7 @@ async function fixture(t) {
     let data; await handler(req, { writeHead() {}, end(text) { data = JSON.parse(text); } }); return data;
   };
   const feed = i => h.appendSocialV2Message(KEY, '群友', `${WORD}第${i}种用法`, `${WORD}第${i}种用法`, false, false, String(i), [], '111111');
-  const entries = () => { const file = path.join(h.temp, 'state/slang.json'); return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file)) : []; };
+  const entries = () => h.bff.slang.unified.entries();
   return { h, call, feed, entries };
 }
 
@@ -33,10 +33,10 @@ test('native AI submissions cannot create candidates until real message threshol
   assert.equal(entries().length, 0);
   assert.equal((await call('/api/socialV2/slang/submit', { key: KEY, content: WORD })).ok, false, 'existing submission rate limit still applies');
   feed(3); const other = await call('/api/socialV2/slang/submit', { key: 'group:123457', content: WORD });
-  assert.equal(other.entry?.status, 'candidate', 'global evidence admits the same candidate from B');
+  assert.equal(other.status, 'pending', 'group A evidence cannot admit a group B internal expression');
   for (let i = 1; i <= 3; i++) h.appendSocialV2Message('group:123457', '群友', WORD + i, WORD + i, false, false, String(i), [], '222222');
   const result = await call('/api/socialV2/slang/submit', { key: 'group:123457', content: WORD });
-  assert.equal(result.entry?.status, 'candidate', JSON.stringify(result)); assert.equal(entries()[0].scope, undefined); assert.equal(entries().length, 1);
+  assert.equal(result.entry?.status, 'candidate', JSON.stringify(result)); assert.equal(entries()[0].scope, 'group:123457'); assert.equal(entries().length, 1);
 });
 
 test('native extraction enforces the same threshold before creating a candidate', async t => {

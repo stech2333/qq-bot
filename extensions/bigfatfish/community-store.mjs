@@ -7,6 +7,8 @@ import { randomUUID } from 'node:crypto';
 import { hash, sourceAllowed, knowledgeAllowed } from './community-adapters.mjs';
 import { memoryTerms } from './memory-recall.mjs';
 import {conceptKey,senseKey,termAliases,containsTerm,retrievalWords,relevance,normalized,expressionScene} from './community-retrieval.mjs';
+import { scopeAllows, knowledgeScope } from './unified-slang.mjs';
+import { expressionTags, expressionOpportunity, glossaryRequest } from './community-retrieval.mjs';
 
 const require = createRequire(import.meta.url);
 export const day = now => new Date(now + 8 * 3600000).toISOString().slice(0, 10);
@@ -29,8 +31,9 @@ export function searchTerms(text) {
 const decode = row => row ? JSON.parse(row.data) : null;
 export const termKey = value => String(value).normalize('NFKC').trim().toLowerCase();
 export class CommunityStore {
-  constructor(root, { readOnly = false } = {}) {
+  constructor(root, { readOnly = false, qqAccess } = {}) {
     this.root = root;
+    this.qqAccess=qqAccess;
     this.file = path.join(root, 'state', 'community.sqlite');
     this.archiveDir = path.join(root, 'logs', 'bridge', 'community-learning');
     this.archiveMaxBytes = ARCHIVE_MAX_BYTES;
@@ -125,7 +128,7 @@ export class CommunityStore {
     this.db.prepare('VACUUM INTO ?').run(file); return path.basename(file);
   }
   generation() { return this.db.prepare('SELECT generation FROM meta WHERE id=1').get().generation; }
-  invalidate() { this.db.exec('UPDATE meta SET generation=generation+1 WHERE id=1'); }
+  invalidate() { this.db.exec('UPDATE meta SET generation=generation+1 WHERE id=1');this.expressionIndex=null; }
   sources() { return this.db.prepare('SELECT * FROM sources ORDER BY id').all().map(r => ({ ...decode(r), revision: r.revision, cursor: r.cursor })); }
   source(id) { return this.sources().find(s => s.id === id); }
   saveSource(source, revision) {
@@ -155,7 +158,7 @@ export class CommunityStore {
     }
   }
   expireSources() {
-    const expired=this.sources().filter(s=>s.license.expiresAt && s.license.expiresAt<=Date.now());
+    const expired=this.sources().filter(s=>s.license?.expiresAt && s.license.expiresAt<=Date.now());
     if(!expired.length)return;
     this.tx(()=>{for(const s of expired)this.purgeSource(s.id);});
   }
@@ -252,6 +255,8 @@ export class CommunityStore {
     return null;
   }
   evidenceLive(e) {
+    if(e.fingerprint?.startsWith('qq:'))return this.qqAccess?.retained?.({key:this.source(e.source)?.key,id:e.document,time:e.at})===true;
+    if(e.fingerprint?.startsWith('admin:'))return this.sourceUsable(this.source(e.source));
     if(e.fingerprint?.startsWith('zh:')){const [,unit,version]=e.fingerprint.split(':'),row=this.latestMaterial(e.source,e.document);return row?.zhihuVersions?.[unit]===version;}
 
     if(!e.fingerprint?.startsWith('tb:'))return true;
@@ -425,7 +430,7 @@ export class CommunityStore {
       const nextJob={...job,...totals,publication,publicationDetails,status:finalize?'COMPLETED':'PUBLISHING',finished:finalize,progress:finalize?100:90,version:job.version+1,completedAt:finalize?Date.now():undefined};
       this.saveJob(nextJob);return {added,nextJob};
     });
-    Object.assign(job,committed.nextJob);return committed.added;
+    this.knowledgeRevision=(this.knowledgeRevision||0)+1;Object.assign(job,committed.nextJob);return committed.added;
   }
   advance(source, cursor) { this.db.prepare('UPDATE sources SET cursor=? WHERE id=? AND revision=?').run(typeof cursor==='object'?JSON.stringify(cursor):cursor, source.id, source.revision); }
   revoke(id) {
@@ -436,47 +441,87 @@ export class CommunityStore {
       this.db.prepare('DELETE FROM knowledge_fts WHERE id=?').run(id); this.invalidate();
     });
   }
-  list({offset=0,limit=100}={}) { return this.db.prepare('SELECT * FROM knowledge ORDER BY at DESC,id LIMIT ? OFFSET ?').all(limit,offset).map(r => ({ ...decode(r), status: r.status, version: r.version,sources:this.db.prepare('SELECT DISTINCT url FROM evidence WHERE knowledge=? LIMIT 4').all(r.id).map(e=>e.url) })); }
+  list({offset=0,limit=100,kind='',status='',platform='',multiple=false,key}={}) {
+    if(status==='pending'){
+      return this.db.prepare("SELECT * FROM candidates WHERE status='pending' ORDER BY rowid DESC").all().map(r=>{
+        const c=decode(r),e=c.recordType==='qq-slang'?c.entry:null;
+        const platforms=e?['qq']:[...new Set((c.refs||[]).map(x=>this.source(x.source)?.platform).filter(Boolean))];
+        return {id:r.id,kind:e?'slang':c.kind,term:e?.content||c.term,meaning:e?.meaning||c.meaning||'',scope:e?'public':'unresolved',status:r.status,version:0,sources:platforms,sourcePlatforms:platforms};
+      }).filter(k=>(!kind||k.kind===kind)&&(!platform||k.sourcePlatforms.includes(platform))).slice(offset,offset+limit);
+    }
+    const where=[],params=[];
+    if(kind){where.push('k.kind=?');params.push(kind);}if(status){where.push('k.status=?');params.push(status);}
+    if(platform){where.push("EXISTS(SELECT 1 FROM evidence e JOIN sources s ON s.id=e.source WHERE e.knowledge=k.id AND json_extract(s.data,'$.platform')=?)");params.push(platform);}
+    if(multiple)where.push("(SELECT count(*) FROM knowledge x WHERE x.term_key=k.term_key AND x.status='published' AND coalesce(json_extract(x.data,'$.scope'),'public')=coalesce(json_extract(k.data,'$.scope'),'public'))>1");
+    return this.db.prepare('SELECT k.* FROM knowledge k'+(where.length?' WHERE '+where.join(' AND '):'')+' ORDER BY k.at DESC,k.id LIMIT ? OFFSET ?').all(...params,limit,offset).map(r=>{
+      const k=decode(r),refs=this.db.prepare('SELECT DISTINCT e.source,e.url FROM evidence e WHERE e.knowledge=?').all(r.id),sources=refs.map(e=>this.source(e.source));
+      return {...k,scope:knowledgeScope(k),status:r.status,version:r.version,usable:r.status==='published'&&this.knowledgeUsable(k,key||knowledgeScope(k)),
+        sources:[...new Set(refs.map(e=>e.url||this.source(e.source)?.platform||'unknown'))],sourcePlatforms:[...new Set(sources.map(s=>s?.platform).filter(Boolean))]};
+    });
+  }
   communityStrategies(cutoff=0) {const out=[];for(const r of this.db.prepare("SELECT * FROM knowledge WHERE kind='strategy' AND status='published'").all()){const k=decode(r),e=this.db.prepare('SELECT DISTINCT source,document,fingerprint,at FROM evidence WHERE knowledge=?').all(r.id).filter(e=>e.at>cutoff&&this.evidenceLive(e)&&knowledgeAllowed(this.source(e.source)));if(new Set(e.map(x=>x.source+':'+x.document)).size>=3&&new Set(e.map(x=>day(x.at))).size>=2)out.push(k.strategy);}return [...new Set(out)];}
-  applicationState(now=Date.now()) {
+  sourceUsable(s,now=Date.now()) {if(s?.sourceType!=='qq')return knowledgeAllowed(s,now);return s.allowUse!==false&&(s.manual&&s.scope==='public'||this.qqAccess?.allowed?.(s.key)===true);}
+  usableEvidence(id,now=Date.now()) {
+    const live=this.db.prepare('SELECT source,document,fingerprint,url,at FROM evidence WHERE knowledge=?').all(id).filter(e=>this.sourceUsable(this.source(e.source),now)&&this.evidenceLive(e));
+    if(live.some(e=>!e.fingerprint.startsWith('qq:')))return live;
+    return live.length>=3?live:[];
+  }
+  knowledgeUsable(k,key,now=Date.now()) {
+    if(!scopeAllows(k,key)||k.validUntil&&k.validUntil<=now)return false;
+    return this.usableEvidence(k.id,now).length>0;
+  }
+  applicationState(now=Date.now(),key) {
     const rows=this.db.prepare('SELECT status,kind,count(*) n FROM knowledge GROUP BY status,kind').all();
     const publishedByKind=Object.fromEntries(['knowledge','slang','meme','culture','strategy'].map(kind=>[kind,rows.find(r=>r.status==='published'&&r.kind===kind)?.n||0]));
-    const sources=new Set(this.sources().filter(s=>knowledgeAllowed(s,now)).map(s=>s.id));
-    let usable=0,sourceFiltered=0,expired=0;
+    const sources=new Set(this.sources().filter(s=>this.sourceUsable(s,now)).map(s=>s.id));
+    let usable=0,sourceFiltered=0,expired=0,sessionUsable=0,groupLimited=0;
     for(const r of this.db.prepare("SELECT id,data FROM knowledge WHERE status='published'").all()) {
       const k=decode(r);
       if(k.validUntil&&k.validUntil<=now){expired++;continue;}
-      if(!this.db.prepare('SELECT source,document,fingerprint FROM evidence WHERE knowledge=?').all(r.id).some(e=>sources.has(e.source)&&this.evidenceLive(e))){sourceFiltered++;continue;}
-      usable++;
+      if(!this.usableEvidence(r.id,now).length){sourceFiltered++;continue;}
+      usable++;if(knowledgeScope(k)!=='public')groupLimited++;if(scopeAllows(k,key))sessionUsable++;
     }
     return {publishedCount:rows.filter(r=>r.status==='published').reduce((n,r)=>n+r.n,0),publishedByKind,
       pendingCount:this.db.prepare("SELECT count(*) n FROM candidates WHERE status='pending'").get().n,
-      revokedCount:rows.filter(r=>r.status==='revoked').reduce((n,r)=>n+r.n,0),validSourceCount:sources.size,usableCount:usable,sourceFilteredCount:sourceFiltered,expiredCount:expired};
+      revokedCount:rows.filter(r=>r.status==='revoked').reduce((n,r)=>n+r.n,0),validSourceCount:sources.size,usableCount:usable,sessionUsableCount:sessionUsable,groupLimitedCount:groupLimited,sourceFilteredCount:sourceFiltered,expiredCount:expired};
   }
-  search(query, { limit = 3, maxChars = 1800, kinds, mode='explain', recent='', scene='', diagnostics = {} } = {}) {
+  expressionCandidates(query,recent='') {
+    const stamp=[this.db.prepare('PRAGMA data_version').get().data_version,this.db.prepare('SELECT generation FROM meta WHERE id=1').get().generation,this.knowledgeRevision||0];
+    const signature=JSON.stringify(stamp);
+    if(this.expressionIndex?.signature!==signature){
+      const postings=new Map();
+      for(const r of this.db.prepare("SELECT id,data FROM knowledge WHERE status='published' AND kind IN ('slang','meme','culture')").all())for(const tag of expressionTags(decode(r))){if(!postings.has(tag))postings.set(tag,[]);postings.get(tag).push(r.id);}
+      this.expressionIndex={signature,postings};
+    }
+    const tags=expressionOpportunity(query,recent).tags;
+    return [...new Set(tags.flatMap(t=>this.expressionIndex.postings.get(t)||[]))].slice(0,80).map(id=>({id,rank:0}));
+  }
+  search(query, { limit = 3, maxChars = 1800, kinds, mode='explain', recent='', scene='', key, diagnostics = {} } = {}) {
     Object.assign(diagnostics,{reasonCode:'NO_MATCH',mode,candidateCount:0,validResultCount:0,sourceFilteredCount:0,databaseError:false});
     // Chat reads never purge data or alter learning checkpoints when a license expires.
     if(mode==='expression'&&!expressionScene(query,scene).allowed){diagnostics.reasonCode='SCENE_SUPPRESSED';return [];}
     const terms = [...new Set([...searchTerms(query),...retrievalWords(query).flatMap(searchTerms)])].slice(0,100);
     const matches = terms.length?this.db.prepare("SELECT f.id,bm25(knowledge_fts) AS rank FROM knowledge_fts f JOIN knowledge k ON k.id=f.id WHERE knowledge_fts MATCH ? AND k.status='published' ORDER BY rank LIMIT 40").all(terms.map(t => '"' + t.replaceAll('"','""') + '"').join(' OR ')):[];
     // An exact published term must not be crowded out by the bounded FTS candidate window.
-    const exact=this.db.prepare("SELECT id,term,kind FROM knowledge WHERE status='published'").all().filter(r=>(!kinds||kinds.includes(r.kind))&&termAliases(r.term).some(t=>containsTerm(query,t)));
-    const candidates=[...exact.map(r=>({id:r.id,rank:0})),...matches.filter(m=>!exact.some(r=>r.id===m.id))];
+    const exact=mode==='expression'?[]:(glossaryRequest(query)?this.db.prepare("SELECT id,term,kind FROM knowledge WHERE status='published'").all():this.db.prepare("SELECT id,term,kind FROM knowledge WHERE status='published' AND term_key=?").all(conceptKey(query))).filter(r=>(!kinds||kinds.includes(r.kind))&&termAliases(r.term).some(t=>containsTerm(query,t)));
+    const sceneCandidates=mode==='expression'?this.expressionCandidates(query,recent):[];
+    const candidates=[...new Map([...exact.map(r=>({id:r.id,rank:0})),...sceneCandidates,...matches].map(r=>[r.id,r])).values()];
     diagnostics.candidateCount=candidates.length;
-    const sources = new Map(this.sources().filter(s=>knowledgeAllowed(s)).map(s=>[s.id,s])), out=[]; let chars=0;
+    const sources = new Map(this.sources().filter(s=>this.sourceUsable(s)).map(s=>[s.id,s])), out=[]; let chars=0;
     for (const m of candidates) {
       const row = this.db.prepare("SELECT * FROM knowledge WHERE id=? AND status='published'").get(m.id); if (!row || kinds && !kinds.includes(row.kind)) continue;
-      const k = decode(row), evidence = this.db.prepare('SELECT source,document,fingerprint,url,at FROM evidence WHERE knowledge=?').all(row.id).filter(e=>sources.has(e.source)&&this.evidenceLive(e));
+      const k = decode(row);if(!scopeAllows(k,key))continue;
+      const evidence = this.usableEvidence(row.id);
       if (!evidence.length) {diagnostics.sourceFilteredCount++;continue;}
       if(k.validUntil&&k.validUntil<=Date.now())continue;
       const match=relevance({...k,evidenceCount:evidence.length},query,{mode,recent});if(!match)continue;
-      out.push({id:k.id,kind:k.kind,term:k.term,meaning:k.meaning,usage:k.usage,contextTerms:k.contextTerms,confidence:k.confidence,conflict:k.conflict,version:row.version,sources:[...new Set(evidence.map(e=>e.url))].slice(0,2),rank:m.rank,...match,origin:'community'});
+      out.push({id:k.id,kind:k.kind,term:k.term,meaning:k.meaning,usage:k.usage,contextTerms:k.contextTerms,aliases:k.aliases||[],usageScenes:expressionTags(k),avoidContexts:k.avoidContexts||[],tone:k.tone||'',scope:knowledgeScope(k),confidence:k.confidence,conflict:k.conflict,version:row.version,sources:[...new Set(evidence.map(e=>e.url).filter(Boolean))].slice(0,2),rank:m.rank,...match,origin:'community'});
     }
     const best=new Map();for(const r of out)best.set(conceptKey(r.term),Math.max(best.get(conceptKey(r.term))||0,r.contextScore));
-    const seen=new Set();const result=out.filter(r=>!best.get(conceptKey(r.term))||r.contextScore===best.get(conceptKey(r.term))).sort((a,b)=>b.score-a.score||a.rank-b.rank).filter(r=>{const key=conceptKey(r.term);if(seen.has(key))return false;const size=JSON.stringify(r).length;if(chars+size>maxChars)return false;seen.add(key);chars+=size;return true;}).slice(0,Math.min(limit,mode==='expression'?2:3));
+    const seen=new Set();const result=out.filter(r=>!best.get(conceptKey(r.term))||r.contextScore===best.get(conceptKey(r.term))).sort((a,b)=>b.score-a.score||a.rank-b.rank).filter(r=>{const key=conceptKey(r.term);if(seen.has(key))return false;const size=JSON.stringify(r).length;if(chars+size>maxChars)return false;seen.add(key);chars+=size;return true;}).slice(0,mode==='expression'?Math.max(0,limit):Math.min(limit,3));
     diagnostics.validResultCount=result.length;
     if(result.length)diagnostics.reasonCode='MATCHED';
-    else {const state=this.applicationState();if(!state.publishedCount)diagnostics.reasonCode='NO_PUBLISHED_KNOWLEDGE';else if(state.sourceFilteredCount===state.publishedCount)diagnostics.reasonCode='ALL_SOURCES_UNUSABLE';else if(!state.usableCount)diagnostics.reasonCode='NO_VALID_KNOWLEDGE';}
+    else {if(!this.db.prepare("SELECT 1 FROM knowledge WHERE status='published' LIMIT 1").get())diagnostics.reasonCode='NO_PUBLISHED_KNOWLEDGE';else if(!sources.size)diagnostics.reasonCode='ALL_SOURCES_UNUSABLE';else if(!this.db.prepare("SELECT 1 FROM knowledge WHERE status='published' AND (json_extract(data,'$.validUntil') IS NULL OR json_extract(data,'$.validUntil')=0 OR json_extract(data,'$.validUntil')>?) LIMIT 1").get(Date.now()))diagnostics.reasonCode='NO_VALID_KNOWLEDGE';}
     return result;
   }
 }

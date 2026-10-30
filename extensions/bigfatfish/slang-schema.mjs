@@ -8,21 +8,22 @@ export function safeGeneralText(text) {
 export function publicSource(value) { try {const u=new URL(value);if(u.protocol!=='https:'||u.username||u.password||u.search||/^(?:localhost|127\.|10\.|192\.168\.|0\.|\[)/i.test(u.hostname))return '';return u.href;}catch{return '';}}
 export function normalizeGlobalSlang(base, original = {}) {
   const { scope, confirmedScopes, ...record } = base;
+  const localScope=/^group:[1-9]\d{4,15}$/.test(original.scope||scope||'')?original.scope||scope:null;
   const term = normalizedTerm(base.content), scopes = original.migration?.originalScopes || [scope || 'legacy'];
   let senses = Array.isArray(original.senses) ? original.senses.map(s => ({ id: s.id || senseId(s.meaning), meaning: String(s.meaning || '').slice(0,300), usage: String(s.usage || '').slice(0,300), contextTerms: Array.isArray(s.contextTerms) ? s.contextTerms.filter(t => typeof t==='string' && safeGeneralText(t)).slice(0,12) : [],
     status: ['candidate','confirmed','rejected','revoked'].includes(s.status) ? s.status : 'candidate', generalizable:s.generalizable===true, verified:s.verified===true, verifiedAt:Number(s.verifiedAt)||0,
-    publicSources:(s.publicSources||[]).map(publicSource).filter(Boolean).slice(0,3), evidence:Array.isArray(s.evidence)?s.evidence.filter(e=>e&&typeof e.key==='string'&&typeof e.id==='string'&&Number.isFinite(e.time)).slice(-48):[], manual:s.manual===true, revision:Number(s.revision)||0 })) : [];
+    publicSources:(s.publicSources||[]).map(publicSource).filter(Boolean).slice(0,3), evidence:Array.isArray(s.evidence)?s.evidence.filter(e=>e&&typeof e.key==='string'&&typeof e.id==='string'&&Number.isFinite(e.time)).slice(-48):[], manual:s.manual===true, revision:Number(s.revision)||0,...(Number.isFinite(s.confidence)?{confidence:Math.max(0,Math.min(1,s.confidence))}:{}) })) : [];
   if (!senses.length && base.meaning) senses.push({ id:senseId(base.meaning),meaning:base.meaning,usage:base.usage||'',contextTerms:[],status:base.status==='rejected'?'rejected':'candidate',generalizable:false,verified:false,verifiedAt:0,publicSources:(base.sources||[]).map(publicSource).filter(Boolean),evidence:[],revision:0,
     ...(base.source==='manual'&&scope==='public'&&base.status==='confirmed'&&safeGeneralText(base.meaning)?{manual:true,status:'confirmed',generalizable:true,verified:true}: {}) });
   const active=senses.find(s=>s.status==='confirmed'&&s.verified&&s.generalizable&&safeGeneralText(s.meaning)), status=original.schemaVersion===3?base.status:active?'confirmed':base.status==='rejected'?'rejected':'candidate';
-  return {...record,id:termId(term),schemaVersion:3,normalized:term,aliases:[...new Set((original.aliases||[]).filter(a=>typeof a==='string'&&safeGeneralText(a)).map(normalizedTerm))].slice(0,12),senses,
+  return {...record,...(localScope?{scope:localScope}:{}),id:termId(term)+(localScope?'-'+createHash('sha256').update(localScope).digest('hex').slice(0,8):''),schemaVersion:3,normalized:term,aliases:[...new Set((original.aliases||[]).filter(a=>typeof a==='string'&&safeGeneralText(a)).map(normalizedTerm))].slice(0,12),senses,
     meaning:active?.meaning||base.meaning||'',usage:active?.usage||base.usage||'',status,revision:Number(original.revision)||0,
     evidence:(base.evidence||[]).filter(e=>e&&typeof e==='object').map(e=>({key:e.key,messageId:e.messageId,time:e.time})).slice(-20),
     migration:{version:3,originalScopes:scopes,legacyIds:[...new Set([...(original.migration?.legacyIds||[]),original.id].filter(Boolean))].slice(0,100),requiresGeneralization:!active}};
 }
 export function mergeGlobalLexicon(entries) {
   const merged=new Map();
-  for(const raw of entries){const e=normalizeGlobalSlang(raw,raw),old=merged.get(e.normalized);if(!old){merged.set(e.normalized,e);continue;}
+  for(const raw of entries){const e=normalizeGlobalSlang(raw,raw),key=e.normalized+':'+(e.scope||'public'),old=merged.get(key);if(!old){merged.set(key,e);continue;}
     old.senses=[...new Map([...old.senses,...e.senses].map(s=>[senseId(s.meaning),s])).values()];old.migration.originalScopes=[...new Set([...old.migration.originalScopes,...e.migration.originalScopes])];old.migration.legacyIds=[...new Set([...old.migration.legacyIds,...e.migration.legacyIds])];
     old.count=Math.max(old.count||0,e.count||0);old.status=old.senses.some(s=>s.status==='confirmed')?'confirmed':old.status==='rejected'&&e.status==='rejected'?'rejected':'candidate';
   }

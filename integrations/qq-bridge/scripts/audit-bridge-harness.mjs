@@ -166,6 +166,7 @@ export async function bridgeHarness({ config = {}, savedState, files = {}, globa
     buildWakePromptV2, buildWakeSnapshotV2, sendWakePromptV2, scheduleWakeV2, evaluateWakeTriggerV2, socialV2,
     scheduleProactiveCheckV2, acknowledgeMessagesV2,
     syncStickerLibrary, listStickersForV2, getStickerImageData,
+    collectStickerV2, applyStickerNoteV2, reanalyzeSticker, startStickerReview, stickerReviewJob,
     refreshMode, modeAllowed, trackTurnEvent, replayPendingWakeReasonsV2,
     collectors, setupSleepTimerV2, recoverOrphanedWakesV2,
     getInitialPrompt, setInitialPrompt, loadInitialPrompts, formatInitialPromptV2,
@@ -193,7 +194,7 @@ export async function bridgeHarness({ config = {}, savedState, files = {}, globa
   const timers = new Set();
   const context = vm.createContext({
     BigFatFish, normalizeState, ApiPool, createCommunityModel, contextHead, contextPolicy, needsContextRenewal,
-    fs, os, path, http, crypto, fileURLToPath, URL, Buffer, AbortSignal, console: { log() {}, error() {} },
+    fs, os, path, http, crypto, fileURLToPath, URL, Buffer, AbortSignal, AbortController, console: { log() {}, error() {} },
     fetch: fakeFetch,
     // 锁文件探测用（bridge.js 顶层的 consolePortInUse）；
     // 固定桩掉：测试不应该真去 netstat 宿主机。

@@ -42,4 +42,15 @@ export class LearningSources {
     return refs;
   }
   sample(now=Date.now()) { const rows=this.all(now); return {messages:rows.length, days:new Set(rows.map(r=>day(r.time))).size,speakers:new Set(rows.map(r=>r.speaker)).size,groups:new Set(rows.map(r=>r.key)).size}; }
+  diagnostics(now=Date.now()) {
+    const groups=[];
+    for(const [key,st]of this.app.states)if(this.allowed(key)){
+      const rows=this.app.learningWindow.messages(key,st,now),eligible=this.rows(key,now);
+      groups.push({key,received:rows.length,eligible:eligible.length,filtered:rows.length-eligible.length,
+        unattested:rows.filter(m=>m.styleSourceVersion!==2||m.sourceScope!==key).length,
+        quotedOrMedia:rows.filter(m=>m.hasForward||m.hasMedia||m.quoted).length,
+        learningDisabled:st.bigfatfish.memoryControl?.accumulation===false,error:this.app.learningWindow.errors.get(key)||''});
+    }
+    return {groups,countsOverlap:true};
+  }
 }
