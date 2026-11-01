@@ -10,7 +10,9 @@
     "bridge:prepare": "node scripts/prepare-bridge.cjs && node scripts/apply-bridge-extension.cjs",
     "bridge:test": "node --test extensions/bigfatfish/*.test.mjs",
     "bridge:manage": "node scripts/bridge-manager.mjs",
-    "bridge:start": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/open-bridge-manager.ps1 -StartAll"
+    "bridge:start": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/open-bridge-manager.ps1 -StartAll",
+    "backup:state": "node scripts/backup-state.mjs --label manual",
+    "plugins:lock": "node scripts/write-plugin-lock.mjs"
   },
   "keywords": [],
   "author": "",

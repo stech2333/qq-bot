@@ -37,3 +37,9 @@ credentials.json
 *.sqlite
 *.sqlite3
 *.sqlite-*
+
+# 第三方 DSH 插件源码（安装产物，不是本项目代码）。
+# 许可证要求以各插件自己的 LICENSE 为准，所以不随本项目仓库分发；
+# 安装方式见 integrations/dsh-plugins/README.md 与 integrations/dsh-plugin-patches/README.md。
+integrations/dsh-plugins/*/
+!integrations/dsh-plugins/README.md

@@ -15,18 +15,21 @@ function fixture(t) {
   const st = { recentMessages: [...messages], unread: [...messages], lastIncomingAt: now - 1000, lastUnreadSeq: 2, lastReadThroughSeq: 0 };
   app.bind(KEY, st); return { app, st, now, next() { const m = { ...messages[1], messageId: String(++st.lastUnreadSeq), seq: st.lastUnreadSeq, time: Date.now() }; st.unread.push(m); st.recentMessages.push(m); return m; } };
 }
-test('18% is configurable and invalid settings are rejected', () => {
-  assert.equal(initiativeSettings().probability, 0.18);
+test('context initiative is a gate, not a dice roll, and invalid settings are rejected', () => {
+  // V4.2：probability 退化为闸门（0=关闭）。默认 1 表示"由上下文条件决定"。
+  assert.equal(initiativeSettings().probability, 1);
   for (const value of [-0.1, 1.1, NaN, '0.18']) assert.throws(() => initiativeSettings({ probability: value }));
   assert.throws(() => initiativeSettings({ cooldownMinutes: 0 }));
 });
-test('one draw per batch, including misses and restarts, never mutates pending or processed messages', t => {
-  const { app, st, now } = fixture(t), before = JSON.stringify([st.unread, st.lastReadThroughSeq]); let draws = 0;
-  assert.equal(app.contextInitiative.begin(KEY, st, now, () => { draws++; return 0.18; }), false);
-  assert.equal(app.contextInitiative.begin(KEY, st, now, () => { draws++; return 0; }), false);
+test('one opportunity per batch, including restarts, never mutates pending or processed messages', t => {
+  const { app, st, now } = fixture(t), before = JSON.stringify([st.unread, st.lastReadThroughSeq]);
+  assert.equal(app.contextInitiative.begin(KEY, st, now), true);
+  // 同一批不能重复开机会：即使重启后状态归一化，也仍按 batch 指纹拒绝。
+  assert.equal(app.contextInitiative.begin(KEY, st, now + 1), false);
   st.bigfatfish = normalizeState(st.bigfatfish);
-  assert.equal(app.contextInitiative.begin(KEY, st, now + 1, () => { draws++; return 0; }), false);
-  assert.equal(draws, 1); assert.equal(JSON.stringify([st.unread, st.lastReadThroughSeq]), before);
+  app.contextInitiative.cancel(KEY, st);
+  assert.equal(app.contextInitiative.begin(KEY, st, now + 2), false);
+  assert.equal(JSON.stringify([st.unread, st.lastReadThroughSeq]), before);
 });
 test('a selected opportunity reserves shared budget, uses context and ignores cold-start dry-run/minimum idle', t => {
   const { app, st, now } = fixture(t);

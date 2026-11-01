@@ -10,7 +10,7 @@ function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bff-memory-'));
   t.after(() => { assert.equal(path.dirname(root), os.tmpdir()); fs.rmSync(root, { recursive: true, force: true }); });
   const config = { bigfatfish: { expectedQQ: '123456789' }, ownerQQ: '987654321', allow: { groups: ['123456', '123457'], private: [] } };
-  const app = new BigFatFish(root, config), states = new Map(); app.settings.casualMaxChars = 40;
+  const app = new BigFatFish(root, config), states = new Map();
   for (const key of [KEY, OTHER]) { const st = { recentMessages: [], activeTopics: [], pendingThoughts: [], memberImpressions: {} }; states.set(key, st); app.bind(key, st); }
   const file = path.join(root, 'saved-memory.json');
   const hooks = { state: key => states.get(key), save: () => fs.writeFileSync(file, JSON.stringify([...states])),
@@ -78,7 +78,7 @@ test('duplicate tools and a short burst cannot establish a lasting style', async
 test('cross-day preference facts remain scoped memories without creating a scoped style', async t => {
   const f = fixture(t); await learn(f); const st = f.states.get(KEY);
   assert.equal(st.bigfatfish.style, undefined); assert.deepEqual(f.app.globalStyle.state.published, []);
-  assert.equal(f.app.memory.targetChars(st), 40); assert.match(f.app.formatMemory(st), /喜欢简短回复/);
+  assert.equal(f.app.memory.recallBudget(), f.app.settings.memory.maxChars); assert.match(f.app.formatMemory(st), /喜欢简短回复/);
   assert.doesNotMatch(f.app.instruction(KEY, st), /表达略简练/);
   assert.doesNotMatch(f.app.instruction(OTHER, f.states.get(OTHER)), /表达略简练/);
   const saved = new Map(JSON.parse(fs.readFileSync(f.file))), restored = normalizeState(saved.get(KEY).bigfatfish);
@@ -140,7 +140,7 @@ test('personalization can be disabled without erasing stored facts', async t => 
   const f = fixture(t); await learn(f);
   await f.admin({ action: 'controls', accumulation: false, personalization: false }); const st = f.states.get(KEY);
   assert.equal(f.app.formatMemory(st), ''); assert.equal(f.app.memory.hint(st), ''); assert.equal(st.bigfatfish.facts.length, 1);
-  assert.equal(f.app.memory.targetChars(st), 40);
+  assert.equal(f.app.memory.recallBudget(), f.app.settings.memory.maxChars);
 });
 test('retired scoped style management cannot modify the global profile', async t => {
   const f = fixture(t);

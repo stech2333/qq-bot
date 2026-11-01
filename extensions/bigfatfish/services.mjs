@@ -40,13 +40,33 @@ export class ServiceManager {
     if (name === 'snowluma') return { ...process.env, SNOWLUMA_WEBUI_HOST: '127.0.0.1',
       SNOWLUMA_HOOK_AUTOLOAD: this.config().bigfatfish.startup?.autoHook === false ? 'false' : 'true' };
     const env = { ...process.env, DSH_HOME: path.join(this.root, 'data-bridge') };
-    const file = path.join(this.root, '.env');
-    for (const line of fs.existsSync(file) ? fs.readFileSync(file, 'utf8').split(/\r?\n/) : []) {
-      const m = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/.exec(line);
-      if (m) env[m[1]] = m[2].replace(/^(['"])(.*)\1$/, '$2');
+    // 两层 .env：
+    //   · 项目根的 .env —— 跟着仓库走，只能放普通配置（API key、提示）；
+    //   · DSH_HOME/.env  —— 不跟仓库走，放"启动环境级"变量（NO_PROXY 等）。
+    // DSH 0.2.1+ 会硬拒项目根 .env 里的 NODE_OPTIONS / NO_PROXY 一类变量
+    // （"only the launching environment may set"），所以这些必须落在 DSH_HOME/.env，
+    // 由这里读进子进程环境；NODE_OPTIONS 仍然只由下面的 preload 逻辑注入。
+    for (const file of [path.join(this.root, '.env'), path.join(this.root, 'data-bridge', '.env')]) {
+      let text = '';
+      try { text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : ''; } catch { text = ''; }
+      for (const line of text.split(/\r?\n/)) {
+        const m = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/.exec(line);
+        if (!m || m[1] === 'NODE_OPTIONS') continue;
+        env[m[1]] = m[2].replace(/^(['"])(.*)\1$/, '$2');
+      }
     }
-    const preload = '--import=' + pathToFileURL(path.join(this.root, 'extensions/bigfatfish/model-network-preload.mjs')).href;
+    const preload = '--import=' + pathToFileURL(path.join(this.root, 'extensions/bigfatfish', 'model-network-preload.mjs')).href;
     if (!String(env.NODE_OPTIONS || '').split(/\s+/).includes(preload)) env.NODE_OPTIONS = [env.NODE_OPTIONS, preload].filter(Boolean).join(' ');
+    // Windows 子进程环境是大小写不敏感的：`NO_PROXY` 与 `no_proxy` 同时存在时，
+    // Node 传给 CreateProcess 的环境块会出现重复键，PowerShell 自己的 Env: 枚举也会直接抛
+    // "已添加了具有相同键的项"。这里统一收敛成大写一份，值取大写优先。
+    const proxyKeys = Object.keys(env).filter(k => /^(no|http|https|all)_proxy$/i.test(k));
+    const upper = new Set(proxyKeys.map(k => k.toUpperCase()));
+    for (const key of proxyKeys) {
+      if (key === key.toUpperCase()) continue;
+      if (upper.has(key.toUpperCase())) delete env[key];
+      else { env[key.toUpperCase()] = env[key]; delete env[key]; }
+    }
     return env;
   }
   async gateway() {

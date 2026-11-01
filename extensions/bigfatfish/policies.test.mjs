@@ -72,16 +72,17 @@ test('native proactive switches stop an eligible wake and an already generating 
   assert.equal(app.beginWake(key, state, 'proactiveCheck'), false);
 });
 
-test('interest scoring cannot override a configured dynamic probability miss with a second guaranteed wake', t => {
+test('interest evidence sets one ambient probability and cannot trigger a second guaranteed wake', t => {
   const { app, state } = fixture(t);
   app.settings.participation.enabled = true;
   const event = { self_id: '123456789', user_id: '111111', message: [] };
   const options = { kind: 'group', text: 'AI 和 DeepSeek', random: () => 1 };
+  const expected = app.settings.participation.ambientJoinProbability;
   let draws = 0;
-  const missed = app.chatDecision('group:123456', state, event, { ...options, random: () => { draws++; return 0.6; } });
-  assert.equal(missed.selected, false); assert.equal(missed.probability, 0.6); assert.equal(draws, 1);
-  const selected = app.chatDecision('group:123456', state, event, { ...options, random: () => 0.59 });
-  assert.equal(selected.reason, 'interest'); assert.equal(selected.probability, 0.6);
+  const missed = app.chatDecision('group:123456', state, event, { ...options, random: () => { draws++; return 1; } });
+  assert.equal(missed.selected, false); assert.equal(missed.probability, expected); assert.equal(draws, 1);
+  const selected = app.chatDecision('group:123456', state, event, { ...options, random: () => 0 });
+  assert.equal(selected.reason, 'interest'); assert.equal(selected.probability, expected);
   assert.equal(app.interestWake('group:123456', state), true, 'native scoring path remains available');
   assert.equal(app.interestWake('group:123456', state), false, 'native scoring path still respects cooldown');
 });

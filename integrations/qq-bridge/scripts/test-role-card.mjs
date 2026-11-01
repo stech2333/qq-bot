@@ -98,10 +98,15 @@ test('真实人格卡可用，且筛选不丢公共内容', () => {
   const v2 = selectRoleText(raw, 'v2');
   const v1 = selectRoleText(raw, 'v1');
   assert.ok(v2.length > 0 && v1.length > 0);
-  // 人设部分两种模式都必须保留
+  // 人设部分两种模式都必须保留。锚点取角色卡自己的第一段正文，
+  // 而不是钉死某个短语 —— 角色卡归内容维护者所有，措辞会被合法改写，
+  // 但"筛选不能丢公共人设"这条性质必须一直成立。
+  const personaLine = raw.split('\n').map(line => line.trim()).find(line => line && !line.startsWith('#'));
+  assert.ok(personaLine, '角色卡应有正文段落');
+  const anchor = personaLine.slice(0, 12);
   for (const text of [v1, v2]) {
     assert.match(text, /小鲸鱼/);
-    assert.match(text, /AI 味|去 AI 味/);
+    assert.ok(text.includes(anchor), `公共人设正文不能在筛选时丢失：${anchor}`);
   }
   // 二代注入的文本里不应再出现一代的分条机制
   assert.doesNotMatch(v2, /空格分隔（例如|\[SILENT\]/);

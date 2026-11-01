@@ -1,4 +1,7 @@
 import { numberSetting, backupOnce, atomicJson } from '../../../extensions/bigfatfish/state-store.mjs';
+import { migrateRetiredConfig } from '../../../extensions/bigfatfish/retired-config.mjs';
+import { pluginIntegrationReport, installedPlugins } from '../../../extensions/bigfatfish/plugin-registry.mjs';
+import { createPluginMoodFeed } from '../../../extensions/bigfatfish/plugin-mood-feed.mjs';
 import { normalizeGlobalSlang, senseId, safeGeneralText } from '../../../extensions/bigfatfish/slang-schema.mjs';
 // Execute the real bridge initialization/functions against temporary files and fake peers.
 // No production config, QQ connection, DSH process, or persistent home is accessed.
@@ -109,8 +112,10 @@ export async function bridgeHarness({ config = {}, savedState, files = {}, globa
     callUnary: async (method, params) => { calls.cancelled.push({ method, params }); return success({ accepted: true }); },
   };
   class FakeBot {
-    async sendPrivateMessage(id, text) { calls.sent.push({ kind: 'private', id, text }); }
-    async sendGroupMessage(id, text) { calls.sent.push({ kind: 'group', id, text }); }
+    // 真实网关会返回 message_id；夹具以前返回 undefined，导致"发送后拿不到 id、事后撤回不了"
+    // 这条路径在测试里永远走不到。这里按真实形状返回。
+    async sendPrivateMessage(id, text) { calls.sent.push({ kind: 'private', id, text }); return { message_id: 9000 + calls.sent.length }; }
+    async sendGroupMessage(id, text) { calls.sent.push({ kind: 'group', id, text }); return { message_id: 9000 + calls.sent.length }; }
     async getImage({ file }) {
       calls.images.push(file);
       // Valid 1 × 1 PNG, supplied entirely in memory by the fixture gateway.
@@ -167,6 +172,7 @@ export async function bridgeHarness({ config = {}, savedState, files = {}, globa
     scheduleProactiveCheckV2, acknowledgeMessagesV2,
     syncStickerLibrary, listStickersForV2, getStickerImageData,
     collectStickerV2, applyStickerNoteV2, reanalyzeSticker, startStickerReview, stickerReviewJob,
+    recordReactionNotice,
     refreshMode, modeAllowed, trackTurnEvent, replayPendingWakeReasonsV2,
     collectors, setupSleepTimerV2, recoverOrphanedWakesV2,
     getInitialPrompt, setInitialPrompt, loadInitialPrompts, formatInitialPromptV2,
@@ -208,6 +214,7 @@ export async function bridgeHarness({ config = {}, savedState, files = {}, globa
     SnowLumaWebSocketClient: FakeBot, text: (s) => s,
     discoverDshLaunchToken: () => '', unwrap, createTurnCollector,
     numberSetting, backupOnce, atomicJson, normalizeGlobalSlang, senseId, safeGeneralText,
+    migrateRetiredConfig, pluginIntegrationReport, installedPlugins, createPluginMoodFeed,
     ...markdown, ...sensitive, ...wait, ...safeFetch, ...forward, ...slang, ...sticker,
     ...modelPrices, ...tokenLedger, ...voiceLib, ...stateAcl, ...presetPrompt,
     // 桥接的出图出口会调归一化（体积/动图抽帧）：VM 里必须能拿到这几个函数。

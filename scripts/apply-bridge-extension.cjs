@@ -13,6 +13,12 @@ function once(source, before, after) {
   if (!source.includes(before) || source.indexOf(before) !== source.lastIndexOf(before)) throw new Error('Upstream patch anchor changed: ' + before.slice(0, 90));
   return source.replace(before, after);
 }
+// 用于"上游文字已被后续补丁改写过"的旧锚点：找不到就跳过，而不是让整个补丁链失败。
+// 只在锚点唯一出现时替换，保证重复执行结果完全一致（可重放）。
+function optionalOnce(source, before, after) {
+  if (!source.includes(before) || source.indexOf(before) !== source.lastIndexOf(before)) return source;
+  return source.replace(before, after);
+}
 function within(source, start, end, before, after) {
   const a = source.indexOf(start), b = source.indexOf(end, a + start.length);
   if (a < 0 || b < 0) throw new Error('Upstream function boundary changed');
@@ -160,10 +166,10 @@ change('src/bridge.js', s => {
           }`);
   return s;
 }, '// BigFatFish slang candidate admission v1');
-change('src/mcp-snowluma-safe.js', s => once(s,
+change('src/mcp-snowluma-safe.js', s => optionalOnce(s,
   '提交后进入候选库，管理员确认后会被写入黑话提示词，成为你后续可查询和使用的记忆。',
   '须达到管理页设置的不同真人消息条数才进入候选库；未达门槛返回 status=pending 和当前条数，不算已收录，也不要反复提交刷次数。管理员确认或满足自动确认策略后才会写入黑话提示词，成为你后续可查询和使用的记忆。'),
-  '未达门槛返回 status=pending');
+  'status=pending表示等待真实语料或研究');
 change('src/bridge.js', s => {
   const patch = JSON.parse(fs.readFileSync(path.join(root, 'extensions/bigfatfish/participation-bridge.patch.json'), 'utf8'));
   for (const { before, after } of patch.pairs) s = once(s, before, after);
@@ -736,6 +742,31 @@ change('src/mcp-snowluma-safe.js',s=>{
   s=once(s,'把你在群里经常看到但不确定含义/用法的陌生词、黑话、梗或网络表达提交给管理员筛选。须达到管理页设置的不同真人消息条数才进入候选库；未达门槛返回 status=pending 和当前条数，不算已收录，也不要反复提交刷次数。管理员确认或满足自动确认策略后才会写入黑话提示词，成为你后续可查询和使用的记忆。','把聊天中不确定含义的陌生词、黑话、梗或网络表达提交到自动研究队列。后台研究完成便直接加入统一公共黑话库，跨已允许会话使用；不需要管理员送审、打分或确认。status=pending表示等待真实语料或研究，不算已经学会，不要反复提交刷次数。个人信息和私人关系不进入公共库。');
   return once(s,'可选：你是在什么语境/哪条消息里看到的，帮助管理员判断','可选：表达出现的真实语境或消息编号，帮助后台自动研究');
 },'不需要管理员送审、打分或确认');
+// V4.2：删除上游那套"第二份记忆写入实现"。
+//
+// 为什么它是死代码（不是"暂时没用"）：
+//   `bff.handle()` 在 console 路由最前面被调用，且对
+//   `/api/socialV2/memory(-append|-update|-remove|-clear)` **一律 return true**（含错误分支），
+//   所以下面这四个上游路由永远拿不到请求；`appendMemoryV2()` 也只被其中一条路由调用。
+//   同一份记忆因此有两套写入实现，改错一份会"看起来没生效"——这是最容易骗人的冗余。
+//
+// 删除策略：整段切掉（锚点到锚点），并在文件顶部留下版本标记；锚点缺失时按"已清理"跳过，
+// 只有"起点在、终点不在"才报错，避免上游改动后静默留下半截代码。
+change('src/bridge.js', s => {
+  let out = s;
+  const routeStart = out.indexOf("        if (req.method === 'POST' && url.pathname === '/api/socialV2/memory-append') {");
+  const routeEnd = out.indexOf('        // ── 二代黑话学习（reserved2）：AI 查询/提交黑话候选');
+  if (routeStart >= 0 && routeEnd < 0) throw new Error('死代码边界变化：找到记忆路由起点却找不到黑话注释终点');
+  if (routeStart >= 0) out = out.slice(0, routeStart) + out.slice(routeEnd);
+  const fnStart = out.indexOf('  function appendMemoryV2(st, category, content, extra = {}) {');
+  if (fnStart >= 0) {
+    const fnEnd = out.indexOf('  loadSocialV2State();', fnStart);
+    if (fnEnd < 0) throw new Error('死代码边界变化：找到 appendMemoryV2 却找不到 loadSocialV2State() 终点');
+    out = out.slice(0, fnStart) + out.slice(fnEnd);
+  }
+  if (out === s && routeStart < 0 && fnStart < 0) return s;
+  return '// BigFatFish V4.2 dead memory routes removed\n' + out;
+}, '// BigFatFish V4.2 dead memory routes removed');
 const consoleScript = ['console-policy.js','console-memory.js','console-api-pool.js','console-v3.js','console-community.js'].map(name=>fs.readFileSync(path.join(root,'extensions/bigfatfish',name),'utf8')).join('\n');
 fs.writeFileSync(path.join(repo, 'public/console.html'), consoleTemplate.replace('<!--V3_SCRIPT-->', () => '<script>\n' + consoleScript + '\n</script>'));
 console.log('BigFatFish integration applied (pinned anchors, idempotent).');

@@ -30,7 +30,7 @@ export class StyleResolver {
     const resolved = this.resolve(key, st, { query, personaId, personaSignature, preview, expressionEnabled });
     const serious = ['help', 'technical'].includes(resolved.scene);
     const sceneInstruction = serious
-      ? `【正式回答要求】当前明确请求与事实准确性优先。需要讲解的问题先给结论，再按需要解释依据和步骤；简单问候、感慨或一句观点按原意简短回应，不自动扩写成建议、评价或人生道理。不清除当前角色的用词、态度和个性，不要求套统一的助手口吻。不受闲聊${this.app.settings.casualMaxChars}字目标限制。真实@的正式要求仅作用于待答消息${JSON.stringify(st.bigfatfish.assistantMessageIds || [])}，不扩大到同批普通话题或未@的后续聊天。\n`
+      ? `【正式回答要求】当前明确请求与事实准确性优先。先直接回答对方问的点，信息够用就停；求助或技术话题也不自动写成长篇说明。需要讲解时才补必要依据和步骤，明确要求详细时再充分展开。简单问候、感慨或一句观点简短接话，不自动扩写成建议、评价或人生道理。沿用当前角色的用词、态度和个性，使用自然短句和意群，不套统一助手口吻。本轮长度按问题本身需要，不套任何固定字数；闲聊的长度偏好不作用于这里。真实@的正式要求仅作用于待答消息${JSON.stringify(st.bigfatfish.assistantMessageIds || [])}，不扩大到同批普通话题或未@的后续聊天。\n`
       : this.app.casualInstruction();
     const data = { scene: resolved.scene, globalVersion: resolved.globalVersion, general: resolved.globalStyle.map(id => STRATEGIES[id]).filter(Boolean),
       features: resolved.learnedFeatures.map(f => STYLE_TRAITS[f.key][f.value]), expressions: resolved.selectedExpressions,

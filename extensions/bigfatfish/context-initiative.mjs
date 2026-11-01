@@ -4,7 +4,9 @@ import { createHash, randomUUID } from 'node:crypto';
 import { clockParts, quietAt } from './policies.mjs';
 
 export function initiativeSettings(value = {}) {
-  const p = { enabled: false, probability: 0.18, cooldownMinutes: 5, contextMinutes: 10, ...value };
+  // V4.2：`probability` 不再是"掷骰子命中率"。它只是一道闸门（>0 才允许上下文主动），
+  // 是否开口由 gate() 里的真实上下文条件决定（有无近期真人话题、有无待答、是否冷却、额度）。
+  const p = { enabled: false, probability: 1, cooldownMinutes: 5, contextMinutes: 10, ...value };
   if (typeof p.enabled !== 'boolean' || !Number.isFinite(p.probability) || p.probability < 0 || p.probability > 1) throw Error('随机主动开关或概率无效');
   for (const k of ['cooldownMinutes', 'contextMinutes']) if (!Number.isInteger(p[k]) || p[k] < 1 || p[k] > 120) throw Error('随机主动时间范围须为1至120分钟');
   return Object.fromEntries(['enabled', 'probability', 'cooldownMinutes', 'contextMinutes'].map(k => [k, p[k]]));
@@ -64,8 +66,11 @@ export class ContextInitiative {
     const s = this.state(st), reason = this.gate(key, st, now), batch = this.batch(st);
     if (reason || s.lastBatch === batch) return false;
     s.lastBatch = batch;
-    const selected = random() < this.app.settings.contextInitiative.probability;
-    const decision = { kind: 'contextInitiative', at: now, probability: this.app.settings.contextInitiative.probability, allowed: selected, reason: selected ? '随机命中，结合当前上下文分享' : '随机未命中' };
+    // 不再掷骰子：gate() 已经证明"有近期真人话题、没有待答消息、不在冷却、额度未用完"。
+    // probability 退化为开关闸门（0 = 关闭），避免旧配置里的 0.18 继续制造随机漏发。
+    if (!(this.app.settings.contextInitiative.probability > 0)) return false;
+    const selected = true;
+    const decision = { kind: 'contextInitiative', at: now, probability: this.app.settings.contextInitiative.probability, allowed: selected, reason: '上下文已具备开口条件' };
     st.bigfatfish.decisions = [...(st.bigfatfish.decisions || []), decision].slice(-30);
     if (!selected) return false;
     const id = randomUUID(), before = structuredClone(this.app.ledger);

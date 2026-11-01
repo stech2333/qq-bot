@@ -18,12 +18,14 @@ test('sticker URL equality ignores renewed query tokens without substring matchi
   assert.equal(findSticker(entries, 'https://example.invalid/a.png?token=new')?.id, 'a');
   assert.equal(findSticker(entries, 'https://evil.invalid/https://example.invalid/a.png?token=old'), null);
 });
-test('partial sticker refresh preserves learned records outside the fetched page', () => {
+test('sticker refresh never deletes locally learned records, partial or complete', () => {
   const entries = [{ id: 'a', source: 'qq' }, { id: 'b', source: 'qq', localNote: 'learned', useCount: 7 }];
   const result = mergeStickerLibrary(entries, [{ id: 'a', desc: 'new' }], { complete: false });
   assert.equal(result.length, 2);
   assert.equal(result.find((entry) => entry.id === 'b').localNote, 'learned');
-  assert.equal(mergeStickerLibrary(entries, [{ id: 'a' }]).length, 1);
+  // 完整刷新同样不该删：QQ 收藏列表读不全/为空是常态，删掉本地认知是不可逆的数据损失。
+  // 真正的"从 QQ 移除"需要显式的管理端操作，不由自动同步完成。
+  assert.equal(mergeStickerLibrary(entries, [{ id: 'a' }]).length, 2);
 });
 test('QQ newline splitting respects the stated per-message limit', () => {
   const text = 'abc\ndef\nghi';

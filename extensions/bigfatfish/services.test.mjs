@@ -61,12 +61,35 @@ test('local service addresses cannot redirect startup or credentials to a remote
   for (const address of ['http://example.com:3086', 'http://user:secret@localhost:3086', 'file:///etc/passwd']) assert.throws(() => localPort(address));
 });
 
-test('model services install public-only campus transport while preserving other Node options', t => {
+test('model services inject the campus preload and never trust NODE_OPTIONS from a project .env', t => {
   const { manager, root } = fixture(t);
-  fs.writeFileSync(path.join(root, '.env'), 'NODE_OPTIONS=--max-old-space-size=1024\n');
+  // 真实事故：项目根 .env 写 NODE_OPTIONS 会让 DSH 直接拒绝启动
+  // （"only the launching environment may set"），所以这里必须忽略它。
+  fs.writeFileSync(path.join(root, '.env'), 'NODE_OPTIONS=--max-old-space-size=1024\nFOO=bar\n');
   for (const name of ['dsh', 'bridge']) {
-    const value = manager.environment(name).NODE_OPTIONS;
-    assert.match(value, /--max-old-space-size=1024/); assert.match(value, /--import=file:.*model-network-preload\.mjs/);
+    const env = manager.environment(name);
+    assert.match(env.NODE_OPTIONS, /--import=file:.*model-network-preload\.mjs/);
+    assert.doesNotMatch(env.NODE_OPTIONS, /max-old-space-size/, '.env 里的 NODE_OPTIONS 必须被忽略');
+    assert.equal(env.FOO, 'bar', '普通变量仍然从项目 .env 读取');
+  }
+});
+
+test('launching-environment NODE_OPTIONS is preserved and DSH_HOME .env is layered in', t => {
+  const { manager, root } = fixture(t);
+  fs.mkdirSync(path.join(root, 'data-bridge'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'data-bridge', '.env'), 'NO_PROXY=127.0.0.1\nNODE_OPTIONS=--trace-warnings\n');
+  const previous = process.env.NODE_OPTIONS;
+  try {
+    manager.shouldRestore = undefined;
+    // 模拟"启动器自己导出了 NODE_OPTIONS"——这是 DSH 允许的唯一来源。
+    process.env.NODE_OPTIONS = '--enable-source-maps';
+    const env = manager.environment('dsh');
+    assert.match(env.NODE_OPTIONS, /--enable-source-maps/, '启动环境的 NODE_OPTIONS 必须保留');
+    assert.match(env.NODE_OPTIONS, /--import=file:.*model-network-preload\.mjs/);
+    assert.doesNotMatch(env.NODE_OPTIONS, /--trace-warnings/, 'DSH_HOME/.env 里的 NODE_OPTIONS 同样不可信');
+    assert.equal(env.NO_PROXY, '127.0.0.1', 'NO_PROXY 这类启动环境变量应来自 DSH_HOME/.env');
+  } finally {
+    if (previous === undefined) delete process.env.NODE_OPTIONS; else process.env.NODE_OPTIONS = previous;
   }
 });
 test('gateway startup uses bundled Node and enables discovery without changing saved runtime preferences', async t => {

@@ -22,7 +22,7 @@ function fixture(t) {
   };
   return { app, states, feed };
 }
-test('ordinary repeated discussion researches a new topic without preset keywords, then joins at 60 percent', async t => {
+test('ordinary repeated discussion researches a new topic without preset keywords, then joins on evidence', async t => {
   const f = fixture(t), st = f.states.get(KEY);
   texts.slice(0, 4).forEach((text, i) => f.feed(text, i)); assert.equal(f.app.discussions.snapshot(st.bigfatfish).active.length, 0);
   f.feed(texts[4], 4);
@@ -31,7 +31,10 @@ test('ordinary repeated discussion researches a new topic without preset keyword
   const topic = f.app.discussions.snapshot(st.bigfatfish).active.find(t => t.topic === '三角洲');
   assert.equal(topic.messages, 5); assert.equal(topic.participants, 2); assert.equal(topic.origin, 'discussion');
   assert.equal(f.app.settings.interests.length, 0, 'learned words stay scoped to their conversation');
-  const joined = f.feed('三角洲还有新地图', 6, { random: () => 0.5 }); assert.equal(joined.reason, 'interest'); assert.equal(joined.probability, 0.6);
+  // V4.2：学到的话题提供"兴趣证据"，抽稀概率用 ambientJoinProbability（旧的 idleProbability 迁移而来）。
+  const joined = f.feed('三角洲还有新地图', 6, { random: () => 0.1 });
+  assert.equal(joined.reason, 'interest'); assert.equal(joined.probability, f.app.settings.participation.ambientJoinProbability);
+  assert.equal(joined.selected, true);
   assert.equal(f.feed('三角洲还有新地图', 7, { key: OTHER, random: () => 0.5 }).selected, false);
   assert.ok(f.app.interestMemory.active(normalizeState(JSON.parse(JSON.stringify(st.bigfatfish)))) .some(t => t.topic === '三角洲'));
 });

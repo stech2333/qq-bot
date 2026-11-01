@@ -1938,10 +1938,11 @@ button:active:not(:disabled) {
         <label class="v2-tool-item"><input type="checkbox" data-v2-tool="listStickers"> <span><b>qq_list_stickers</b><span class="meta">查看/搜索 QQ 收藏表情（含备注和本地笔记）</span></span></label>
         <label class="v2-tool-item"><input type="checkbox" data-v2-tool="getStickerImage"> <span><b>qq_get_sticker_image</b><span class="meta">看图理解没有备注的收藏表情</span></span></label>
         <label class="v2-tool-item"><input type="checkbox" data-v2-tool="sendSticker"> <span><b>qq_send_sticker</b><span class="meta">发送收藏表情（一条消息只能一张，不能带文字）</span></span></label>
-        <label class="v2-tool-item"><input type="checkbox" data-v2-tool="collectSticker"> <span><b>qq_collect_sticker</b><span class="meta">AI 偶尔收藏别人发的表情并写简短备注</span></span></label>
+        <label class="v2-tool-item"><input type="checkbox" data-v2-tool="collectSticker"> <span><b>qq_collect_sticker</b><span class="meta">先识图理解，再收藏并保存本地用途</span></span></label>
         <label class="v2-tool-item"><input type="checkbox" data-v2-tool="getSelfImage"> <span><b>qq_get_self_image</b><span class="meta">查看自己的默认 Q 版形象图片</span></span></label>
         <label class="v2-tool-item"><input type="checkbox" data-v2-tool="stickerNote"> <span><b>qq_sticker_note</b><span class="meta">给表情记录本地含义/标签/用法</span></span></label>
         <label class="v2-tool-item"><input type="checkbox" data-v2-tool="setStickerRemark"> <span><b>qq_set_sticker_remark</b><span class="meta">修改 QQ 官方表情备注（默认禁用，慎用）</span></span></label>
+        <label class="v2-tool-item"><input type="checkbox" data-v2-tool="react"> <span><b>qq_react</b><span class="meta">给群消息加 QQ 表情回应，不必发一条文字（仅群聊；默认禁用，确认网关支持后再开）</span></span></label>
         <label class="v2-tool-item"><input type="checkbox" data-v2-tool="sendVoice"> <span><b>qq_send_voice / qq_list_voices</b><span class="meta">发送语音条（只能发语音库里的音频；偶然而为的强表达）</span></span></label>
       </div>
       <div class="meta" style="margin-top:6px">二代黑话学习：AI 可用 <code>qq_slang_submit</code> 提交陌生词，也可由桥接自动提取；系统自动核验词义、来源和作用域，达标后自动写入统一知识库；不需要管理员送研究或手动确认。</div>
@@ -2081,7 +2082,7 @@ button:active:not(:disabled) {
         <label style="flex:1">列表最大返回数</label><input type="number" id="v2StickerMaxList" min="1" max="500" style="width:90px">
       </div>
       <div class="row">
-        <label style="flex:1">提示中列出常用表情数</label><input type="number" id="v2StickerPromptMax" min="1" max="30" style="width:90px">
+        <label style="flex:1">提示中列出适配候选数</label><input type="number" id="v2StickerPromptMax" min="0" max="30" style="width:90px">
         <label style="flex:1">在 prompt/唤醒里附带表情摘要</label><input type="checkbox" id="v2StickerIncludePrompt" style="width:auto">
         <span class="meta" style="flex:2">关闭后 AI 仍可主动调用 qq_list_stickers，只是不主动喂到上下文。</span>
       </div>
@@ -2092,10 +2093,17 @@ button:active:not(:disabled) {
       </div>
       <div class="row">
         <label style="flex:1">收藏备注最大字数</label><input type="number" id="v2StickerCollectRemarkMax" min="1" max="50" style="width:80px">
-        <span class="meta" style="flex:2">AI 收藏别人表情时写的简短备注长度上限。</span>
+        <span class="meta" style="flex:2">仅保存简短收藏备注；修改QQ官方备注仍需独立权限。</span>
       </div>
 
       </div></details>
+<details class="settings-group" id="stickerManager"><summary>表情包认知与使用管理</summary><div class="settings-content">
+  <p>先看懂用途，再按语境使用。旧收藏默认待理解；识图仅在收藏或手动整理时调用当前模型，最多每小时20张。管理员备注受保护。QQ原始备注保持独立管理。</p>
+  <div class="row"><input id="stickerQuery" placeholder="搜索备注、含义或标签"><button type="button" id="stickerRefresh">刷新列表</button><button type="button" id="stickerSync">同步收藏</button><button type="button" id="stickerBatch">补充理解待确认表情（最多5张）</button><button type="button" id="stickerCancel">取消整理</button></div>
+  <p id="stickerNotice" role="status"></p><p id="stickerStats"></p><p id="stickerProgress"></p>
+  <div id="stickerRecovery"></div><details><summary>最近使用诊断（仅场景、ID与结果）</summary><pre id="stickerDecisions" style="white-space:pre-wrap"></pre></details>
+  <div id="stickerCards"></div><div class="row"><button type="button" id="stickerPrev">上一页</button><span id="stickerPage"></span><button type="button" id="stickerNext">下一页</button></div>
+</div></details>
 <details class="settings-group"><summary>上下文参数（recent / unread / contextWindow）</summary><div class="settings-content">
       <div class="row">
         <label style="flex:1">最近消息上限</label><input type="number" id="v2ContextRecentLimit" min="1" style="width:80px">
@@ -3085,7 +3093,7 @@ async function loadV2Config() {
     document.getElementById('v2StickerEnabled').checked = stk.enabled !== false;
     document.getElementById('v2StickerSyncTtlSec').value = Math.round((stk.syncTtlMs || 60000) / 1000);
     document.getElementById('v2StickerMaxList').value = stk.maxListCount ?? 100;
-    document.getElementById('v2StickerPromptMax').value = stk.promptMaxStickers ?? 8;
+    document.getElementById('v2StickerPromptMax').value = stk.promptMaxStickers ?? 0;
     document.getElementById('v2StickerIncludePrompt').checked = stk.includeInPrompt !== false;
     const stkCollect = stk.collect || {};
     document.getElementById('v2StickerCollectEnabled').checked = stkCollect.enabled !== false;
@@ -3166,7 +3174,7 @@ async function saveV2Config() {
       syncTtlMs: Math.max(1000, Math.round(Number(document.getElementById('v2StickerSyncTtlSec').value) || 60) * 1000),
       maxListCount: Math.min(500, Math.max(1, Math.round(Number(document.getElementById('v2StickerMaxList').value) || 100))),
       includeInPrompt: document.getElementById('v2StickerIncludePrompt').checked,
-      promptMaxStickers: Math.min(30, Math.max(1, Math.round(Number(document.getElementById('v2StickerPromptMax').value) || 8))),
+      promptMaxStickers: Math.min(30, Math.max(0, Math.round(Number(document.getElementById('v2StickerPromptMax').value) || 0))),
       collect: {
         enabled: document.getElementById('v2StickerCollectEnabled').checked,
         maxPerMinute: Math.max(0, Math.round(Number(document.getElementById('v2StickerCollectPerMin').value) || 0)),

@@ -75,7 +75,7 @@ test('log DOM omits null labels while retaining explicit false',()=>{
   class Node {constructor(){this.children=[];this.value='';}set textContent(v){this.value=v;}get textContent(){return this.value+this.children.map(n=>n.textContent).join('');}append(...nodes){this.children.push(...nodes);}replaceChildren(){this.children=[];}}
   const box=new Node(),source=fs.readFileSync(new URL('./console-community.js',import.meta.url),'utf8');
   const fn=source.slice(source.indexOf('  function renderLogs('),source.indexOf('  function fillSource('));
-  const context=vm.createContext({logRows:[],states:{},el:()=>box,safeBiliUrl:()=>'',document:{createElement:()=>new Node()},line:(b,t)=>{const n=new Node();n.textContent=t;b.append(n);return n;}});
+  const context=vm.createContext({logRows:[],states:{},el:()=>box,safeBiliUrl:()=>'',safeCommunityUrl:()=>'',document:{createElement:()=>new Node()},line:(b,t)=>{const n=new Node();n.textContent=t;b.append(n);return n;}});
   vm.runInContext(fn+';renderLogs([{id:1,at:1,level:"warn",message:"fixture",data:{validJson:null,complete:false,checkpointSaved:null}}]);',context);
   assert.doesNotMatch(box.textContent,/JSON有效|检查点已保存|:null/);assert.match(box.textContent,/完整读取:false/);
 });

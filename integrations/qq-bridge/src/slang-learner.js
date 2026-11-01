@@ -86,7 +86,11 @@ export function normalizeSlangEntry(raw) {
         sources: Array.isArray(entry.research.result.sources) ? entry.research.result.sources.map(s => clip(s, 300)).slice(0, 10) : []
       } : undefined,
       at: Number(entry.research.at) || 0, nextAt: Number(entry.research.nextAt) || 0, confidence: Number(entry.research.confidence) || 0,
-      reason: clip(entry.research.reason, 160), fingerprint: clip(entry.research.fingerprint, 500)
+      reason: clip(entry.research.reason, 160), fingerprint: clip(entry.research.fingerprint, 500),
+      // 发布状态必须持久化。learning-research 在"已写入统一公共库"时会写 publication='published'，
+      // 但这里过去按白名单重建 research，会把它丢掉 —— 结果条目 status=confirmed（由统一库按
+      // 已发布释义反推）却没有 publication，审计上分不清"研究确认"和"真的已发布"。
+      publication: entry.research.publication === 'published' ? 'published' : undefined
     } : undefined,
     status,
     source: entry.source === 'manual' ? 'manual' : 'ai',

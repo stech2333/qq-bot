@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { BigFatFish, normalizeState, validateSettings } from './runtime.mjs';
+import { BigFatFish, normalizeState, validateSettings, retiredSettingsPresent } from './runtime.mjs';
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bff-'));
   t.after(() => { assert.equal(path.dirname(root), os.tmpdir()); assert.ok(path.basename(root).startsWith('bff-')); fs.rmSync(root, { recursive: true, force: true }); });
@@ -106,7 +106,11 @@ test('casual length is advisory; content, privacy and silence handling are prese
   assert.throws(() => app.prepareMessages('group:123456', ['C:\\private\\secret.txt']));
 });
 test('invalid settings and missing independent voice fail explicitly', async t => {
-  const { app } = fixture(t); assert.throws(() => validateSettings({ casualMaxChars: -1 }));
+  const { app } = fixture(t);
+  // V4.2: 闲聊字数目标已弃用；旧磁盘设置必须被丢弃，不能重新进入生效设置。
+  assert.equal(Object.hasOwn(validateSettings({ casualMaxChars: 25 }), 'casualMaxChars'), false);
+  assert.equal(retiredSettingsPresent({ casualMaxChars: 25 }), true);
+  assert.throws(() => validateSettings({ replyDelivery: 'block' }));
   assert.equal(app.voiceStatus().installed, false); await assert.rejects(() => app.openVoice(), /未安装/);
   assert.equal(normalizeState({ facts: Array(500).fill({ text: 'a' }) }).facts.length, 200);
 });

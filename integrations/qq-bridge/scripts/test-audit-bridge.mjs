@@ -130,7 +130,9 @@ await test('malformed HTTP request targets return 400 without hanging', async (h
     },
   } });
   try {
-    await h.sendStickerV2('group:123456', 'fixture-sticker');
+    // agent:false 走非模型通道：本节只验证"发的是校验后的字节而不是 URL"，
+    // 表情语义闸门由 stickers.test.mjs / directed-chat.test.mjs 覆盖。
+    await h.sendStickerV2('group:123456', 'fixture-sticker', { agent: false });
     assert.equal(body.message.find((part) => part.type === 'image').data.file, 'base64://' + image.toString('base64'));
     console.log('PASS sticker sending gives OneBot validated bytes, never a URL to refetch');
   } catch (error) { failures++; console.error('FAIL safe sticker sending:', error.message); }

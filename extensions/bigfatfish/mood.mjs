@@ -59,7 +59,9 @@ export class MoodManager {
     const [kind, target] = key.split(':'), field = kind === 'group' ? 'groups' : 'private';
     return (this.app.config.allow?.[field] || []).map(String).includes(target) && !(this.app.config.deny?.[field] || []).map(String).includes(target);
   }
-  active(key, st) { const m = this.bind(st); return this.app.config.socialV2?.enabled !== false && this.allowed(key) && m.config.enabled && m.config.autoJudge && st.bigfatfish.memoryControl?.accumulation !== false; }
+  // 插件优先：装了 dsh-feiyu-mood 之后，心情的判定/持久化/注入全部归插件；
+  // 本模块只保留历史数据与后台查看（view），不再 active/hint，避免两套心情互相覆盖。
+  active(key, st) { if (this.delegated) return false; const m = this.bind(st); return this.app.config.socialV2?.enabled !== false && this.allowed(key) && m.config.enabled && m.config.autoJudge && st.bigfatfish.memoryControl?.accumulation !== false; }
   view(key, st, now = Date.now()) {
     const m = this.bind(st), current = moodAt(m, now);
     const status = !m.config.enabled ? '已关闭' : !this.allowed(key) ? '参与已停用，暂停判断'
@@ -72,6 +74,7 @@ export class MoodManager {
       pending: this.pending.has(key), error: this.error, preview: this.hint(st, { stage: false }) };
   }
   hint(st, { stage = true } = {}) {
+    if (this.delegated) return ''; // 心情提示由插件负责；本地再注入一份就是双注入
     const m = this.bind(st), p = m.config;
     if (!p.enabled || p.injectMode === 'off' || !m.significant || m.confidence < p.minConfidence || !m.updateId || m.updateId === m.injectedId
       || st.bigfatfish.memoryControl?.personalization === false || st.bigfatfish.mode === 'ASSISTANT') return '';

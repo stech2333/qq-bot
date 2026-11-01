@@ -1942,6 +1942,7 @@ button:active:not(:disabled) {
         <label class="v2-tool-item"><input type="checkbox" data-v2-tool="getSelfImage"> <span><b>qq_get_self_image</b><span class="meta">查看自己的默认 Q 版形象图片</span></span></label>
         <label class="v2-tool-item"><input type="checkbox" data-v2-tool="stickerNote"> <span><b>qq_sticker_note</b><span class="meta">给表情记录本地含义/标签/用法</span></span></label>
         <label class="v2-tool-item"><input type="checkbox" data-v2-tool="setStickerRemark"> <span><b>qq_set_sticker_remark</b><span class="meta">修改 QQ 官方表情备注（默认禁用，慎用）</span></span></label>
+        <label class="v2-tool-item"><input type="checkbox" data-v2-tool="react"> <span><b>qq_react</b><span class="meta">给群消息加 QQ 表情回应，不必发一条文字（仅群聊；默认禁用，确认网关支持后再开）</span></span></label>
         <label class="v2-tool-item"><input type="checkbox" data-v2-tool="sendVoice"> <span><b>qq_send_voice / qq_list_voices</b><span class="meta">发送语音条（只能发语音库里的音频；偶然而为的强表达）</span></span></label>
       </div>
       <div class="meta" style="margin-top:6px">二代黑话学习：AI 可用 <code>qq_slang_submit</code> 提交陌生词，也可由桥接自动提取；系统自动核验词义、来源和作用域，达标后自动写入统一知识库；不需要管理员送研究或手动确认。</div>
@@ -2081,7 +2082,7 @@ button:active:not(:disabled) {
         <label style="flex:1">列表最大返回数</label><input type="number" id="v2StickerMaxList" min="1" max="500" style="width:90px">
       </div>
       <div class="row">
-        <label style="flex:1">提示中列出适配候选数</label><input type="number" id="v2StickerPromptMax" min="1" max="30" style="width:90px">
+        <label style="flex:1">提示中列出适配候选数</label><input type="number" id="v2StickerPromptMax" min="0" max="30" style="width:90px">
         <label style="flex:1">在 prompt/唤醒里附带表情摘要</label><input type="checkbox" id="v2StickerIncludePrompt" style="width:auto">
         <span class="meta" style="flex:2">关闭后 AI 仍可主动调用 qq_list_stickers，只是不主动喂到上下文。</span>
       </div>
@@ -3092,7 +3093,7 @@ async function loadV2Config() {
     document.getElementById('v2StickerEnabled').checked = stk.enabled !== false;
     document.getElementById('v2StickerSyncTtlSec').value = Math.round((stk.syncTtlMs || 60000) / 1000);
     document.getElementById('v2StickerMaxList').value = stk.maxListCount ?? 100;
-    document.getElementById('v2StickerPromptMax').value = stk.promptMaxStickers ?? 8;
+    document.getElementById('v2StickerPromptMax').value = stk.promptMaxStickers ?? 0;
     document.getElementById('v2StickerIncludePrompt').checked = stk.includeInPrompt !== false;
     const stkCollect = stk.collect || {};
     document.getElementById('v2StickerCollectEnabled').checked = stkCollect.enabled !== false;
@@ -3173,7 +3174,7 @@ async function saveV2Config() {
       syncTtlMs: Math.max(1000, Math.round(Number(document.getElementById('v2StickerSyncTtlSec').value) || 60) * 1000),
       maxListCount: Math.min(500, Math.max(1, Math.round(Number(document.getElementById('v2StickerMaxList').value) || 100))),
       includeInPrompt: document.getElementById('v2StickerIncludePrompt').checked,
-      promptMaxStickers: Math.min(30, Math.max(1, Math.round(Number(document.getElementById('v2StickerPromptMax').value) || 8))),
+      promptMaxStickers: Math.min(30, Math.max(0, Math.round(Number(document.getElementById('v2StickerPromptMax').value) || 0))),
       collect: {
         enabled: document.getElementById('v2StickerCollectEnabled').checked,
         maxPerMinute: Math.max(0, Math.round(Number(document.getElementById('v2StickerCollectPerMin').value) || 0)),
@@ -4384,7 +4385,7 @@ setInterval(() => { if (currentConsolePage !== 'usage') return; refreshUsage(); 
   <h3>启用群聊 / 私聊</h3><p>启用只控制机器人参与范围，不会自动加入群或添加好友。</p>
   <form id="bfAccess"><select name="kind"><option value="group">QQ群</option><option value="private">个人QQ</option></select> <select name="target" required aria-label="选择群聊或好友"><option value="">读取群聊与好友列表…</option></select><button type="button" id="bfContactsRefresh">刷新列表</button> <button name="enable" value="yes">启用</button> <button name="enable" value="no">停用</button></form><div id="bfPeers"></div>
   <h3>人格与行为</h3><p>人格正文在原控制台“人格与角色”编辑；这里修改闲聊与冷场开场策略。</p>
-  <form id="bfSettings"><label>闲聊简练字数参考（不作为拆条门槛） <input name="casualMaxChars" type="number" min="5" max="200"></label> <span>真实 @ 优先回应；明确求助按完整准确的方式回答，其余沿用当前人格。</span><p><label>人工补充话题（逗号分隔，可留空）<input name="interests" style="width:70%"></label></p>
+  <form id="bfSettings"><span>聊天长度由角色卡和当前内容决定，这里不再提供字数目标；真实 @ 与明确求助优先，其余沿用当前人格。</span><p><label>人工补充话题（逗号分隔，可留空）<input name="interests" style="width:70%"></label></p>
   <p><label><input name="dryRun" type="checkbox">冷场主动仅演练</label> <label>安静分钟 <input name="minIdleMinutes" type="number" min="1" max="10080"></label> <label>冷却分钟 <input name="cooldownMinutes" type="number" min="1" max="10080"></label> <label>每日上限 <input name="dailyCap" type="number" min="0" max="20"></label></p>
   <p><label>静默开始 <input name="quietStart" type="number" min="0" max="23"></label> <label>静默结束 <input name="quietEnd" type="number" min="0" max="23"></label>（北京时间，冷场与随机主动共用）</p><p><label>明确称呼（逗号分隔，命中必触发并要求回应）<input name="participationAliases" style="width:90%"></label></p><p>自动统计各会话反复讨论的词组，达到门槛后加入该会话的话题兴趣；再涉及这些话题时按话题概率接话，不再根据预设兴趣词算分。明确找其他群友时不使用话题加成；普通无关消息仍按退火规则处理。多条消息可能合并回应。</p><p>随机主动只在未安排正常回复的群聊合并轮次中抽取一次，依据最近上下文主动分享；已有明确待答消息时不触发。忙碌、离线、静默或限频时跳过，概率命中也不要求硬凑内容。沿用主动小时、全局每日及推理额度；不受冷场演练和45分钟冷场门槛限制。</p><div id="bfPolicyFields"></div><button>保存，即时生效</button></form>
   <h3>长期记忆</h3><select id="bfMemoryKey"></select> <button id="bfMemoryLoad">加载</button> <input id="bfMemoryQuery" placeholder="搜索长期事实"> <button id="bfMemorySearch">搜索</button>
@@ -4422,12 +4423,56 @@ setInterval(() => { if (currentConsolePage !== 'usage') return; refreshUsage(); 
     const b = document.createElement('button'); b.type = 'button'; b.textContent = label;
     b.onclick = () => { setConsolePage(page, { focus: true, target }); run(refresh); if (page === 'persona') run(refreshPersonas); if (page === 'operations') run(refreshServices); }; quick.append(b);
   }
-  const accessActions = document.createElement('div'); accessActions.className = 'row';
-  for (const [kind, title] of [['group', '添加群聊'], ['private', '添加私聊']]) {
+  const accessActions = document.createElement('div'); accessActions.className = 'row';  for (const [kind, title] of [['group', '添加群聊'], ['private', '添加私聊']]) {
     const b = document.createElement('button'); b.type = 'button'; b.textContent = title;
     b.onclick = () => { el('bfAccess').elements.kind.value = kind; el('bfAccess').elements.kind.dispatchEvent(new Event('change')); el('bfAccess').elements.target.focus(); }; accessActions.append(b);
   }
   peers.querySelector('h2').after(accessActions);
+  // V4.2：把"这个功能到底由谁负责"变成管理端可见的事实，而不是散落在文档里。
+  const integration = document.createElement('section'); integration.id = 'section-bff-integration';
+  integration.innerHTML = '<h3>插件整合与功能所有权</h3><p class="meta">显示每个候选插件是否安装、最终主实现是谁、以及仍然存在的重复实现。插件"是否已加载"只能由 DSH 启动日志确认，这里不会猜。</p><div id="bfIntegrationRows"></div>';
+  panel.append(integration);
+  const renderIntegration = data => {
+    const box = el('bfIntegrationRows'); if (!box) return; box.replaceChildren();
+    // 先显示"已经交给插件"的项：这才是当前的实际分工。
+    for (const d of data.delegations || []) {
+      const row = document.createElement('p');
+      row.textContent = `✅ 已由插件接管 · ${d.feature} → ${d.plugin}（${d.resolution}）：${d.localSwitch}`;
+      box.append(row);
+    }
+    // 再显示冲突：这是"装上去之后真的会出事"的部分。
+    for (const c of data.conflicts || []) {
+      const row = document.createElement('p');
+      row.textContent = `${c.status === 'latent' ? '⚠️ 潜伏冲突' : '❌ 冲突'}（${c.severity}）· ${c.plugin} ↔ ${c.feature}：${c.failureMode}`
+        + (c.status === 'latent' ? '（当前仍在试运行，只记账不开回合）' : '')
+        + (c.localSwitch ? `处理：${c.localSwitch}` : '');
+      box.append(row);
+    }
+    if (!(data.conflicts || []).length && !(data.delegations || []).length) {
+      const row = document.createElement('p'); row.textContent = '当前没有启用的冲突插件。';
+      box.append(row);
+    }
+    for (const p of data.plugins || []) {
+      const row = document.createElement('p');
+      row.textContent = `${p.feature}：插件 ${p.id}@${p.version}（提交 ${String(p.commit).slice(0, 8)}）`
+        + `；安装=${p.installed ? '是' : '否'}；启用=${p.enabled ? '是' : '否'}`
+        + `；加载=${p.loaded === 'unverified' ? '未验证' : p.loaded}`
+        + `；最终主实现 ${p.owner}；结论 ${p.decision}`;
+      box.append(row);
+    }
+    for (const o of data.ownership || []) {
+      const row = document.createElement('p'); row.className = 'meta';
+      row.textContent = `所有权 · ${o.feature} → ${o.owner}`;
+      box.append(row);
+    }
+    for (const d of data.duplicates || []) {
+      const row = document.createElement('p'); row.className = 'meta';
+      row.textContent = `仍需注意 · ${d.area}：${d.detail}`;
+      box.append(row);
+    }
+  };
+  if (el('bfIntegrationRows')) run(async () => { try { renderIntegration(await call('/api/bigfatfish/plugin-integration', 'GET')); } catch { /* 读不到就不显示，不阻塞其它面板 */ } });
+
   // Use the native create/update events and role files, with a clear entry in the persona list.
   const addRole = document.createElement('button'); addRole.type = 'button'; addRole.id = 'bfAddRole'; addRole.textContent = '＋ 新增人格';
   const revealRoleEditor = () => { const input = el('newRoleName'); const details = input.closest('details'); if (details) details.open = true; input.scrollIntoView({ block: 'center' }); input.focus(); };
@@ -4458,9 +4503,9 @@ setInterval(() => { if (currentConsolePage !== 'usage') return; refreshUsage(); 
     @media(max-width:650px){#bfAccess{grid-template-columns:1fr}#bfSlangFields{grid-template-columns:1fr}}
   `; document.head.append(style);
   const fields = {
-    participation: { title: '接话与退火', enabled: ['启用动态接话', 'checkbox'], requireDirected: ['群聊确认在跟机器人说话才回答', 'checkbox'], quoteReplies: ['群聊允许引用原消息', 'checkbox'], idleProbability: ['旁观接话概率', 0, 1, 0.05], interestProbability: ['兴趣话题接话概率下限', 0, 1, 0.05], engagedProbability: ['参与中接话概率', 0, 1, 0.05], floorProbability: ['退出后接话概率', 0, 1, 0.01], halfLifeMessages: ['无关消息减半条数', 1, 20], halfLifeSeconds: ['热度减半秒数', 10, 3600], exitSeconds: ['退出秒数', 30, 7200], followUpSeconds: ['追问识别秒数', 10, 600], maxOffTopicMessages: ['退出前无关消息条数', 2, 40], directBatchMs: ['直接找它合批毫秒', 100, 3000], engagedBatchMs: ['参与中合批毫秒', 100, 5000], ambientBatchMs: ['旁观合批毫秒', 100, 10000] },
+    participation: { title: '接话与退火', enabled: ['启用动态接话', 'checkbox'], requireDirected: ['群聊确认在跟机器人说话才回答', 'checkbox'], quoteReplies: ['群聊允许引用原消息', 'checkbox'], ambientJoinProbability: ['没人点名时按证据插话的抽稀概率', 0, 1, 0.05], halfLifeMessages: ['无关消息减半条数', 1, 20], halfLifeSeconds: ['热度减半秒数', 10, 3600], exitSeconds: ['退出秒数', 30, 7200], followUpSeconds: ['追问识别秒数', 10, 600], maxOffTopicMessages: ['退出前无关消息条数', 2, 40], directBatchMs: ['直接找它合批毫秒', 100, 3000], engagedBatchMs: ['参与中合批毫秒', 100, 5000], ambientBatchMs: ['旁观合批毫秒', 100, 10000] },
     interestPolicy: { title: '话题参与', enabled: ['使用学到的话题参与聊天', 'checkbox'] },
-    contextInitiative: { title: '聊天中随机主动（正常回复优先，每批只抽一次）', enabled: ['启用上下文随机主动，仅群聊', 'checkbox'], probability: ['主动发言概率', 0, 1, 0.01], cooldownMinutes: ['两次主动尝试至少间隔分钟', 1, 120], contextMinutes: ['使用最近多少分钟的上下文', 1, 120] },
+    contextInitiative: { title: '聊天中主动（正常回复优先，由上下文决定是否开口）', enabled: ['启用上下文主动，仅群聊', 'checkbox'], probability: ['开口闸门（0=关闭，>0=由上下文决定）', 0, 1, 0.01], cooldownMinutes: ['两次主动尝试至少间隔分钟', 1, 120], contextMinutes: ['使用最近多少分钟的上下文', 1, 120] },
     topicLearning: { title: '自动发现聊天多的话题', enabled: ['启用自动话题学习', 'checkbox'], autoResearch: ['达标后自动研究话题', 'checkbox'], autoConfirm: ['研究通过后自动加入本群话题库', 'checkbox'], lookbackHours: ['统计近多少小时', 1, 720], minMessages: ['多人研究至少消息数', 3, 20], minSpeakers: ['至少讨论人数', 2, 10], soloMinMessages: ['单人研究至少消息数', 3, 20], retentionDays: ['话题多久未提及后停用（天）', 1, 365], maxTopics: ['每会话最多使用话题数', 1, 30], sampleLimit: ['话题统计消息上限', 50, 50000] },
     learningWindow: { title: '独立滚动学习记录（不占聊天上下文）', maxMessages: ['每群最多保留消息数', 200, 50000] },
     learningResearch: { title: '话题、风格、黑话自动研究', enabled: ['启用自动研究', 'checkbox'], minConfidence: ['研究确认最低置信度', 0.5, 1, 0.05], maxPerDay: ['每日最多研究次数', 0, 200], intervalMinutes: ['研究检查间隔（分钟）', 1, 1440], retryMinutes: ['研究重试间隔（分钟）', 1, 10080] },
@@ -4496,7 +4541,6 @@ setInterval(() => { if (currentConsolePage !== 'usage') return; refreshUsage(); 
     if (!settingsDirty) {
     for(const[group,spec]of Object.entries(fields))for(const key of Object.keys(spec)){if(key==='title')continue;const input=form.elements[group+'_'+key];input[input.type==='checkbox'?'checked':'value']=settings[group][key]}
     form.elements.weekdays.value=settings.schedule.weekdays.join(',');
-    form.elements.casualMaxChars.value = settings.casualMaxChars;
     form.elements.interests.value = settings.interests.join('，');
     form.elements.participationAliases.value = settings.participation.aliases.join('，');
     for (const [key, value] of Object.entries(settings.coldStart)) form.elements[key][key === 'dryRun' ? 'checked' : 'value'] = value;
@@ -4554,7 +4598,7 @@ setInterval(() => { if (currentConsolePage !== 'usage') return; refreshUsage(); 
   el('bfTopicScan').onclick = () => run(async () => { await call('/api/bigfatfish/topics', 'POST', { action: 'scan' }); await refresh(); notice('已从各会话现有聊天中更新话题，未发送聊天消息'); });
   el('bfAccess').onsubmit = event => { event.preventDefault(); const form = event.target; run(async () => { await call('/api/bigfatfish/access', 'POST', { kind: form.elements.kind.value, target: form.elements.target.value.trim(), enabled: event.submitter?.value !== 'no' }); notice('参与范围已保存，立即生效'); await refresh(); await refreshWhitelist(); }); };
   el('bfSettings').onsubmit = event => { event.preventDefault(); const f=event.target.elements; run(async()=>{
-    const body={...currentSettings,casualMaxChars:Number(f.casualMaxChars.value),privateAssistant:false,interests:f.interests.value.split(/[,，]/).map(x=>x.trim()).filter(Boolean),coldStart:{dryRun:f.dryRun.checked},interestWeights:{...currentSettings.interestWeights}};
+    const body={...currentSettings,privateAssistant:false,interests:f.interests.value.split(/[,，]/).map(x=>x.trim()).filter(Boolean),coldStart:{dryRun:f.dryRun.checked},interestWeights:{...currentSettings.interestWeights}};
     for(const key of ['minIdleMinutes','cooldownMinutes','dailyCap','quietStart','quietEnd'])body.coldStart[key]=Number(f[key].value);
     for(const[group,spec]of Object.entries(fields)){body[group]={...currentSettings[group]};for(const key of Object.keys(spec)){if(key==='title')continue;const input=f[group+'_'+key];body[group][key]=input.type==='checkbox'?input.checked:input.type==='text'?input.value:Number(input.value)}}
     body.schedule.weekdays=f.weekdays.value.split(/[,，]/).map(Number);
@@ -4925,6 +4969,86 @@ setInterval(() => { if (currentConsolePage !== 'usage') return; refreshUsage(); 
   featureIndex.push({page:'bff-global-style',label:'全局风格 自动学习 版本 回滚',target:card});const initial=window.bffInitialHash||'overview';setConsolePage(initial,{updateHash:false});if(initial==='models'||initial==='model-pool')document.querySelector('[data-subpage="model-pool"]').click();if(initial==='bff-global-style')run(loadStyle);
 })();
 
+// BigFatFish V4.1 sticker semantics management
+(() => {
+  const $ = id => document.getElementById(id);
+  let view, offset = 0, busy = false, previewObserver;
+  const states = { reviewed: '已确认', unreviewed: '待理解', uncertain: '有歧义', disabled: '已禁用' };
+  const list = value => String(value || '').split(/[,，\n]+/).map(s => s.trim()).filter(Boolean);
+  const request = async (path, body) => { const r = await api(path, body ? 'POST' : 'GET', body); if (r.ok === false) throw Error(r.error || '操作未完成'); return r; };
+  async function run(fn) { if (busy) return; busy = true; try { await fn(); } catch (e) { $('stickerNotice').textContent = e.message; } finally { busy = false; } }
+  function diagnostics(r) {
+    const d = r.diagnostics || {};
+    $('stickerStats').textContent = `收藏 ${d.total || 0} · 已理解 ${d.reviewed || 0} · 待理解 ${d.unreviewed || 0} · 有歧义 ${d.uncertain || 0} · 禁用 ${d.disabled || 0} · 语义可用 ${d.autoEligible || 0}（发图时仍需匹配语境）`;
+    const job = r.reviewJob || {};
+    $('stickerProgress').textContent = `整理：${({idle:'未启动',running:'处理中',completed:'完成',cancelled:'已取消',failed:'失败'})[job.status] || job.status || '未启动'} ${job.done || 0}/${job.total || 0} ` + (job.results || []).map(x => `${x.id}：${states[x.status] || x.status}${x.reason ? '（' + x.reason + '）' : ''}`).join('；');
+    $('stickerDecisions').textContent = (r.decisions || []).map(x => `${x.key} · ${new Date(x.at).toLocaleString()} · ${x.scene || '未知场景'} · 候选 ${(x.candidates || []).map(c => c.id).join(', ') || '无'} · ${x.selected || ''} · ${x.status} · ${x.reason || ''}${x.usageSaved === false ? ' · 使用记录落盘失败' : ''}`).join('\n') || '暂无诊断';
+    const box = $('stickerRecovery'); box.replaceChildren();
+    for (const item of r.recovery || []) {
+      const row = document.createElement('p'); row.textContent = `QQ已收藏，本地语义待恢复：${item.emojiId || 'ID缺失，请同步核对'} ${item.error || ''} `;
+      if (item.emojiId) { const b = document.createElement('button'); b.type = 'button'; b.textContent = '重试保存本地认知'; b.onclick = () => run(async () => { await request('/api/stickers/recover', { stickerId: item.emojiId }); await load(); }); row.append(b); }
+      box.append(row);
+    }
+    if (r.writable === false) $('stickerNotice').textContent = '表情库处于只读保护：请修复文件并重启桥接；未覆盖原库。';
+  }
+  async function preview(card) {
+    const id = card.dataset.sticker;
+    try { const r = await request('/api/stickers/image?stickerId=' + encodeURIComponent(id)); const img = card.querySelector('img'); img.src = `data:${r.image.mimeType};base64,${r.image.data}`; img.hidden = false; card.querySelector('[data-preview]').textContent = '重新查看原图'; }
+    catch { card.querySelector('[data-preview]').textContent = '缩略图读取失败，点击重试'; }
+  }
+  function render() {
+    previewObserver?.disconnect();
+    const cards = $('stickerCards'); cards.replaceChildren();
+    const entries = view.stickers || [], page = entries.slice(offset, offset + 12);
+    for (const e of page) {
+      const card = document.createElement('article'); card.dataset.sticker = e.id; card.style.cssText = 'border:1px solid var(--border,#ddd);padding:12px;margin:12px 0;border-radius:8px';
+      card.innerHTML = `<div class="row"><img alt="表情缩略图" hidden style="width:96px;height:96px;object-fit:contain"><button type="button" data-preview>查看缩略图</button><b>${esc(e.id)}</b><span>${esc(states[e.understandingStatus] || e.understandingStatus)} · ${e.understandingSource === 'manual' ? '管理员' : e.understandingSource === 'visual' ? '视觉理解' : '未确认来源'} · 自动发送：${e.autoEligible ? '语义已准入，仍需场景匹配' : '禁止'}</span></div>
+        <p>QQ原始备注：${esc(e.desc || '无')} · 使用 ${Number(e.useCount) || 0} 次 · 最近 ${e.lastUsedAt ? esc(new Date(e.lastUsedAt).toLocaleString()) : '未使用'}</p>
+        <p class="meta">图像：${esc(e.visualContent || '未理解')}；图片文字：${esc(e.imageText || '无记录')}；潜台词：${esc(e.subtext || '无记录')}；歧义：${esc(e.ambiguity || '无记录')}</p>
+        <form><p><label>图片含义 <input name="note" maxlength="200" style="width:80%" value="${esc(e.localNote)}"></label></p>
+        <p><label>适合用途 <input name="usage" maxlength="200" style="width:80%" value="${esc(e.usage)}"></label></p>
+        <p><label>标签（逗号分隔） <input name="tags" value="${esc(e.tags.join(','))}"></label> <label>语气 <input name="tone" value="${esc(e.tone.join(','))}"></label></p>
+        <p><label>适用场景 <input name="usageScenes" placeholder="casual_chat,casual_banter" value="${esc(e.usageScenes.join(','))}"></label> <label>禁止场景 <input name="avoidScenes" placeholder="help,technical,serious" value="${esc(e.avoidScenes.join(','))}"></label></p>
+        <p><label>歧义备注 <input name="ambiguity" value="${esc(e.ambiguity)}"></label> <label><input type="checkbox" name="privacySensitive" ${e.privacySensitive ? 'checked' : ''}>含不宜传播个人信息</label></p>
+        <p><label>理解状态 <select name="understandingStatus">${Object.entries(states).map(([v,label]) => `<option value="${v}" ${e.understandingStatus === v ? 'selected' : ''}>${label}</option>`).join('')}</select></label> <button type="submit">保存本地认知</button> <button type="button" data-review>重新识图</button></p></form>`;
+      card.querySelector('[data-preview]').onclick = () => run(() => preview(card));
+      card.querySelector('[data-review]').onclick = () => run(async () => {
+        $('stickerNotice').textContent = '正在读取真实图片并调用当前视觉模型…';
+        const r = await request('/api/stickers/review', { stickerId: e.id });
+        $('stickerNotice').textContent = `${states[r.result.status] || r.result.status}：${r.result.reason || '已保存本地认知'}`;
+        if (r.result.proposal) {
+          const p = r.result.proposal, f = card.querySelector('form').elements;
+          f.note.value = p.note || ''; f.usage.value = p.usage || ''; f.ambiguity.value = p.ambiguity || ''; f.privacySensitive.checked = !!p.privacySensitive;
+          for (const key of ['tags','tone','usageScenes','avoidScenes']) f[key].value = (p[key] || []).join(',');
+          // Administrator explicitly chooses status and saves the proposal.
+          card.scrollIntoView({ block: 'nearest' });
+        } else await load();
+      });
+      card.querySelector('form').onsubmit = ev => { ev.preventDefault(); run(async () => {
+        const f = ev.target.elements, body = { stickerId: e.id, expectedUpdatedAt: e.updatedAt, note: f.note.value, usage: f.usage.value, understandingStatus: f.understandingStatus.value, ambiguity: f.ambiguity.value, privacySensitive: f.privacySensitive.checked };
+        for (const key of ['tags','tone','usageScenes','avoidScenes']) body[key] = list(f[key].value);
+        if (body.understandingStatus === 'reviewed' && (!body.note.trim() || !body.usage.trim() || !body.tags.length || !body.usageScenes.some(x => ['casual_chat','casual_banter'].includes(x)) || body.ambiguity.trim() || body.privacySensitive)) throw Error('确认前请补齐含义、用途、标签和适用场景，消除歧义并检查隐私');
+        await request('/api/stickers/note', body); $('stickerNotice').textContent = '本地认知已保存，立即生效'; await load();
+      }); };
+      cards.append(card);
+    }
+    if (typeof IntersectionObserver !== 'undefined') {
+      previewObserver = new IntersectionObserver(items => { for (const item of items) if (item.isIntersecting) { previewObserver.unobserve(item.target); void preview(item.target); } });
+      for (const card of cards.children) previewObserver.observe(card);
+    }
+    $('stickerPage').textContent = `${entries.length ? Math.floor(offset / 12) + 1 : 0}/${Math.ceil(entries.length / 12)} 页 · 匹配 ${view.matched || 0}`;
+    $('stickerPrev').disabled = offset === 0; $('stickerNext').disabled = offset + 12 >= entries.length;
+  }
+  async function load() { view = await request('/api/stickers?count=500&query=' + encodeURIComponent($('stickerQuery').value)); if (offset >= view.stickers.length) offset = 0; diagnostics(view); render(); }
+  $('stickerRefresh').onclick = () => run(load);
+  $('stickerSync').onclick = () => run(async () => { await request('/api/stickers/sync', {}); await load(); });
+  $('stickerBatch').onclick = () => run(async () => { await request('/api/stickers/review', {}); await load(); });
+  $('stickerCancel').onclick = async () => { try { await request('/api/stickers/review', { cancel: true }); $('stickerNotice').textContent = '已请求取消，已保存的结果保留'; } catch (e) { $('stickerNotice').textContent = e.message; } };
+  $('stickerPrev').onclick = () => { offset = Math.max(0, offset - 12); render(); }; $('stickerNext').onclick = () => { offset += 12; render(); };
+  $('stickerManager').addEventListener('toggle', () => { if ($('stickerManager').open && !view) void run(load); });
+  setInterval(async () => { if (view?.reviewJob?.status !== 'running' || !$('stickerManager').open || document.hidden) return; try { const r = await request('/api/stickers?count=1'); diagnostics(r); view.reviewJob = r.reviewJob; if (r.reviewJob.status !== 'running') { if (!$('stickerCards').contains(document.activeElement)) await load(); else $('stickerNotice').textContent = '整理已结束；当前编辑内容已保留，刷新列表查看新认知'; } } catch {} }, 2000);
+})();
+
 // V4.1 community is a sibling page under Learning; backend APIs and all existing control IDs are retained.
 (() => {
   const el=id=>document.getElementById(id),page=el('section-bff-community'),section=document.createElement('div');section.id='bfCommunity';
@@ -5040,86 +5164,6 @@ setInterval(() => { if (currentConsolePage !== 'usage') return; refreshUsage(); 
   featureIndex.push({page:'bff-community',label:'社区持续自主学习 B站 贴吧 知乎 小黑盒 虎扑 开始 停止 Token 费用 日志 知识',target:page});
   section.querySelectorAll('input,select,textarea,summary').forEach(input=>{const label=input.tagName==='SUMMARY'?input.textContent:input.labels?.[0]?.textContent||input.placeholder;if(label)featureIndex.push({page:'bff-community',label:label.trim(),target:input});});
   section.dataset.available='false';section.querySelectorAll('input,select,button').forEach(i=>{if(i.id!=='bfCommunityRefresh')i.disabled=true;});updateMonitoring();
-})();
-
-// BigFatFish V4.1 sticker semantics management
-(() => {
-  const $ = id => document.getElementById(id);
-  let view, offset = 0, busy = false, previewObserver;
-  const states = { reviewed: '已确认', unreviewed: '待理解', uncertain: '有歧义', disabled: '已禁用' };
-  const list = value => String(value || '').split(/[,，\n]+/).map(s => s.trim()).filter(Boolean);
-  const request = async (path, body) => { const r = await api(path, body ? 'POST' : 'GET', body); if (r.ok === false) throw Error(r.error || '操作未完成'); return r; };
-  async function run(fn) { if (busy) return; busy = true; try { await fn(); } catch (e) { $('stickerNotice').textContent = e.message; } finally { busy = false; } }
-  function diagnostics(r) {
-    const d = r.diagnostics || {};
-    $('stickerStats').textContent = `收藏 ${d.total || 0} · 已理解 ${d.reviewed || 0} · 待理解 ${d.unreviewed || 0} · 有歧义 ${d.uncertain || 0} · 禁用 ${d.disabled || 0} · 语义可用 ${d.autoEligible || 0}（发图时仍需匹配语境）`;
-    const job = r.reviewJob || {};
-    $('stickerProgress').textContent = `整理：${({idle:'未启动',running:'处理中',completed:'完成',cancelled:'已取消',failed:'失败'})[job.status] || job.status || '未启动'} ${job.done || 0}/${job.total || 0} ` + (job.results || []).map(x => `${x.id}：${states[x.status] || x.status}${x.reason ? '（' + x.reason + '）' : ''}`).join('；');
-    $('stickerDecisions').textContent = (r.decisions || []).map(x => `${x.key} · ${new Date(x.at).toLocaleString()} · ${x.scene || '未知场景'} · 候选 ${(x.candidates || []).map(c => c.id).join(', ') || '无'} · ${x.selected || ''} · ${x.status} · ${x.reason || ''}${x.usageSaved === false ? ' · 使用记录落盘失败' : ''}`).join('\n') || '暂无诊断';
-    const box = $('stickerRecovery'); box.replaceChildren();
-    for (const item of r.recovery || []) {
-      const row = document.createElement('p'); row.textContent = `QQ已收藏，本地语义待恢复：${item.emojiId || 'ID缺失，请同步核对'} ${item.error || ''} `;
-      if (item.emojiId) { const b = document.createElement('button'); b.type = 'button'; b.textContent = '重试保存本地认知'; b.onclick = () => run(async () => { await request('/api/stickers/recover', { stickerId: item.emojiId }); await load(); }); row.append(b); }
-      box.append(row);
-    }
-    if (r.writable === false) $('stickerNotice').textContent = '表情库处于只读保护：请修复文件并重启桥接；未覆盖原库。';
-  }
-  async function preview(card) {
-    const id = card.dataset.sticker;
-    try { const r = await request('/api/stickers/image?stickerId=' + encodeURIComponent(id)); const img = card.querySelector('img'); img.src = `data:${r.image.mimeType};base64,${r.image.data}`; img.hidden = false; card.querySelector('[data-preview]').textContent = '重新查看原图'; }
-    catch { card.querySelector('[data-preview]').textContent = '缩略图读取失败，点击重试'; }
-  }
-  function render() {
-    previewObserver?.disconnect();
-    const cards = $('stickerCards'); cards.replaceChildren();
-    const entries = view.stickers || [], page = entries.slice(offset, offset + 12);
-    for (const e of page) {
-      const card = document.createElement('article'); card.dataset.sticker = e.id; card.style.cssText = 'border:1px solid var(--border,#ddd);padding:12px;margin:12px 0;border-radius:8px';
-      card.innerHTML = `<div class="row"><img alt="表情缩略图" hidden style="width:96px;height:96px;object-fit:contain"><button type="button" data-preview>查看缩略图</button><b>${esc(e.id)}</b><span>${esc(states[e.understandingStatus] || e.understandingStatus)} · ${e.understandingSource === 'manual' ? '管理员' : e.understandingSource === 'visual' ? '视觉理解' : '未确认来源'} · 自动发送：${e.autoEligible ? '语义已准入，仍需场景匹配' : '禁止'}</span></div>
-        <p>QQ原始备注：${esc(e.desc || '无')} · 使用 ${Number(e.useCount) || 0} 次 · 最近 ${e.lastUsedAt ? esc(new Date(e.lastUsedAt).toLocaleString()) : '未使用'}</p>
-        <p class="meta">图像：${esc(e.visualContent || '未理解')}；图片文字：${esc(e.imageText || '无记录')}；潜台词：${esc(e.subtext || '无记录')}；歧义：${esc(e.ambiguity || '无记录')}</p>
-        <form><p><label>图片含义 <input name="note" maxlength="200" style="width:80%" value="${esc(e.localNote)}"></label></p>
-        <p><label>适合用途 <input name="usage" maxlength="200" style="width:80%" value="${esc(e.usage)}"></label></p>
-        <p><label>标签（逗号分隔） <input name="tags" value="${esc(e.tags.join(','))}"></label> <label>语气 <input name="tone" value="${esc(e.tone.join(','))}"></label></p>
-        <p><label>适用场景 <input name="usageScenes" placeholder="casual_chat,casual_banter" value="${esc(e.usageScenes.join(','))}"></label> <label>禁止场景 <input name="avoidScenes" placeholder="help,technical,serious" value="${esc(e.avoidScenes.join(','))}"></label></p>
-        <p><label>歧义备注 <input name="ambiguity" value="${esc(e.ambiguity)}"></label> <label><input type="checkbox" name="privacySensitive" ${e.privacySensitive ? 'checked' : ''}>含不宜传播个人信息</label></p>
-        <p><label>理解状态 <select name="understandingStatus">${Object.entries(states).map(([v,label]) => `<option value="${v}" ${e.understandingStatus === v ? 'selected' : ''}>${label}</option>`).join('')}</select></label> <button type="submit">保存本地认知</button> <button type="button" data-review>重新识图</button></p></form>`;
-      card.querySelector('[data-preview]').onclick = () => run(() => preview(card));
-      card.querySelector('[data-review]').onclick = () => run(async () => {
-        $('stickerNotice').textContent = '正在读取真实图片并调用当前视觉模型…';
-        const r = await request('/api/stickers/review', { stickerId: e.id });
-        $('stickerNotice').textContent = `${states[r.result.status] || r.result.status}：${r.result.reason || '已保存本地认知'}`;
-        if (r.result.proposal) {
-          const p = r.result.proposal, f = card.querySelector('form').elements;
-          f.note.value = p.note || ''; f.usage.value = p.usage || ''; f.ambiguity.value = p.ambiguity || ''; f.privacySensitive.checked = !!p.privacySensitive;
-          for (const key of ['tags','tone','usageScenes','avoidScenes']) f[key].value = (p[key] || []).join(',');
-          // Administrator explicitly chooses status and saves the proposal.
-          card.scrollIntoView({ block: 'nearest' });
-        } else await load();
-      });
-      card.querySelector('form').onsubmit = ev => { ev.preventDefault(); run(async () => {
-        const f = ev.target.elements, body = { stickerId: e.id, expectedUpdatedAt: e.updatedAt, note: f.note.value, usage: f.usage.value, understandingStatus: f.understandingStatus.value, ambiguity: f.ambiguity.value, privacySensitive: f.privacySensitive.checked };
-        for (const key of ['tags','tone','usageScenes','avoidScenes']) body[key] = list(f[key].value);
-        if (body.understandingStatus === 'reviewed' && (!body.note.trim() || !body.usage.trim() || !body.tags.length || !body.usageScenes.some(x => ['casual_chat','casual_banter'].includes(x)) || body.ambiguity.trim() || body.privacySensitive)) throw Error('确认前请补齐含义、用途、标签和适用场景，消除歧义并检查隐私');
-        await request('/api/stickers/note', body); $('stickerNotice').textContent = '本地认知已保存，立即生效'; await load();
-      }); };
-      cards.append(card);
-    }
-    if (typeof IntersectionObserver !== 'undefined') {
-      previewObserver = new IntersectionObserver(items => { for (const item of items) if (item.isIntersecting) { previewObserver.unobserve(item.target); void preview(item.target); } });
-      for (const card of cards.children) previewObserver.observe(card);
-    }
-    $('stickerPage').textContent = `${entries.length ? Math.floor(offset / 12) + 1 : 0}/${Math.ceil(entries.length / 12)} 页 · 匹配 ${view.matched || 0}`;
-    $('stickerPrev').disabled = offset === 0; $('stickerNext').disabled = offset + 12 >= entries.length;
-  }
-  async function load() { view = await request('/api/stickers?count=500&query=' + encodeURIComponent($('stickerQuery').value)); if (offset >= view.stickers.length) offset = 0; diagnostics(view); render(); }
-  $('stickerRefresh').onclick = () => run(load);
-  $('stickerSync').onclick = () => run(async () => { await request('/api/stickers/sync', {}); await load(); });
-  $('stickerBatch').onclick = () => run(async () => { await request('/api/stickers/review', {}); await load(); });
-  $('stickerCancel').onclick = async () => { try { await request('/api/stickers/review', { cancel: true }); $('stickerNotice').textContent = '已请求取消，已保存的结果保留'; } catch (e) { $('stickerNotice').textContent = e.message; } };
-  $('stickerPrev').onclick = () => { offset = Math.max(0, offset - 12); render(); }; $('stickerNext').onclick = () => { offset += 12; render(); };
-  $('stickerManager').addEventListener('toggle', () => { if ($('stickerManager').open && !view) void run(load); });
-  setInterval(async () => { if (view?.reviewJob?.status !== 'running' || !$('stickerManager').open || document.hidden) return; try { const r = await request('/api/stickers?count=1'); diagnostics(r); view.reviewJob = r.reviewJob; if (r.reviewJob.status !== 'running') { if (!$('stickerCards').contains(document.activeElement)) await load(); else $('stickerNotice').textContent = '整理已结束；当前编辑内容已保留，刷新列表查看新认知'; } } catch {} }, 2000);
 })();
 
 </script>

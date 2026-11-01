@@ -35,10 +35,9 @@ export class MemoryManager {
     state.memoryWrites.push({ sourceId, at: now });
   }
   hint(st) { this.app.cleanMemory(st); return this.app.globalStyle.hint(st); }
-  targetChars(st) {
-    this.app.cleanMemory(st);
-    return this.app.settings.casualMaxChars;
-  }
+  // V4.2: 聊天长度不再是可配置的"目标字数"，只保留召回体积预算（memory.maxChars）。
+  // 保留这个访问器是为了让旧调用点显式暴露，而不是静默读到 undefined。
+  recallBudget() { return this.app.settings.memory.maxChars; }
   snapshot(st) {
     return copy({ bigfatfish: st.bigfatfish, activeTopics: st.activeTopics ?? [], pendingThoughts: st.pendingThoughts ?? [], memberImpressions: st.memberImpressions ?? {} });
   }

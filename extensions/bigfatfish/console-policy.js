@@ -13,7 +13,7 @@
   <h3>启用群聊 / 私聊</h3><p>启用只控制机器人参与范围，不会自动加入群或添加好友。</p>
   <form id="bfAccess"><select name="kind"><option value="group">QQ群</option><option value="private">个人QQ</option></select> <select name="target" required aria-label="选择群聊或好友"><option value="">读取群聊与好友列表…</option></select><button type="button" id="bfContactsRefresh">刷新列表</button> <button name="enable" value="yes">启用</button> <button name="enable" value="no">停用</button></form><div id="bfPeers"></div>
   <h3>人格与行为</h3><p>人格正文在原控制台“人格与角色”编辑；这里修改闲聊与冷场开场策略。</p>
-  <form id="bfSettings"><label>闲聊简练字数参考（不作为拆条门槛） <input name="casualMaxChars" type="number" min="5" max="200"></label> <span>真实 @ 优先回应；明确求助按完整准确的方式回答，其余沿用当前人格。</span><p><label>人工补充话题（逗号分隔，可留空）<input name="interests" style="width:70%"></label></p>
+  <form id="bfSettings"><span>聊天长度由角色卡和当前内容决定，这里不再提供字数目标；真实 @ 与明确求助优先，其余沿用当前人格。</span><p><label>人工补充话题（逗号分隔，可留空）<input name="interests" style="width:70%"></label></p>
   <p><label><input name="dryRun" type="checkbox">冷场主动仅演练</label> <label>安静分钟 <input name="minIdleMinutes" type="number" min="1" max="10080"></label> <label>冷却分钟 <input name="cooldownMinutes" type="number" min="1" max="10080"></label> <label>每日上限 <input name="dailyCap" type="number" min="0" max="20"></label></p>
   <p><label>静默开始 <input name="quietStart" type="number" min="0" max="23"></label> <label>静默结束 <input name="quietEnd" type="number" min="0" max="23"></label>（北京时间，冷场与随机主动共用）</p><p><label>明确称呼（逗号分隔，命中必触发并要求回应）<input name="participationAliases" style="width:90%"></label></p><p>自动统计各会话反复讨论的词组，达到门槛后加入该会话的话题兴趣；再涉及这些话题时按话题概率接话，不再根据预设兴趣词算分。明确找其他群友时不使用话题加成；普通无关消息仍按退火规则处理。多条消息可能合并回应。</p><p>随机主动只在未安排正常回复的群聊合并轮次中抽取一次，依据最近上下文主动分享；已有明确待答消息时不触发。忙碌、离线、静默或限频时跳过，概率命中也不要求硬凑内容。沿用主动小时、全局每日及推理额度；不受冷场演练和45分钟冷场门槛限制。</p><div id="bfPolicyFields"></div><button>保存，即时生效</button></form>
   <h3>长期记忆</h3><select id="bfMemoryKey"></select> <button id="bfMemoryLoad">加载</button> <input id="bfMemoryQuery" placeholder="搜索长期事实"> <button id="bfMemorySearch">搜索</button>
@@ -51,12 +51,56 @@
     const b = document.createElement('button'); b.type = 'button'; b.textContent = label;
     b.onclick = () => { setConsolePage(page, { focus: true, target }); run(refresh); if (page === 'persona') run(refreshPersonas); if (page === 'operations') run(refreshServices); }; quick.append(b);
   }
-  const accessActions = document.createElement('div'); accessActions.className = 'row';
-  for (const [kind, title] of [['group', '添加群聊'], ['private', '添加私聊']]) {
+  const accessActions = document.createElement('div'); accessActions.className = 'row';  for (const [kind, title] of [['group', '添加群聊'], ['private', '添加私聊']]) {
     const b = document.createElement('button'); b.type = 'button'; b.textContent = title;
     b.onclick = () => { el('bfAccess').elements.kind.value = kind; el('bfAccess').elements.kind.dispatchEvent(new Event('change')); el('bfAccess').elements.target.focus(); }; accessActions.append(b);
   }
   peers.querySelector('h2').after(accessActions);
+  // V4.2：把"这个功能到底由谁负责"变成管理端可见的事实，而不是散落在文档里。
+  const integration = document.createElement('section'); integration.id = 'section-bff-integration';
+  integration.innerHTML = '<h3>插件整合与功能所有权</h3><p class="meta">显示每个候选插件是否安装、最终主实现是谁、以及仍然存在的重复实现。插件"是否已加载"只能由 DSH 启动日志确认，这里不会猜。</p><div id="bfIntegrationRows"></div>';
+  panel.append(integration);
+  const renderIntegration = data => {
+    const box = el('bfIntegrationRows'); if (!box) return; box.replaceChildren();
+    // 先显示"已经交给插件"的项：这才是当前的实际分工。
+    for (const d of data.delegations || []) {
+      const row = document.createElement('p');
+      row.textContent = `✅ 已由插件接管 · ${d.feature} → ${d.plugin}（${d.resolution}）：${d.localSwitch}`;
+      box.append(row);
+    }
+    // 再显示冲突：这是"装上去之后真的会出事"的部分。
+    for (const c of data.conflicts || []) {
+      const row = document.createElement('p');
+      row.textContent = `${c.status === 'latent' ? '⚠️ 潜伏冲突' : '❌ 冲突'}（${c.severity}）· ${c.plugin} ↔ ${c.feature}：${c.failureMode}`
+        + (c.status === 'latent' ? '（当前仍在试运行，只记账不开回合）' : '')
+        + (c.localSwitch ? `处理：${c.localSwitch}` : '');
+      box.append(row);
+    }
+    if (!(data.conflicts || []).length && !(data.delegations || []).length) {
+      const row = document.createElement('p'); row.textContent = '当前没有启用的冲突插件。';
+      box.append(row);
+    }
+    for (const p of data.plugins || []) {
+      const row = document.createElement('p');
+      row.textContent = `${p.feature}：插件 ${p.id}@${p.version}（提交 ${String(p.commit).slice(0, 8)}）`
+        + `；安装=${p.installed ? '是' : '否'}；启用=${p.enabled ? '是' : '否'}`
+        + `；加载=${p.loaded === 'unverified' ? '未验证' : p.loaded}`
+        + `；最终主实现 ${p.owner}；结论 ${p.decision}`;
+      box.append(row);
+    }
+    for (const o of data.ownership || []) {
+      const row = document.createElement('p'); row.className = 'meta';
+      row.textContent = `所有权 · ${o.feature} → ${o.owner}`;
+      box.append(row);
+    }
+    for (const d of data.duplicates || []) {
+      const row = document.createElement('p'); row.className = 'meta';
+      row.textContent = `仍需注意 · ${d.area}：${d.detail}`;
+      box.append(row);
+    }
+  };
+  if (el('bfIntegrationRows')) run(async () => { try { renderIntegration(await call('/api/bigfatfish/plugin-integration', 'GET')); } catch { /* 读不到就不显示，不阻塞其它面板 */ } });
+
   // Use the native create/update events and role files, with a clear entry in the persona list.
   const addRole = document.createElement('button'); addRole.type = 'button'; addRole.id = 'bfAddRole'; addRole.textContent = '＋ 新增人格';
   const revealRoleEditor = () => { const input = el('newRoleName'); const details = input.closest('details'); if (details) details.open = true; input.scrollIntoView({ block: 'center' }); input.focus(); };
@@ -87,9 +131,9 @@
     @media(max-width:650px){#bfAccess{grid-template-columns:1fr}#bfSlangFields{grid-template-columns:1fr}}
   `; document.head.append(style);
   const fields = {
-    participation: { title: '接话与退火', enabled: ['启用动态接话', 'checkbox'], requireDirected: ['群聊确认在跟机器人说话才回答', 'checkbox'], quoteReplies: ['群聊允许引用原消息', 'checkbox'], idleProbability: ['旁观接话概率', 0, 1, 0.05], interestProbability: ['兴趣话题接话概率下限', 0, 1, 0.05], engagedProbability: ['参与中接话概率', 0, 1, 0.05], floorProbability: ['退出后接话概率', 0, 1, 0.01], halfLifeMessages: ['无关消息减半条数', 1, 20], halfLifeSeconds: ['热度减半秒数', 10, 3600], exitSeconds: ['退出秒数', 30, 7200], followUpSeconds: ['追问识别秒数', 10, 600], maxOffTopicMessages: ['退出前无关消息条数', 2, 40], directBatchMs: ['直接找它合批毫秒', 100, 3000], engagedBatchMs: ['参与中合批毫秒', 100, 5000], ambientBatchMs: ['旁观合批毫秒', 100, 10000] },
+    participation: { title: '接话与退火', enabled: ['启用动态接话', 'checkbox'], requireDirected: ['群聊确认在跟机器人说话才回答', 'checkbox'], quoteReplies: ['群聊允许引用原消息', 'checkbox'], ambientJoinProbability: ['没人点名时按证据插话的抽稀概率', 0, 1, 0.05], halfLifeMessages: ['无关消息减半条数', 1, 20], halfLifeSeconds: ['热度减半秒数', 10, 3600], exitSeconds: ['退出秒数', 30, 7200], followUpSeconds: ['追问识别秒数', 10, 600], maxOffTopicMessages: ['退出前无关消息条数', 2, 40], directBatchMs: ['直接找它合批毫秒', 100, 3000], engagedBatchMs: ['参与中合批毫秒', 100, 5000], ambientBatchMs: ['旁观合批毫秒', 100, 10000] },
     interestPolicy: { title: '话题参与', enabled: ['使用学到的话题参与聊天', 'checkbox'] },
-    contextInitiative: { title: '聊天中随机主动（正常回复优先，每批只抽一次）', enabled: ['启用上下文随机主动，仅群聊', 'checkbox'], probability: ['主动发言概率', 0, 1, 0.01], cooldownMinutes: ['两次主动尝试至少间隔分钟', 1, 120], contextMinutes: ['使用最近多少分钟的上下文', 1, 120] },
+    contextInitiative: { title: '聊天中主动（正常回复优先，由上下文决定是否开口）', enabled: ['启用上下文主动，仅群聊', 'checkbox'], probability: ['开口闸门（0=关闭，>0=由上下文决定）', 0, 1, 0.01], cooldownMinutes: ['两次主动尝试至少间隔分钟', 1, 120], contextMinutes: ['使用最近多少分钟的上下文', 1, 120] },
     topicLearning: { title: '自动发现聊天多的话题', enabled: ['启用自动话题学习', 'checkbox'], autoResearch: ['达标后自动研究话题', 'checkbox'], autoConfirm: ['研究通过后自动加入本群话题库', 'checkbox'], lookbackHours: ['统计近多少小时', 1, 720], minMessages: ['多人研究至少消息数', 3, 20], minSpeakers: ['至少讨论人数', 2, 10], soloMinMessages: ['单人研究至少消息数', 3, 20], retentionDays: ['话题多久未提及后停用（天）', 1, 365], maxTopics: ['每会话最多使用话题数', 1, 30], sampleLimit: ['话题统计消息上限', 50, 50000] },
     learningWindow: { title: '独立滚动学习记录（不占聊天上下文）', maxMessages: ['每群最多保留消息数', 200, 50000] },
     learningResearch: { title: '话题、风格、黑话自动研究', enabled: ['启用自动研究', 'checkbox'], minConfidence: ['研究确认最低置信度', 0.5, 1, 0.05], maxPerDay: ['每日最多研究次数', 0, 200], intervalMinutes: ['研究检查间隔（分钟）', 1, 1440], retryMinutes: ['研究重试间隔（分钟）', 1, 10080] },
@@ -125,7 +169,6 @@
     if (!settingsDirty) {
     for(const[group,spec]of Object.entries(fields))for(const key of Object.keys(spec)){if(key==='title')continue;const input=form.elements[group+'_'+key];input[input.type==='checkbox'?'checked':'value']=settings[group][key]}
     form.elements.weekdays.value=settings.schedule.weekdays.join(',');
-    form.elements.casualMaxChars.value = settings.casualMaxChars;
     form.elements.interests.value = settings.interests.join('，');
     form.elements.participationAliases.value = settings.participation.aliases.join('，');
     for (const [key, value] of Object.entries(settings.coldStart)) form.elements[key][key === 'dryRun' ? 'checked' : 'value'] = value;
@@ -183,7 +226,7 @@
   el('bfTopicScan').onclick = () => run(async () => { await call('/api/bigfatfish/topics', 'POST', { action: 'scan' }); await refresh(); notice('已从各会话现有聊天中更新话题，未发送聊天消息'); });
   el('bfAccess').onsubmit = event => { event.preventDefault(); const form = event.target; run(async () => { await call('/api/bigfatfish/access', 'POST', { kind: form.elements.kind.value, target: form.elements.target.value.trim(), enabled: event.submitter?.value !== 'no' }); notice('参与范围已保存，立即生效'); await refresh(); await refreshWhitelist(); }); };
   el('bfSettings').onsubmit = event => { event.preventDefault(); const f=event.target.elements; run(async()=>{
-    const body={...currentSettings,casualMaxChars:Number(f.casualMaxChars.value),privateAssistant:false,interests:f.interests.value.split(/[,，]/).map(x=>x.trim()).filter(Boolean),coldStart:{dryRun:f.dryRun.checked},interestWeights:{...currentSettings.interestWeights}};
+    const body={...currentSettings,privateAssistant:false,interests:f.interests.value.split(/[,，]/).map(x=>x.trim()).filter(Boolean),coldStart:{dryRun:f.dryRun.checked},interestWeights:{...currentSettings.interestWeights}};
     for(const key of ['minIdleMinutes','cooldownMinutes','dailyCap','quietStart','quietEnd'])body.coldStart[key]=Number(f[key].value);
     for(const[group,spec]of Object.entries(fields)){body[group]={...currentSettings[group]};for(const key of Object.keys(spec)){if(key==='title')continue;const input=f[group+'_'+key];body[group][key]=input.type==='checkbox'?input.checked:input.type==='text'?input.value:Number(input.value)}}
     body.schedule.weekdays=f.weekdays.value.split(/[,，]/).map(Number);

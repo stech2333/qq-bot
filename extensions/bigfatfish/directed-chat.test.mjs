@@ -55,7 +55,14 @@ async function fixture(t) {
   const token = 'directed-fixture-token', server = { address: () => ({ port: 3106 }), listen(_p, _h, cb) { cb(); }, on() {} };
   const h = await bridgeHarness({ config: { consolePort: 3106, consoleToken: token, ownerQQ: '987654321', allow: { groups: ['123456'], private: ['987654321'] },
     bigfatfish: { expectedQQ: BOT }, socialV2: { sticker: { enabled: true }, wake: { maxWakePerMinute: 100, maxWakePerHour: 100 } } },
-    files: { 'state/bigfatfish-settings.json': { participation: { requireDirected: true, quoteReplies: false } } },
+    files: { 'state/bigfatfish-settings.json': { participation: { requireDirected: true, quoteReplies: false } },
+      // 自动发送只允许语义已确认的表情；这里给夹具一条 reviewed 的本地认知，
+      // 本轮要验证的是"群聊不带引用条"，不是语义闸门（闸门由 stickers.test.mjs 覆盖）。
+      'state/stickers.json': [{ id: 'fixture-sticker', url: 'https://public.invalid/sticker',
+        md5: 'AABBCCDDEEFF00112233445566778899', localNote: '打招呼时挥挥手', usage: '熟人打招呼或回应在吗',
+        tags: ['肥鱼', '打招呼', '在吗'], usageScenes: ['casual_chat'], avoidScenes: ['help', 'technical', 'serious'],
+        tone: ['轻松'], understandingStatus: 'reviewed', understandingSource: 'visual', understandingConfidence: 0.9,
+        semanticPersistence: 'saved' }] },
     globals: { ...roleCard, http: { createServer(cb) { handler = cb; return server; } }, safeFetchBuffer: async () => ({
       buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+k3ioAAAAASUVORK5CYII=', 'base64') }) } });
   t.after(() => h.close()); h.setMode('reserved2'); h.setSelfIdentity('肥鱼', BOT); h.startConsoleServer();
